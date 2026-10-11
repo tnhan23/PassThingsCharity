@@ -1,44 +1,50 @@
-var createError = require("http-errors");
-var express = require("express");
-var path = require("path");
-var cookieParser = require("cookie-parser");
-var logger = require("morgan");
-var indexRouter = require("./routes/index");
-var usersRouter = require("./routes/users");
-
-var app = express();
-
-// view engine setup
-app.set("views", path.join(__dirname, "views"));
-app.set("view engine", "jade");
-
-app.use(logger("dev"));
+require('dotenv').config();
+const express=require('express');
+const passport=require('passport')
+require('./config/passport');
+const usersRouter=require('./routes/users');
+const authRouter=require('./routes/auth');
+const organizationsRouter = require('./routes/organization');
+const stationsRouter = require('./routes/station');
+const adminApprovalRouter = require('./routes/adminApproval');
+const stationManagerRouter = require('./routes/stationManager');
+const app=express();
+const mongoose = require('mongoose');
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
-app.use(cookieParser());
-app.use(express.static(path.join(__dirname, "public")));
-
-app.use("/", indexRouter);
-app.use("/users", usersRouter);
-
-// catch 404 and forward to error handler
-app.use(function (req, res, next) {
-  next(createError(404));
+app.use(passport.initialize());
+app.get('/', (req, res) => {
+  res.send('PassThingsCharity API is running');
 });
 
-// error handler
-app.use(function (err, req, res, next) {
-  // set locals, only providing error in development
-  res.locals.message = err.message;
-  res.locals.error = req.app.get("env") === "development" ? err : {};
-
-  // render the error page
-  res.status(err.status || 500);
-  res.render("error");
+app.use('/auth', authRouter);
+app.use('/users', usersRouter);
+app.use('/stationmanager', stationManagerRouter);
+app.use('/organizations', organizationsRouter);
+app.use('/stations', stationsRouter);
+app.use('/admin', adminApprovalRouter);
+app.use((req, res) => {
+  res.status(404).json({ error: 'Không tìm thấy đường dẫn.' });
 });
-const PORT = 5000;
 
-app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(err.status || 500).json({
+    error: err.message || 'Lỗi máy chủ.',
+  });
 });
+
+const PORT = process.env.PORT ||8080;
+mongoose
+  .connect(process.env.MONGODB_URI)
+  .then(() => {
+    console.log('Đã kết nối MongoDB');
+    app.listen(PORT, () => {
+      console.log(`Server running at http://localhost:${PORT}`);
+    });
+  })
+  .catch((error) => {
+    console.error('Không kết nối được MongoDB:', error);
+    process.exit(1);
+  });
 module.exports = app;
