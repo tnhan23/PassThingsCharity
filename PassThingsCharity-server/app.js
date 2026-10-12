@@ -8,13 +8,19 @@ const organizationsRouter = require('./routes/organization');
 const stationsRouter = require('./routes/station');
 const adminApprovalRouter = require('./routes/adminApproval');
 const stationManagerRouter = require('./routes/stationManager');
+const swaggerUi = require('swagger-ui-express');
+const swaggerDocument = require('./config/swagger');
 const app=express();
 const mongoose = require('mongoose');
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(passport.initialize());
+
+// Swagger Documentation
+app.use(['/swagger', '/api-docs'], swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+
 app.get('/', (req, res) => {
-  res.send('PassThingsCharity API is running');
+  res.send('PassThingsCharity API is running. View API docs at <a href="/swagger">/swagger</a>');
 });
 
 app.use('/auth', authRouter);
@@ -40,7 +46,8 @@ mongoose
   .then(() => {
     console.log('Đã kết nối MongoDB');
     app.listen(PORT, () => {
-      console.log(`Server running at http://localhost:${PORT}`);
+      console.log(`🚀 Server running at: http://localhost:${PORT}`);
+      console.log(`📚 Swagger API Docs:  http://localhost:${PORT}/swagger`);
     });
   })
   .catch((error) => {

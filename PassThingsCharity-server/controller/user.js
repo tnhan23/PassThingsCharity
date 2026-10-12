@@ -192,7 +192,7 @@ async function updateUser(req,res,next) {
             email:user.email,
             username:user.username,
             fullName:user.fullName,
-            phone:user,phone,
+            phone:user.phone,
             role:user.role?.name,
             status:user.status,
         },
