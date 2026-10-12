@@ -1,14 +1,10 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
 const Role = require('./models/role');
 const User = require('./models/user');
 const Organization = require('./models/organization');
 const Station = require('./models/station');
 const StationStaff = require('./models/stationstaff');
-
-// Mật khẩu test chung cho tất cả các tài khoản: 123456
-const DEFAULT_PASSWORD_HASH = bcrypt.hashSync('123456', 12);
 
 const rolesData = [
   {
@@ -43,9 +39,9 @@ const usersData = [
     _id: new mongoose.Types.ObjectId("6ac7b15a501de8a3e18592c9"),
     email: "admin@charity.com",
     username: "admin_system",
-    password: DEFAULT_PASSWORD_HASH,
+    password: "$2a$12$AlRBIWIi.ISWfcjnWlLYHuL6Rf52W5rET/9vj/7be5iD1zsVXo5dm",
     fullName: "Quản Trị Viên",
-    role: new mongoose.Types.ObjectId("6523456789abcdef00000001"), // ADMIN
+    role: new mongoose.Types.ObjectId("6523456789abcdef00000001"),
     status: "active",
     phone: "0965095788",
     createdAt: new Date("2026-10-08T00:00:00.000Z"),
@@ -55,9 +51,9 @@ const usersData = [
     _id: new mongoose.Types.ObjectId("6ac7b15a501de8a3e18592ca"),
     email: "user01@gmail.com",
     username: "nguoiquyengop_01",
-    password: DEFAULT_PASSWORD_HASH,
-    fullName: "Người Quyên Góp (Station Manager)",
-    role: new mongoose.Types.ObjectId("6523456789abcdef00000002"), // STATION_MANAGER
+    password: "$2a$12$5za.z8Tp8R8jraiXeZqgvuvQrGKGgRAjcXQuPT81oO8wYICr.kHdq",
+    fullName: "Người Quyên Góp",
+    role: new mongoose.Types.ObjectId("6523456789abcdef00000002"),
     status: "active",
     phone: "0949733882",
     createdAt: new Date("2026-10-08T00:00:00.000Z"),
@@ -67,35 +63,11 @@ const usersData = [
     _id: new mongoose.Types.ObjectId("6acbbb6a7faf5d01bb5261e4"),
     email: "staff-test@example.com",
     username: "staff_test_01",
-    password: DEFAULT_PASSWORD_HASH,
+    password: "$2b$12$VIKkDkW1B5HZFxX06v1IYuu7mdC6wrNFHAZplh6/3cM6rpL9jxnQy",
     fullName: "Staff Test",
-    role: new mongoose.Types.ObjectId("6523456789abcdef00000003"), // STAFF
+    role: new mongoose.Types.ObjectId("6523456789abcdef00000003"),
     status: "active",
     phone: "0901234567",
-    createdAt: new Date("2026-10-11T16:38:02.417Z"),
-    updatedAt: new Date("2026-10-11T16:38:02.417Z")
-  },
-  {
-    _id: new mongoose.Types.ObjectId("6acbbb6a7faf5d01bb5261e6"),
-    email: "volunteer-test@example.com",
-    username: "volunteer_test_01",
-    password: DEFAULT_PASSWORD_HASH,
-    fullName: "Tình Nguyện Viên Test",
-    role: new mongoose.Types.ObjectId("6523456789abcdef00000004"), // VOLUNTEER
-    status: "active",
-    phone: "0912345679",
-    createdAt: new Date("2026-10-11T16:38:02.417Z"),
-    updatedAt: new Date("2026-10-11T16:38:02.417Z")
-  },
-  {
-    _id: new mongoose.Types.ObjectId("6acbbb6a7faf5d01bb5261e7"),
-    email: "user-test@example.com",
-    username: "user_test_01",
-    password: DEFAULT_PASSWORD_HASH,
-    fullName: "Người Dùng Test",
-    role: new mongoose.Types.ObjectId("6523456789abcdef00000005"), // USER
-    status: "active",
-    phone: "0987654321",
     createdAt: new Date("2026-10-11T16:38:02.417Z"),
     updatedAt: new Date("2026-10-11T16:38:02.417Z")
   }
@@ -160,7 +132,7 @@ async function seed() {
       await Role.findOneAndUpdate({ _id: item._id }, item, { upsert: true, returnDocument: 'after' });
     }
 
-    console.log('[Seed] Seeding Users with test password: "123456"...');
+    console.log('[Seed] Seeding Users...');
     for (const item of usersData) {
       await User.findOneAndUpdate({ _id: item._id }, item, { upsert: true, returnDocument: 'after' });
     }
@@ -182,7 +154,6 @@ async function seed() {
 
     console.log('==================================================');
     console.log('✅ SEED DATABASE COMPLETED SUCCESSFULLY!');
-    console.log('Mật khẩu đăng nhập cho tất cả tài khoản là: 123456');
     console.log('==================================================');
   } catch (error) {
     console.error('❌ Error during database seed:', error);
