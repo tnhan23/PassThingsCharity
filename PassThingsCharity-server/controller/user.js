@@ -76,50 +76,61 @@ async function createUser(req,res,next) {
     }
     
 }
-async function deleteUser(req,res,next){
-    try{
-        const {id}=req.params;
-       if (!mongoose.isValidObjectId(id)) {
-      return res.status(400).json({ error: 'User ID không hợp lệ.' });
-    }
-    const user=await User.findByIdAndUpdate(
-        id,
-        {status:'inactive'},
-        {new:true,runValidators:true}
-    ).populate('role','name');
-    if(!user){
-        return res.status(404).json({error: 'Không tìm thấy user.'})
-    }
-    return res.status(200).json({
-        message:'Đã vô hiệu hóa tài khoản',
-        user:{
-            id:user._id,
-            username:user.username,
-            role:user.role?.name,
-            status:user.status,
-        }
-    })
+async function setUserStatus(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { status = 'inactive' } = req.body || {};
 
-    }catch (error) {
-    return next(error);
-    }
-}
-async function updateUser(req,res,next) {
-    try{
-         const {id}=req.params;
-            if (!mongoose.isValidObjectId(id)) {
+    if (!mongoose.isValidObjectId(id)) {
       return res.status(400).json({ error: 'User ID không hợp lệ.' });
     }
+
+    if (!['active', 'inactive', 'banned'].includes(status)) {
+      return res.status(400).json({
+        error: 'Status phải là active, inactive hoặc banned.',
+      });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      id,
+      { $set: { status } },
+      { new: true, runValidators: true }
+    ).populate('role', 'name');
+
+    if (!user) {
+      return res.status(404).json({ error: 'Không tìm thấy user.' });
+    }
+
+    return res.status(200).json({
+      message: status === 'active'
+        ? 'Đã kích hoạt tài khoản.'
+        : status === 'banned'
+          ? 'Đã khóa tài khoản.'
+          : 'Đã vô hiệu hóa tài khoản.',
+      user: {
+        id: user._id,
+        username: user.username,
+        role: user.role?.name,
+        status: user.status,
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function updateMyProfile(req, res, next) {
+  try {
+    const { email, username, fullName, phone } = req.body || {};
+
     if (
       email === undefined &&
       username === undefined &&
       fullName === undefined &&
-      phone === undefined &&
-      status === undefined &&
-      password === undefined
+      phone === undefined
     ) {
       return res.status(400).json({
-        error: 'Cần gửi ít nhất một thông tin cần cập nhật.',
+        error: 'Cần gửi ít nhất một thông tin hồ sơ cần cập nhật.',
       });
     }
 
@@ -145,24 +156,10 @@ async function updateUser(req,res,next) {
       });
     }
 
-    if (
-      status !== undefined &&
-      !['active', 'inactive', 'banned'].includes(status)
-    ) {
-      return res.status(400).json({
-        error: 'Status phải là active, inactive hoặc banned.',
-      });
-    }
-
-    if (password !== undefined &&
-        (typeof password !== 'string' || !password)) {
-      return res.status(400).json({ error: 'Password không hợp lệ.' });
-    }
-
-    const user = await User.findById(id);
+    const user = await User.findById(req.user._id);
 
     if (!user) {
-      return res.status(404).json({ error: 'Không tìm thấy user.' });
+      return res.status(404).json({ error: 'Không tìm thấy tài khoản.' });
     }
 
     if (email !== undefined) {
@@ -177,36 +174,77 @@ async function updateUser(req,res,next) {
     if (phone !== undefined) {
       user.phone = phone.trim();
     }
-    if (status !== undefined) {
-      user.status = status;
-    }
-    if (password !== undefined) {
-      user.password = await bcrypt.hash(password, 12);
-    }
-    await user.save();
-    await user.populate('role','name')
-    return res.status(200).json({
-        message:'Đã cập nhật tài khoản',
-        user:{
-            id:user._id,
-            email:user.email,
-            username:user.username,
-            fullName:user.fullName,
-            phone:user.phone,
-            role:user.role?.name,
-            status:user.status,
-        },
-    })
 
-    }catch(error){
-     if (error.code === 11000) {
+    await user.save();
+    await user.populate('role', 'name');
+
+    return res.status(200).json({
+      message: 'Đã cập nhật hồ sơ.',
+      user: {
+        id: user._id,
+        email: user.email,
+        username: user.username,
+        fullName: user.fullName,
+        phone: user.phone,
+        role: user.role?.name,
+        status: user.status,
+      },
+    });
+  } catch (error) {
+    if (error.code === 11000) {
       return res.status(409).json({
         error: 'Email hoặc username đã được sử dụng.',
       });
     }
-     return next(error);
-    }
-    
+    return next(error);
+  }
 }
+async function deleteMyAccount(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { password } = req.body || {};
 
-module.exports={getUser,createUser,deleteUser,updateUser}
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ error: 'User ID không hợp lệ.' });
+    }
+
+    if (String(req.user._id) !== id) {
+      return res.status(403).json({
+        error: 'Bạn chỉ có thể xóa tài khoản của chính mình.',
+      });
+    }
+
+    if (typeof password !== 'string' || !password) {
+      return res.status(400).json({
+        error: 'Vui lòng nhập mật khẩu để xác nhận xóa tài khoản.',
+      });
+    }
+
+    const user = await User.findById(id).select('+password');
+
+    if (!user) {
+      return res.status(404).json({ error: 'Không tìm thấy tài khoản.' });
+    }
+
+    const passwordMatches = await bcrypt.compare(password, user.password);
+
+    if (!passwordMatches) {
+      return res.status(401).json({ error: 'Mật khẩu không chính xác.' });
+    }
+
+    await user.deleteOne();
+
+    return res.status(200).json({
+      message: 'Tài khoản của bạn đã được xóa vĩnh viễn.',
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+module.exports={
+  getUser,
+  createUser,
+  setUserStatus,
+  updateMyProfile,
+  deleteMyAccount,
+};

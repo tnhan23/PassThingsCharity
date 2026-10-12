@@ -29,23 +29,23 @@ module.exports = {
       },
     },
   },
-  '/users/{id}': {
+  '/users/me/profile': {
     patch: {
       tags: ['Users'],
-      summary: 'Cập nhật thông tin người dùng',
-      parameters: [
-        { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
-      ],
+      summary: 'User cập nhật hồ sơ của chính mình',
+      description: 'ID tài khoản được lấy từ Bearer token. Không thể thay đổi role hoặc status bằng endpoint này.',
       requestBody: {
+        required: true,
         content: {
           'application/json': {
             schema: {
               type: 'object',
+              minProperties: 1,
               properties: {
+                email: { type: 'string', format: 'email' },
+                username: { type: 'string' },
                 fullName: { type: 'string' },
                 phone: { type: 'string' },
-                status: { type: 'string', enum: ['active', 'inactive', 'banned'] },
-                password: { type: 'string' },
               },
             },
           },
@@ -53,16 +53,83 @@ module.exports = {
       },
       responses: {
         200: { description: 'Cập nhật thành công' },
+        400: { description: 'Dữ liệu hồ sơ không hợp lệ' },
+        401: { description: 'Chưa đăng nhập' },
+        409: { description: 'Email hoặc username đã được sử dụng' },
       },
     },
+  },
+  '/users/{id}': {
     delete: {
       tags: ['Users'],
-      summary: 'Xóa người dùng',
+      summary: 'Xóa vĩnh viễn tài khoản của chính mình',
+      description: 'Chỉ cho phép xóa tài khoản có ID trùng với tài khoản trong Bearer token. Yêu cầu mật khẩu hiện tại để xác nhận.',
+      parameters: [
+        {
+          name: 'id',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+          description: 'ID của chính tài khoản đang đăng nhập',
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['password'],
+              properties: {
+                password: {
+                  type: 'string',
+                  format: 'password',
+                  description: 'Mật khẩu hiện tại để xác nhận xóa tài khoản',
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: { description: 'Tài khoản đã được xóa vĩnh viễn' },
+        400: { description: 'ID hoặc mật khẩu không hợp lệ' },
+        401: { description: 'Token hoặc mật khẩu không hợp lệ' },
+        403: { description: 'Chỉ được xóa tài khoản của chính mình' },
+        404: { description: 'Không tìm thấy tài khoản' },
+      },
+    },
+  },
+  '/users/{id}/status': {
+    patch: {
+      tags: ['Users'],
+      summary: 'Thay đổi trạng thái tài khoản (Chỉ ADMIN)',
+      description: 'Gửi active để bật lại, inactive để vô hiệu hóa hoặc banned để khóa tài khoản. Nếu không gửi body, mặc định chuyển sang inactive.',
       parameters: [
         { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
       ],
+      requestBody: {
+        required: false,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                status: {
+                  type: 'string',
+                  enum: ['active', 'inactive', 'banned'],
+                  example: 'inactive',
+                },
+              },
+            },
+          },
+        },
+      },
       responses: {
-        200: { description: 'Đã xóa người dùng' },
+        200: { description: 'Trạng thái tài khoản đã được cập nhật' },
+        401: { description: 'Chưa đăng nhập' },
+        403: { description: 'Chỉ ADMIN được phép thực hiện' },
+        404: { description: 'Không tìm thấy tài khoản' },
       },
     },
   },
