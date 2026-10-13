@@ -6,6 +6,11 @@ const stationsDocs = require('../docs/stations.doc');
 const stationManagerDocs = require('../docs/stationManager.doc');
 const adminApprovalDocs = require('../docs/adminApproval.doc');
 
+// BE2 Swagger Docs
+const itemCatalogDocs = require('../docs/itemCatalog.doc');
+const campaignDocs = require('../docs/campaign.doc');
+const gamificationDocs = require('../docs/gamification.doc');
+
 const swaggerDocument = {
   openapi: '3.0.0',
   info: {
@@ -42,6 +47,9 @@ const swaggerDocument = {
     ...stationsDocs,
     ...stationManagerDocs,
     ...adminApprovalDocs,
+    ...itemCatalogDocs,
+    ...campaignDocs,
+    ...gamificationDocs,
   },
 };
 
