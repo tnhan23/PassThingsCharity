@@ -17,9 +17,11 @@ const gamificationRouter = require('./routes/gamification');
 
 const swaggerUi = require('swagger-ui-express');
 const swaggerDocument = require('./config/swagger');
+const cors = require('cors');
 const app = express();
 const mongoose = require('mongoose');
 
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(passport.initialize());

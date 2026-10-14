@@ -1,17 +1,21 @@
 {
   "expo": {
-    "name": "PassThingsCharity-mobile",
-    "slug": "PassThingsCharity-mobile",
+    "name": "Pass Đồ",
+    "slug": "pass-do",
+    "scheme": "passdo",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "backgroundColor": "#f9f9f7",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "vn.passdo.app"
     },
     "android": {
+      "package": "vn.passdo.app",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#07241a",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -20,6 +24,16 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "apiUrl": "http://localhost:8080"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-image",
+      "expo-font",
+      "expo-splash-screen",
+      "expo-secure-store"
+    ]
   }
 }
