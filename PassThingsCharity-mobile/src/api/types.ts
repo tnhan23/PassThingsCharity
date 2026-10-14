@@ -2,6 +2,9 @@ export type SessionUser = {
   id: string;
   username: string;
   phone: string;
+  email?: string;
+  fullName?: string;
+  role?: string;
 };
 
 export type OrgRef = { name?: string; code?: string; address?: string; phone?: string } | string;

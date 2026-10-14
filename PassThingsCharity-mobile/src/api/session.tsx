@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { api } from "@/api/client";
+import { backend } from "@/api/backend";
 import { readSession, writeSession } from "@/api/storage";
 import type { SessionUser } from "@/api/types";
 
@@ -18,6 +18,7 @@ type SessionValue = {
   login: (username: string, password: string) => Promise<void>;
   register: (input: RegisterInput) => Promise<void>;
   logout: () => Promise<void>;
+  patchUser: (partial: Partial<SessionUser>) => void;
 };
 
 const SessionContext = createContext<SessionValue | null>(null);
@@ -51,21 +52,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       token,
       user,
       async login(username, password) {
-        const data = await api<{ token: string; user: { id: unknown; username: string; phone: string } }>(
-          "/auth/login",
-          { method: "POST", body: { username, password } },
-        );
+        const data = await backend.login(username, password);
         const nextUser = asUser(data.user);
         setToken(data.token);
         setUser(nextUser);
         await writeSession({ token: data.token, user: nextUser });
       },
       async register(input) {
-        await api("/auth/register", { method: "POST", body: input });
-        const data = await api<{ token: string; user: { id: unknown; username: string; phone: string } }>(
-          "/auth/login",
-          { method: "POST", body: { username: input.username, password: input.password } },
-        );
+        await backend.register(input);
+        const data = await backend.login(input.username, input.password);
         const nextUser = asUser(data.user);
         setToken(data.token);
         setUser(nextUser);
@@ -75,6 +70,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setToken(null);
         setUser(null);
         await writeSession(null);
+      },
+      patchUser(partial) {
+        setUser((current) => {
+          if (!current || !token) return current;
+          const next = { ...current, ...partial };
+          void writeSession({ token, user: next });
+          return next;
+        });
       },
     };
   }, [ready, token, user]);

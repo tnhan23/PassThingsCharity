@@ -1,9 +1,9 @@
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
-import { api, ApiError } from "@/api/client";
+import { backend } from "@/api/backend";
+import { ApiError } from "@/api/client";
 import { useSession } from "@/api/session";
-import type { PointsPayload } from "@/api/types";
 import { Screen } from "@/components/chrome";
 import { Body, Button, Card, Eyebrow, Photo, Title } from "@/components/ui";
 import { colors, fonts, photos } from "@/theme";
@@ -93,17 +93,27 @@ export function ProfileScreen({ state }: { state: "full" | "low" | "empty" | "lo
 function AccountCard() {
   const { user, token, logout } = useSession();
   const [points, setPoints] = useState<number | null>(null);
+  const [lines, setLines] = useState("");
   const [problem, setProblem] = useState("");
 
   useEffect(() => {
     if (!token) {
       setPoints(null);
+      setLines("");
       return;
     }
     let cancelled = false;
-    api<PointsPayload>("/gamification/points/me", { token })
-      .then((data) => {
-        if (!cancelled) setPoints(data.totalPoints);
+    Promise.all([backend.myPoints(token), backend.myAchievements(token), backend.myCertificates(token)])
+      .then(([pointData, badges, papers]) => {
+        if (cancelled) return;
+        setPoints(pointData.totalPoints);
+        const history = pointData.transactions.slice(0, 5).map((row) => `${row.points} điểm ${row.type}`).join(". ");
+        const badgeText = badges.unlockedAchievements
+          .map((row) => (typeof row.achievementId === "object" ? row.achievementId?.title : ""))
+          .filter((title): title is string => Boolean(title))
+          .join(", ");
+        const paperText = papers.certificates.map((row) => row.title ?? "Chứng nhận").join(", ");
+        setLines([history && `Giao dịch: ${history}`, badgeText && `Thành tích: ${badgeText}`, paperText && `Chứng nhận: ${paperText}`].filter(Boolean).join("\n"));
       })
       .catch((caught) => {
         if (!cancelled) setProblem(caught instanceof ApiError ? caught.message : "Không tải được điểm.");
@@ -126,6 +136,9 @@ function AccountCard() {
         {points === null ? "…" : `${points} điểm`}
       </Text>
       {problem ? <Body>{problem}</Body> : null}
+      {lines ? <Body muted>{lines}</Body> : null}
+      <Button label="Sửa tài khoản" tone="ghost" onPress={() => router.push("/account")} />
+      <Button label="Vận hành máy chủ" tone="ghost" onPress={() => router.push("/desk")} />
       <Button
         label="Đăng xuất"
         tone="ghost"

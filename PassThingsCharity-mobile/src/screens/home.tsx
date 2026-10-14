@@ -1,7 +1,8 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, ScrollView, Text, TextInput, View } from "react-native";
-import { api, ApiError } from "@/api/client";
+import { backend } from "@/api/backend";
+import { ApiError } from "@/api/client";
 import { formatDay, itemName, itemUnit, orgName, statusLabel } from "@/api/labels";
 import type { CampaignDetail, CampaignSummary } from "@/api/types";
 import { Screen } from "@/components/chrome";
@@ -134,7 +135,7 @@ export function SearchScreen({ mode = "ready" }: { mode?: "ready" | "loading" | 
       return;
     }
     let cancelled = false;
-    api<{ campaigns: CampaignSummary[] }>(`/campaigns?search=${encodeURIComponent(query)}`)
+    backend.listCampaigns({ search: query })
       .then((data) => {
         if (!cancelled) setFound(data.campaigns);
       })
@@ -280,7 +281,7 @@ function FeaturedCampaigns() {
 
   useEffect(() => {
     let cancelled = false;
-    api<{ campaigns: CampaignSummary[] }>("/campaigns")
+    backend.listCampaigns()
       .then((data) => {
         if (!cancelled) setCampaigns(data.campaigns);
       })
@@ -351,14 +352,20 @@ function CampaignLive() {
       try {
         let id = requestedId;
         if (!id) {
-          const list = await api<{ campaigns: CampaignSummary[] }>("/campaigns");
+          const list = await backend.listCampaigns();
           id = list.campaigns[0]?._id ?? "";
         }
         if (!id) {
           if (!cancelled) setProblem("Chưa có chiến dịch đã phát hành.");
           return;
         }
-        const next = await api<CampaignDetail>(`/campaigns/${id}`);
+        const next = await backend.getCampaign(id);
+        try {
+          const stationList = await backend.campaignStations(id);
+          next.stations = stationList.stations;
+        } catch {
+          // Chi tiết chiến dịch đã kèm trạm. Route riêng lỗi thì vẫn hiện chi tiết.
+        }
         if (!cancelled) setDetail(next);
       } catch (caught) {
         if (!cancelled) setProblem(caught instanceof ApiError ? caught.message : "Không mở được chiến dịch.");

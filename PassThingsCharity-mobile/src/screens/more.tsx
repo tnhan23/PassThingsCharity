@@ -2,7 +2,8 @@ import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { api, ApiError } from "@/api/client";
+import { backend } from "@/api/backend";
+import { ApiError } from "@/api/client";
 import { useSession } from "@/api/session";
 import type { StationRow } from "@/api/types";
 import { Screen } from "@/components/chrome";
@@ -27,7 +28,7 @@ function StationCards() {
       return;
     }
     let cancelled = false;
-    api<{ data: StationRow[] }>("/stations", { token })
+    backend.listStations(token)
       .then((data) => {
         if (!cancelled) setRows(data.data);
       })
@@ -517,6 +518,7 @@ export function MenuScreen() {
         <Title>Bạn muốn làm gì?</Title>
         <Button label="Mang đồ tới trạm" onPress={() => router.replace("/stations/map")} />
         <Button label="Đăng ký tình nguyện" tone="ghost" onPress={() => router.replace("/volunteer/form")} />
+        <Button label="Vận hành máy chủ" tone="ghost" onPress={() => router.replace("/desk")} />
         <Button label="Xin nhận hỗ trợ" tone="ghost" onPress={() => router.replace("/receive/form")} />
         <Button label="Check-in ca" tone="ghost" onPress={() => router.replace("/qr/scan")} />
         <Button label="Đóng" tone="ghost" onPress={() => router.back()} />
