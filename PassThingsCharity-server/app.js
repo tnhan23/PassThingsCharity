@@ -15,6 +15,12 @@ const itemCatalogRouter = require('./routes/itemCatalog');
 const campaignRouter = require('./routes/campaign');
 const gamificationRouter = require('./routes/gamification');
 
+// BE3 Routers (Operations, Transfer, Relief & Workforce)
+const contributionsRouter = require('./routes/contribution');
+const transfersRouter = require('./routes/campaignTransfer');
+const reliefRouter = require('./routes/reliefDistribution');
+const workforceRouter = require('./routes/workforce');
+
 const swaggerUi = require('swagger-ui-express');
 const swaggerDocument = require('./config/swagger');
 const app = express();
@@ -43,6 +49,12 @@ app.use('/admin', adminApprovalRouter);
 app.use('/catalog', itemCatalogRouter);
 app.use('/campaigns', campaignRouter);
 app.use('/gamification', gamificationRouter);
+
+// BE3 Route Middlewares
+app.use('/contributions', contributionsRouter);
+app.use('/transfers', transfersRouter);
+app.use('/relief', reliefRouter);
+app.use('/workforce', workforceRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Không tìm thấy đường dẫn.' });
