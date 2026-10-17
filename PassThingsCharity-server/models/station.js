@@ -16,6 +16,16 @@ const stationSchema =new mongoose.Schema(
       required: true,
       trim: true,
     },
+    latitude: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    longitude: {
+      type: String,
+      required: true,
+      trim: true,
+    },
     isActive: {
       type: Boolean,
       default: false,

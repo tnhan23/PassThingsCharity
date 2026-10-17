@@ -43,19 +43,16 @@ module.exports = {
       requestBody: {
         content: {
           'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                name: { type: 'string' },
-                address: { type: 'string' },
-                isActive: { type: 'boolean' },
-              },
-            },
+            schema: { $ref: '#/components/schemas/StationUpdateRequest' },
           },
         },
       },
       responses: {
         200: { description: 'Cập nhật trạm thành công' },
+        400: { description: 'Thông tin trạm hoặc tọa độ (latitude, longitude) không hợp lệ' },
+        401: { description: 'Chưa đăng nhập' },
+        403: { description: 'Không có quyền truy cập' },
+        404: { description: 'Không tìm thấy trạm' },
       },
     },
     delete: {

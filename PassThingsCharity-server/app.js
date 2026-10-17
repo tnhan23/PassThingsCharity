@@ -4,6 +4,7 @@ const passport = require('passport');
 require('./config/passport');
 
 const usersRouter = require('./routes/users');
+const adminRouter=require('./routes/authAdmin')
 const authRouter = require('./routes/auth');
 const organizationsRouter = require('./routes/organization');
 const stationsRouter = require('./routes/station');
@@ -22,9 +23,12 @@ const reliefRouter = require('./routes/reliefDistribution');
 const workforceRouter = require('./routes/workforce');
 
 const swaggerUi = require('swagger-ui-express');
-const swaggerDocument = require('./config/swagger');
+const createSwaggerDocument = require('./config/swagger');
 const app = express();
 const mongoose = require('mongoose');
+
+const DEFAULT_PORT = Number(process.env.PORT) || 8080;
+const swaggerDocument = createSwaggerDocument(DEFAULT_PORT);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
@@ -38,6 +42,7 @@ app.get('/', (req, res) => {
 });
 
 // Existing Route Middlewares
+app.use('/authadmin',adminRouter)
 app.use('/auth', authRouter);
 app.use('/users', usersRouter);
 app.use('/stationmanager', stationManagerRouter);
@@ -67,15 +72,32 @@ app.use((err, req, res, next) => {
   });
 });
 
-const PORT = process.env.PORT || 8080;
+const startServer = (port) => {
+  const server = app.listen(port, () => {
+    process.env.PORT = String(port);
+    swaggerDocument.servers[0].url = `http://localhost:${port}`;
+    console.log(`🚀 Server running at: http://localhost:${port}`);
+    console.log(`📚 Swagger API Docs:  http://localhost:${port}/swagger`);
+  });
+
+  server.on('error', (error) => {
+    if (error.code === 'EADDRINUSE') {
+      const fallbackPort = port + 1;
+      console.warn(`Port ${port} is already in use. Retrying on port ${fallbackPort}...`);
+      startServer(fallbackPort);
+      return;
+    }
+
+    console.error('Server failed to start:', error);
+    process.exit(1);
+  });
+};
+
 mongoose
   .connect(process.env.MONGODB_URI)
   .then(() => {
     console.log('Đã kết nối MongoDB');
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running at: http://localhost:${PORT}`);
-      console.log(`📚 Swagger API Docs:  http://localhost:${PORT}/swagger`);
-    });
+    startServer(DEFAULT_PORT);
   })
   .catch((error) => {
     console.error('Không kết nối được MongoDB:', error);

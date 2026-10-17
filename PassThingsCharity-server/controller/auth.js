@@ -2,7 +2,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const User = require('../models/user');
-const Role = require('../models/role')
+const Role = require('../models/role');
+const Admin=require('../models/admin');
 async function login(req, res, next) {
   try {
     const { username, password } = req.body;
@@ -14,15 +15,15 @@ async function login(req, res, next) {
     }
 
     const user = await User.findOne({ username }).select('+password');
-
+     
     if (!user || user.status !== 'active') {
-      return res.status(401).json({ error: 'Sai thông tin đăng nhập.' });
+      return res.status(401).json({ error: 'Username không tồn tại.' });
     }
 
     const passwordMatches = await bcrypt.compare(password, user.password);
 
     if (!passwordMatches) {
-      return res.status(401).json({ error: 'Sai thông tin đăng nhập.' });
+      return res.status(401).json({ error: 'Mật khẩu không chính xác.' });
     }
 
     const token = jwt.sign(
