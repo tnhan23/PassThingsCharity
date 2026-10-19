@@ -46,6 +46,7 @@ async function upsertDoc(Model, query, itemData) {
 // 1. Roles
 const rolesData = [
   { _id: new mongoose.Types.ObjectId("6523456789abcdef00000001"), name: "ADMIN", description: "Quản trị viên toàn quyền hệ thống" },
+  { _id: new mongoose.Types.ObjectId("6523456789abcdef00000006"), name: "ORG_MANAGER", description: "Quản lý tổ chức từ thiện" },
   { _id: new mongoose.Types.ObjectId("6523456789abcdef00000002"), name: "STATION_MANAGER", description: "Quản lý trạm tiếp nhận quyên góp" },
   { _id: new mongoose.Types.ObjectId("6523456789abcdef00000003"), name: "STAFF", description: "Nhân viên điều phối và xác nhận" },
   { _id: new mongoose.Types.ObjectId("6523456789abcdef00000004"), name: "VOLUNTEER", description: "Tình nguyện viên nhận nhiệm vụ" },
@@ -127,6 +128,10 @@ const stationsData = [
     organizationId: new mongoose.Types.ObjectId("671000000000000000000001"),
     name: "Trạm Tiếp Nhận Trung Tâm 01",
     address: "456 Đường Lê Lợi, Quận 1, TP.HCM",
+    latitude: "10.776889",
+    longitude: "106.700806",
+    openingTime: "08:00",
+    closingTime: "17:00",
     isActive: true
   },
   {
@@ -134,6 +139,10 @@ const stationsData = [
     organizationId: new mongoose.Types.ObjectId("671000000000000000000001"),
     name: "Trạm Tiếp Nhận Quận 5",
     address: "789 Đường An Dương Vương, Quận 5, TP.HCM",
+    latitude: "10.758889",
+    longitude: "106.666806",
+    openingTime: "08:00",
+    closingTime: "17:00",
     isActive: true
   }
 ];

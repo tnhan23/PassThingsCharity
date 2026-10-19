@@ -28,7 +28,7 @@ router.get(
 
 router.post(
   '/',
-  checkRole(['ADMIN', 'STATION_MANAGER']),
+  checkRole(['ADMIN', 'ORG_MANAGER', 'USER']),
   createOrganization
 );
 
@@ -46,7 +46,7 @@ router.delete(
 
 router.post(
   '/:organizationId/stations',
-  checkRole(['ADMIN', 'STATION_MANAGER']),
+  checkRole(['ADMIN', 'STATION_MANAGER','ORG_MANAGER']),
   createStation
 );
 
