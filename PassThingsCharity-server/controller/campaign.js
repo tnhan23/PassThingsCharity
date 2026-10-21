@@ -10,6 +10,23 @@ const MIN_CAMPAIGN_DURATION_MS = 5 * 24 * 60 * 60 * 1000;
 const MAX_CAMPAIGN_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
+ * Calculate Haversine distance in kilometers between two GPS coordinates
+ */
+function getHaversineDistanceKm(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Earth radius in km
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) *
+      Math.cos(lat2 * (Math.PI / 180)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c * 100) / 100;
+}
+
+/**
  * Create a new Campaign (Admin / Station Manager)
  */
 async function createCampaign(req, res, next) {
@@ -150,7 +167,7 @@ async function getCampaignById(req, res, next) {
     // Fetch associated stations
     const stations = await CampaignStation.find({ campaignId: id }).populate({
       path: 'stationId',
-      select: 'name address isActive',
+      select: 'name address latitude longitude openingTime closingTime isActive',
     });
 
     return res.status(200).json({
@@ -442,11 +459,13 @@ async function removeStationFromCampaign(req, res, next) {
 }
 
 /**
- * Public API: Find active participating stations for a Campaign (e.g. for donor guidance)
+ * Public API: Find active participating stations for a Campaign (with optional userLat & userLng distance calculation)
  */
 async function findStationsForCampaign(req, res, next) {
   try {
     const { id } = req.params;
+    const { userLat, userLng } = req.query;
+
     if (!mongoose.isValidObjectId(id)) {
       return res.status(400).json({ error: 'Invalid Campaign ID.' });
     }
@@ -458,7 +477,7 @@ async function findStationsForCampaign(req, res, next) {
 
     const campaignStations = await CampaignStation.find({ campaignId: id }).populate({
       path: 'stationId',
-      select: 'name address isActive organizationId',
+      select: 'name address latitude longitude openingTime closingTime isActive organizationId managerId',
       populate: { path: 'organizationId', select: 'name code' },
     });
 
@@ -466,10 +485,35 @@ async function findStationsForCampaign(req, res, next) {
       .map((cs) => cs.stationId)
       .filter((st) => st && st.isActive);
 
+    const latNum = parseFloat(userLat);
+    const lngNum = parseFloat(userLng);
+    const hasUserCoordinates = !isNaN(latNum) && !isNaN(lngNum);
+
+    let stationsList = activeStations.map((st) => {
+      const stObj = st.toObject();
+      if (hasUserCoordinates && stObj.latitude && stObj.longitude) {
+        const stLat = parseFloat(stObj.latitude);
+        const stLng = parseFloat(stObj.longitude);
+        if (!isNaN(stLat) && !isNaN(stLng)) {
+          stObj.distanceKm = getHaversineDistanceKm(latNum, lngNum, stLat, stLng);
+        }
+      }
+      return stObj;
+    });
+
+    if (hasUserCoordinates) {
+      stationsList.sort((a, b) => {
+        if (a.distanceKm !== undefined && b.distanceKm !== undefined) {
+          return a.distanceKm - b.distanceKm;
+        }
+        return 0;
+      });
+    }
+
     return res.status(200).json({
       campaignId: id,
-      totalStations: activeStations.length,
-      stations: activeStations,
+      totalStations: stationsList.length,
+      stations: stationsList,
     });
   } catch (error) {
     return next(error);
