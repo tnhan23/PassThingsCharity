@@ -10,6 +10,9 @@ const {
 } = require('../controller/contribution');
 const checkBearerToken = require('../middleware/checkBearerToken');
 const checkRole = require('../middleware/checkRole');
+const { uploadContributionImages } = require('../utils/contributionUpload');
+
+router.post('/upload-images', checkBearerToken, checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF']), uploadContributionImages);
 
 // Tra cứu donor (Staff / Station Manager / Admin)
 router.get('/lookup', checkBearerToken, checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF']), lookupDonor);

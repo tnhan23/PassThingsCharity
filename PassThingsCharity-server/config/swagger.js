@@ -14,6 +14,7 @@ const gamificationDocs = require('../docs/gamification.doc');
 
 // BE3 Swagger Docs
 const operationsDocs = require('../docs/operations.doc');
+const uploadDocs = require('../docs/upload.doc');
 
 const createSwaggerDocument = (port = process.env.PORT || 8080) => ({
   openapi: '3.0.0',
@@ -56,6 +57,7 @@ const createSwaggerDocument = (port = process.env.PORT || 8080) => ({
     ...campaignDocs,
     ...gamificationDocs,
     ...operationsDocs,
+    ...uploadDocs,
   },
 });
 
