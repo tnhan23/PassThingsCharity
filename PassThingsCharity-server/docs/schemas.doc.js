@@ -53,13 +53,34 @@ module.exports = {
   },
   OrganizationRequest: {
     type: 'object',
-    required: ['name', 'code', 'address', 'phone', 'email'],
+    required: ['name', 'code', 'address'],
     properties: {
       name: { type: 'string', example: 'Quỹ Từ Thiện Ánh Sáng' },
       code: { type: 'string', example: 'ORG-LIGHT-01' },
       address: { type: 'string', example: '123 Đường Nguyễn Huệ, Q1, TP.HCM' },
       phone: { type: 'string', example: '0909123456' },
       email: { type: 'string', example: 'contact@anhsang.org' },
+      description: { type: 'string', example: 'Cứu trợ đồng bào vùng lũ lụt và hỗ trợ trẻ em khó khăn' },
+      operatingArea: { type: 'string', example: 'TP.HCM và các tỉnh Miền Trung' },
+      idCardNumber: { type: 'string', example: '079123456789' },
+    },
+  },
+  CreateStationManagerRequest: {
+    type: 'object',
+    required: ['email', 'username', 'password', 'fullName', 'phone'],
+    properties: {
+      email: { type: 'string', format: 'email', example: 'manager_thuduc@gmail.com' },
+      username: { type: 'string', example: 'manager_thuduc' },
+      password: { type: 'string', format: 'password', example: 'Password123!' },
+      fullName: { type: 'string', example: 'Trần Văn B' },
+      phone: { type: 'string', example: '0901234567' },
+    },
+  },
+  AssignStationManagerRequest: {
+    type: 'object',
+    required: ['identifier'],
+    properties: {
+      identifier: { type: 'string', example: '0987654321', description: 'Số điện thoại hoặc email của User cần bổ nhiệm' },
     },
   },
   StationRequest: {
@@ -173,13 +194,13 @@ module.exports = {
   },
   AchievementRequest: {
     type: 'object',
-    description: 'MVP achievement criteria supported: donation count and accumulated points.',
+    description: 'System achievement criteria types supported: DONATION_COUNT, DONATION_WEIGHT_KG, VOLUNTEER_HOURS, CAMPAIGN_COUNT, POINTS_ACCUMULATED.',
     required: ['title', 'criteriaType', 'criteriaValue'],
     properties: {
       title: { type: 'string', example: 'Chiến Sĩ Áo Xanh' },
       description: { type: 'string', example: 'Hoàn thành 1 lần quyên góp thành công' },
       badgeIconUrl: { type: 'string', example: 'https://example.com/badge.png' },
-      criteriaType: { type: 'string', enum: ['DONATION_COUNT', 'POINTS_ACCUMULATED'], example: 'DONATION_COUNT' },
+      criteriaType: { type: 'string', enum: ['DONATION_COUNT', 'DONATION_WEIGHT_KG', 'VOLUNTEER_HOURS', 'CAMPAIGN_COUNT', 'POINTS_ACCUMULATED'], example: 'DONATION_COUNT' },
       criteriaValue: { type: 'integer', minimum: 1, example: 5 },
       pointsReward: { type: 'integer', minimum: 0, example: 100 },
     },
@@ -408,4 +429,3 @@ module.exports = {
     },
   },
 };
-

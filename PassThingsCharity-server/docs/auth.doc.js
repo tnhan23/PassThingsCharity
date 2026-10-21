@@ -73,26 +73,25 @@ module.exports = {
       },
     },
   },
-  '/auth/reset-password/{id}': {
-    patch: {
+  '/auth/forgot-password': {
+    post: {
       tags: ['Authentication'],
-      summary: 'Admin reset mật khẩu khi user quên mật khẩu',
-      description: 'Chỉ ADMIN được gọi sau khi đã xác minh danh tính người dùng. Mật khẩu mới được hash trước khi lưu.',
-      parameters: [
-        { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
-      ],
+      summary: 'Yêu cầu gửi OTP đặt lại mật khẩu qua email (Lưu ý: Sử dụng Gmail thật)',
+      description: 'Nhập email để nhận mã OTP gồm 6 chữ số qua Gmail. ⚠️ LƯU Ý: Phải sử dụng Gmail thật đã tồn tại trong database để có thể mở hộp thư nhận mã OTP. Mã có hiệu lực trong 10 phút.',
+      security: [],
       requestBody: {
         required: true,
         content: {
           'application/json': {
             schema: {
               type: 'object',
-              required: ['newPassword'],
+              required: ['email'],
               properties: {
-                newPassword: {
+                email: {
                   type: 'string',
-                  format: 'password',
-                  minLength: 8,
+                  format: 'email',
+                  description: 'Địa chỉ Gmail thật đã đăng ký tài khoản trong hệ thống',
+                  example: 'your_real_email@gmail.com',
                 },
               },
             },
@@ -100,11 +99,52 @@ module.exports = {
         },
       },
       responses: {
-        200: { description: 'Đã đặt lại mật khẩu' },
-        400: { description: 'ID hoặc mật khẩu mới không hợp lệ' },
-        401: { description: 'Chưa đăng nhập' },
-        403: { description: 'Chỉ ADMIN được phép thực hiện' },
-        404: { description: 'Không tìm thấy user' },
+        200: {
+          description: 'Thông báo đã gửi mã OTP nếu email tồn tại trong hệ thống (kiểm tra hộp thư đến hoặc mục Spam của Gmail thật)',
+        },
+      },
+    },
+  },
+  '/auth/reset-password': {
+    post: {
+      tags: ['Authentication'],
+      summary: 'Đặt lại mật khẩu mới bằng mã OTP (Sử dụng Gmail thật nhận mã)',
+      description: 'Nhập Gmail thật đã nhận mã OTP, nhập mã OTP 6 số và mật khẩu mới.',
+      security: [],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['email', 'otp', 'newPassword'],
+              properties: {
+                email: {
+                  type: 'string',
+                  format: 'email',
+                  description: 'Gmail thật đã dùng để nhận mã OTP ở bước trên',
+                  example: 'your_real_email@gmail.com',
+                },
+                otp: {
+                  type: 'string',
+                  description: 'Mã OTP gồm 6 chữ số nhận từ Gmail',
+                  example: '123456',
+                },
+                newPassword: {
+                  type: 'string',
+                  format: 'password',
+                  minLength: 6,
+                  description: 'Mật khẩu mới (tối thiểu 6 ký tự)',
+                  example: 'newpassword123',
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: { description: 'Đặt lại mật khẩu thành công' },
+        400: { description: 'Mã OTP không đúng, hết hạn hoặc dữ liệu không hợp lệ' },
       },
     },
   },

@@ -71,18 +71,28 @@ async function createOrganization(req, res, next) {
         error: 'name, code và address là thông tin bắt buộc.',
       });
     }
+    const existingPending = await Organization.findOne({
+      submittedBy: req.user._id,
+      status: 'PENDING',
+    });
 
+    if (existingPending) {
+      return res.status(400).json({
+        error: 'Bạn đã có một yêu cầu thành lập tổ chức đang chờ duyệt. Vui lòng chờ phản hồi từ Admin.',
+      });
+    }
     const isAdmin = req.user.role.name === 'ADMIN';
-
     const organization = await Organization.create({
       name: body.name.trim(),
       code: body.code.trim().toUpperCase(),
       address: body.address.trim(),
       phone: typeof body.phone === 'string' ? body.phone.trim() : undefined,
       email: typeof body.email === 'string' ? body.email.trim() : undefined,
-      logoUrl:
-        typeof body.logoUrl === 'string' ? body.logoUrl.trim() : undefined,
+      description: typeof body.description === 'string' ? body.description.trim() : '',
+      operatingArea: typeof body.operatingArea === 'string' ? body.operatingArea.trim() : '',
+      idCardNumber: typeof body.idCardNumber === 'string' ? body.idCardNumber.trim() : '',
       submittedBy: req.user._id,
+      status: isAdmin ? 'APPROVED' : 'PENDING',
       isVerified: isAdmin,
     });
 
