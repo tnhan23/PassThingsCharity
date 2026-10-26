@@ -1,4 +1,32 @@
-module.exports = {
+const accessErrorSchema = {
+  type: 'object',
+  required: ['code', 'message', 'error'],
+  properties: {
+    code: { type: 'string', description: 'Mã lỗi ổn định để FE xử lý.' },
+    message: { type: 'string', description: 'Thông báo hiển thị cho người dùng.' },
+    error: { type: 'string', description: 'Giống message, tương thích với FE hiện tại.' },
+  },
+};
+
+// All BE3 endpoints require authentication. Document JSON failures consistently.
+const accessResponses = {
+  401: {
+    description: 'Request thiếu Bearer token, sai định dạng Authorization, token hết hạn/không hợp lệ hoặc tài khoản không hoạt động. Thiếu token không đồng nghĩa người dùng chưa đăng nhập trên FE.',
+    content: { 'application/json': {
+      schema: accessErrorSchema,
+      example: { code: 'AUTH_TOKEN_EXPIRED', message: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', error: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.' },
+    } },
+  },
+  403: {
+    description: 'Đã đăng nhập nhưng không có quyền thực hiện hành động.',
+    content: { 'application/json': {
+      schema: accessErrorSchema,
+      example: { code: 'FORBIDDEN', message: 'Bạn không có quyền truy cập.', error: 'Bạn không có quyền truy cập.' },
+    } },
+  },
+};
+
+const paths = {
   '/contributions/upload-images': {
     post: {
       tags: ['BE3 - Operations & Inbound'],
@@ -539,3 +567,72 @@ module.exports = {
     },
   },
 };
+
+// Mirror checkRole in routes; null means any successfully authenticated account.
+const operators = ['ADMIN', 'STATION_MANAGER', 'STAFF'];
+const managers = ['ADMIN', 'STATION_MANAGER'];
+const permissions = {
+  'POST /contributions/upload-images': operators,
+  'GET /contributions/lookup': operators,
+  'POST /contributions': operators,
+  'GET /contributions': null,
+  'GET /contributions/{id}': null,
+  'PATCH /contributions/{id}/status': managers,
+  'POST /contributions/{id}/images': operators,
+  'POST /transfers': operators,
+  'GET /transfers': operators,
+  'GET /transfers/{id}': operators,
+  'PATCH /transfers/{id}/status': operators,
+  'POST /relief': operators,
+  'GET /relief': null,
+  'GET /relief/{id}': null,
+  'PATCH /relief/{id}/status': operators,
+  'GET /relief/summary/{campaignId}': null,
+  'POST /workforce/volunteers/register': null,
+  'GET /workforce/volunteers/me': null,
+  'GET /workforce/volunteers/campaign/{campaignId}': operators,
+  'PATCH /workforce/volunteers/{id}/status': managers,
+  'GET /workforce/tasks/applications/me': null,
+  'POST /workforce/tasks/{taskId}/apply': null,
+  'GET /workforce/tasks/{taskId}/applications': operators,
+  'PATCH /workforce/tasks/applications/{id}/review': operators,
+  'POST /workforce/tasks': operators,
+  'GET /workforce/tasks': null,
+  'GET /workforce/tasks/me': null,
+  'GET /workforce/tasks/{id}': null,
+  'PATCH /workforce/tasks/{id}': operators,
+  'POST /workforce/tasks/assign': operators,
+  'POST /workforce/tasks/check-in': null,
+  'POST /workforce/tasks/check-out': null,
+};
+
+const personalScopes = {
+  'POST /workforce/volunteers/register': 'Đăng ký cho chính tài khoản trong token; userId do BE lấy từ token.',
+  'GET /workforce/volunteers/me': 'Chỉ trả đơn đăng ký của tài khoản trong token.',
+  'GET /workforce/tasks/applications/me': 'Chỉ trả đơn ứng tuyển của tài khoản trong token.',
+  'POST /workforce/tasks/{taskId}/apply': 'Ứng tuyển cho chính tài khoản trong token; userId do BE lấy từ token.',
+  'GET /workforce/tasks/me': 'Chỉ trả nhiệm vụ được phân công cho tài khoản trong token.',
+  'POST /workforce/tasks/check-in': 'Người được phân công tự check-in; ADMIN, STATION_MANAGER hoặc STAFF được check-in thay người khác. Tài khoản khác nhận 403.',
+  'POST /workforce/tasks/check-out': 'Người được phân công tự check-out; ADMIN, STATION_MANAGER hoặc STAFF được check-out thay người khác. Tài khoản khác nhận 403.',
+};
+
+for (const [url, path] of Object.entries(paths)) {
+  for (const [method, operation] of Object.entries(path)) {
+    const key = `${method.toUpperCase()} ${url}`;
+    if (!Object.prototype.hasOwnProperty.call(permissions, key)) {
+      throw new Error(`Missing BE3 Swagger permission: ${key}`);
+    }
+    const roles = permissions[key];
+    const label = roles ? roles.join(' / ') : 'Mọi role có token hợp lệ';
+    operation.summary = `[${label}] ${operation.summary}`;
+    const scope = personalScopes[key] || (roles
+      ? 'Kiểm tra role theo danh sách trên; hiện chưa giới hạn dữ liệu theo trạm/tổ chức của tài khoản.'
+      : 'Hiện BE không giới hạn role và không tự giới hạn dữ liệu theo người dùng/trạm/tổ chức; kết quả phụ thuộc bộ lọc của API.');
+    operation.description = `**Quyền truy cập:** ${label}.\n\n**Phạm vi:** ${scope}${operation.description ? `\n\n${operation.description}` : ''}`;
+    operation.security = [{ bearerAuth: [] }];
+    operation['x-allowed-roles'] = roles || ['*'];
+    operation.responses = { ...operation.responses, ...accessResponses };
+  }
+}
+
+module.exports = paths;
