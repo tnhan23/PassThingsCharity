@@ -42,6 +42,7 @@ app.get('/', (req, res) => {
 // Existing Route Middlewares
 app.use('/auth', authRouter);
 app.use('/users', usersRouter);
+app.use('/uploads', require('./routes/upload'));
 app.use('/stationmanager', stationManagerRouter);
 app.use('/organizations', organizationsRouter);
 app.use('/stations', stationsRouter);

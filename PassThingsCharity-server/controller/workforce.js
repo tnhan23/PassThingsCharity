@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { sendAccessError } = require('../utils/accessError');
 const VolunteerRegistration = require('../models/volunteerRegistration');
 const Task = require('../models/task');
 const TaskAssignment = require('../models/taskAssignment');
@@ -734,7 +735,7 @@ async function checkInTask(req, res, next) {
     // Verify ownership or staff/admin
     const userRole = req.user.role ? req.user.role.name : '';
     if (String(assignment.assigneeId) !== String(userId) && !['ADMIN', 'STATION_MANAGER', 'STAFF'].includes(userRole)) {
-      return res.status(403).json({ error: 'Bạn không có quyền điểm danh cho người này.' });
+      return sendAccessError(res, 403, 'FORBIDDEN', 'Bạn không có quyền điểm danh cho người này.');
     }
 
     assignment.checkInTime = new Date();
@@ -773,7 +774,7 @@ async function checkOutTask(req, res, next) {
 
     const userRole = req.user.role ? req.user.role.name : '';
     if (String(assignment.assigneeId) !== String(userId) && !['ADMIN', 'STATION_MANAGER', 'STAFF'].includes(userRole)) {
-      return res.status(403).json({ error: 'Bạn không có quyền điểm danh kết thúc ca cho người này.' });
+      return sendAccessError(res, 403, 'FORBIDDEN', 'Bạn không có quyền điểm danh kết thúc ca cho người này.');
     }
 
     const checkOut = new Date();

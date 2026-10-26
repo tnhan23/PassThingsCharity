@@ -1,16 +1,17 @@
+const { sendAccessError } = require('../utils/accessError');
+
 const checkRole = (allowedRoles) => {
     return (req, res, next) => {
-        if (!req.user || !req.user.role) {
-            return res.status(401).json({ error: 'Unauthorized: Không tìm thấy thông tin xác thực.' })
+        if (!req.user) {
+            return sendAccessError(res, 401, 'AUTH_REQUIRED', 'Request chưa có thông tin xác thực hợp lệ để kiểm tra quyền truy cập.');
         }
-        const currentUserRole = req.user.role.name;
+        const currentUserRole = req.user.role && req.user.role.name;
         if (allowedRoles.includes(currentUserRole)) {
             next();
         }
         else {
-            res.status(403).json({
-                error: `Forbidden: Yêu cầu quyền ${allowedRoles.join(' hoặc ')} để thực hiện hành động này.`
-            });
+            return sendAccessError(res, 403, 'FORBIDDEN',
+                `Bạn không có quyền truy cập. Yêu cầu quyền ${allowedRoles.join(' hoặc ')} để thực hiện hành động này.`);
         };
     };
 };
