@@ -43,19 +43,16 @@ module.exports = {
       requestBody: {
         content: {
           'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                name: { type: 'string' },
-                address: { type: 'string' },
-                isActive: { type: 'boolean' },
-              },
-            },
+            schema: { $ref: '#/components/schemas/StationUpdateRequest' },
           },
         },
       },
       responses: {
         200: { description: 'Cập nhật trạm thành công' },
+        400: { description: 'Thông tin trạm hoặc tọa độ (latitude, longitude) không hợp lệ' },
+        401: { description: 'Chưa đăng nhập' },
+        403: { description: 'Không có quyền truy cập' },
+        404: { description: 'Không tìm thấy trạm' },
       },
     },
     delete: {
@@ -90,6 +87,63 @@ module.exports = {
       ],
       responses: {
         200: { description: 'Đã xóa nhân viên khỏi trạm' },
+      },
+    },
+  },
+  '/stations/{id}/manager': {
+    post: {
+      tags: ['Stations'],
+      summary: 'Tạo tài khoản mới và gán làm Trưởng trạm (ADMIN, ORG_MANAGER)',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', example: '671000000000000000000011' }, description: 'Station ID' },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/CreateStationManagerRequest' },
+          },
+        },
+      },
+      responses: {
+        201: { description: 'Đã tạo tài khoản và gán làm Trưởng trạm thành công' },
+        400: { description: 'Thông tin không hợp lệ' },
+        403: { description: 'Không có quyền quản lý trạm thuộc tổ chức này' },
+        404: { description: 'Không tìm thấy trạm hoặc tổ chức' },
+        409: { description: 'Email hoặc username đã được sử dụng' },
+      },
+    },
+    patch: {
+      tags: ['Stations'],
+      summary: 'Bổ nhiệm User có sẵn làm Trưởng trạm qua Email/SĐT (ADMIN, ORG_MANAGER)',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', example: '671000000000000000000011' }, description: 'Station ID' },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/AssignStationManagerRequest' },
+          },
+        },
+      },
+      responses: {
+        200: { description: 'Đã bổ nhiệm làm Trưởng trạm thành công' },
+        400: { description: 'Vui lòng cung cấp email hoặc số điện thoại' },
+        403: { description: 'Không có quyền quản lý trạm thuộc tổ chức này' },
+        404: { description: 'Không tìm thấy trạm, tổ chức hoặc người dùng' },
+      },
+    },
+    delete: {
+      tags: ['Stations'],
+      summary: 'Gỡ quyền Trưởng trạm khỏi trạm này (ADMIN, ORG_MANAGER)',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', example: '671000000000000000000011' }, description: 'Station ID' },
+      ],
+      responses: {
+        200: { description: 'Đã gỡ Trưởng trạm khỏi trạm' },
+        403: { description: 'Không có quyền quản lý trạm thuộc tổ chức này' },
+        404: { description: 'Không tìm thấy trạm hoặc tổ chức' },
       },
     },
   },

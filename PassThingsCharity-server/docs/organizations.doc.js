@@ -9,7 +9,7 @@ module.exports = {
     },
     post: {
       tags: ['Organizations'],
-      summary: 'Tạo tổ chức từ thiện mới (ADMIN, STATION_MANAGER)',
+      summary: 'Tạo tổ chức từ thiện mới (ADMIN, ORG_MANAGER, USER)',
       requestBody: {
         required: true,
         content: {
@@ -19,7 +19,8 @@ module.exports = {
         },
       },
       responses: {
-        201: { description: 'Tạo tổ chức thành công' },
+        201: { description: 'Tạo tổ chức thành công, chờ Admin duyệt' },
+        400: { description: 'Dữ liệu không hợp lệ hoặc đã có đơn chờ duyệt' },
       },
     },
   },
@@ -36,7 +37,7 @@ module.exports = {
     },
     patch: {
       tags: ['Organizations'],
-      summary: 'Cập nhật thông tin tổ chức',
+      summary: 'Cập nhật thông tin tổ chức (ADMIN, ORG_MANAGER)',
       parameters: [
         { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
       ],
@@ -53,7 +54,7 @@ module.exports = {
     },
     delete: {
       tags: ['Organizations'],
-      summary: 'Xóa tổ chức',
+      summary: 'Xóa tổ chức (ADMIN, ORG_MANAGER)',
       parameters: [
         { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
       ],
@@ -65,7 +66,7 @@ module.exports = {
   '/organizations/{organizationId}/stations': {
     post: {
       tags: ['Organizations'],
-      summary: 'Tạo trạm mới thuộc tổ chức',
+      summary: 'Tạo trạm mới thuộc tổ chức (ADMIN, ORG_MANAGER)',
       parameters: [
         { name: 'organizationId', in: 'path', required: true, schema: { type: 'string' } },
       ],
@@ -75,10 +76,14 @@ module.exports = {
           'application/json': {
             schema: {
               type: 'object',
-              required: ['name', 'address'],
+              required: ['name', 'address', 'latitude', 'longitude'],
               properties: {
                 name: { type: 'string', example: 'Trạm Tiếp Nhận Cơ Sở 1' },
                 address: { type: 'string', example: '456 Lê Lợi, Q1, TP.HCM' },
+                latitude: { type: 'string', example: '10.776889', description: 'Vĩ độ (Latitude)' },
+                longitude: { type: 'string', example: '106.700806', description: 'Kinh độ (Longitude)' },
+                openingTime: { type: 'string', example: '08:00', description: 'Giờ mở cửa' },
+                closingTime: { type: 'string', example: '17:00', description: 'Giờ đóng cửa' },
               },
             },
           },
@@ -86,6 +91,10 @@ module.exports = {
       },
       responses: {
         201: { description: 'Tạo trạm thành công' },
+        400: { description: 'Thiếu name, address hoặc tọa độ không hợp lệ' },
+        401: { description: 'Chưa đăng nhập' },
+        403: { description: 'Không có quyền tạo trạm cho tổ chức này' },
+        409: { description: 'Tổ chức cần được Admin duyệt trước khi tạo trạm' },
       },
     },
   },

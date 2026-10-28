@@ -23,6 +23,12 @@ async function checkAndUnlockAchievements(userId) {
     type: 'DONATION',
   });
 
+  // Calculate total volunteer task count
+  const volunteerTaskCount = await PointTransaction.countDocuments({
+    userId,
+    type: 'VOLUNTEER_TASK',
+  });
+
   // Get all active achievements
   const achievements = await Achievement.find({ isActive: true });
 
@@ -39,6 +45,10 @@ async function checkAndUnlockAchievements(userId) {
     if (ach.criteriaType === 'POINTS_ACCUMULATED' && totalPoints >= ach.criteriaValue) {
       qualifies = true;
     } else if (ach.criteriaType === 'DONATION_COUNT' && donationCount >= ach.criteriaValue) {
+      qualifies = true;
+    } else if (ach.criteriaType === 'VOLUNTEER_HOURS' && volunteerTaskCount >= ach.criteriaValue) {
+      qualifies = true;
+    } else if (ach.criteriaType === 'CAMPAIGN_COUNT' && (donationCount + volunteerTaskCount) >= ach.criteriaValue) {
       qualifies = true;
     }
 
@@ -153,7 +163,7 @@ async function createAchievement(req, res, next) {
       return res.status(400).json({ error: 'Achievement title is required.' });
     }
 
-    const validCriteria = ['DONATION_COUNT', 'POINTS_ACCUMULATED'];
+    const validCriteria = ['DONATION_COUNT', 'DONATION_WEIGHT_KG', 'VOLUNTEER_HOURS', 'CAMPAIGN_COUNT', 'POINTS_ACCUMULATED'];
     const formattedCriteria = typeof criteriaType === 'string' ? criteriaType.trim().toUpperCase() : '';
 
     if (!validCriteria.includes(formattedCriteria)) {
@@ -303,6 +313,7 @@ async function getUserCertificates(req, res, next) {
 }
 
 module.exports = {
+  checkAndUnlockAchievements,
   awardPoints,
   getUserPoints,
   createAchievement,

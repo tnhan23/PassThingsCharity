@@ -11,7 +11,11 @@ const itemCatalogDocs = require('../docs/itemCatalog.doc');
 const campaignDocs = require('../docs/campaign.doc');
 const gamificationDocs = require('../docs/gamification.doc');
 
-const swaggerDocument = {
+// BE3 Swagger Docs
+const operationsDocs = require('../docs/operations.doc');
+const uploadDocs = require('../docs/upload.doc');
+
+const createSwaggerDocument = (port = process.env.PORT || 8080) => ({
   openapi: '3.0.0',
   info: {
     title: 'PassThingsCharity API Documentation',
@@ -20,7 +24,7 @@ const swaggerDocument = {
   },
   servers: [
     {
-      url: 'http://localhost:8080',
+      url: `http://localhost:${port}`,
       description: 'Local Development Server',
     },
   ],
@@ -50,7 +54,9 @@ const swaggerDocument = {
     ...itemCatalogDocs,
     ...campaignDocs,
     ...gamificationDocs,
+    ...operationsDocs,
+    ...uploadDocs,
   },
-};
+});
 
-module.exports = swaggerDocument;
+module.exports = createSwaggerDocument;

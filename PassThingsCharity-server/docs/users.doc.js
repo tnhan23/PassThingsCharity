@@ -1,34 +1,4 @@
 module.exports = {
-  '/users': {
-    get: {
-      tags: ['Users'],
-      summary: 'Lấy danh sách người dùng (Chỉ ADMIN)',
-      parameters: [
-        { name: 'role', in: 'query', schema: { type: 'string' }, description: 'Lọc theo role name (ADMIN, USER, STAFF...)' },
-        { name: 'status', in: 'query', schema: { type: 'string' }, description: 'Lọc theo status (active, inactive, banned)' },
-      ],
-      responses: {
-        200: { description: 'Danh sách người dùng' },
-        401: { description: 'Chưa đăng nhập' },
-        403: { description: 'Không có quyền truy cập' },
-      },
-    },
-    post: {
-      tags: ['Users'],
-      summary: 'Tạo người dùng mới',
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: { $ref: '#/components/schemas/RegisterRequest' },
-          },
-        },
-      },
-      responses: {
-        201: { description: 'Tạo thành công' },
-      },
-    },
-  },
   '/users/me/profile': {
     patch: {
       tags: ['Users'],
@@ -100,48 +70,84 @@ module.exports = {
       },
     },
   },
-  '/users/{id}/status': {
+  '/users/{id}/station-manager': {
     patch: {
       tags: ['Users'],
-      summary: 'Thay đổi trạng thái tài khoản (Chỉ ADMIN)',
-      description: 'Gửi active để bật lại, inactive để vô hiệu hóa hoặc banned để khóa tài khoản. Nếu không gửi body, mặc định chuyển sang inactive.',
+      summary: 'Gán quyền STATION_MANAGER cho user (Chỉ ADMIN)',
+      description: 'Admin cấp role STATION_MANAGER cho tài khoản người dùng. Chỉ áp dụng cho tài khoản đang có role USER.',
       parameters: [
-        { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', example: '671000000000000000000001' }, description: 'ID của user cần gán quyền' },
       ],
-      requestBody: {
-        required: false,
-        content: {
-          'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                status: {
-                  type: 'string',
-                  enum: ['active', 'inactive', 'banned'],
-                  example: 'inactive',
+      responses: {
+        200: {
+          description: 'Đã cấp role STATION_MANAGER và gán trạm thành công',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  message: { type: 'string', example: 'Đã cấp role STATION_MANAGER và gán trạm' },
+                  user: {
+                    type: 'object',
+                    properties: {
+                      id: { type: 'string', example: '671000000000000000000001' },
+                      username: { type: 'string', example: 'user_01' },
+                      role: { type: 'string', example: 'STATION_MANAGER' },
+                    },
+                  },
                 },
               },
             },
           },
         },
-      },
-      responses: {
-        200: { description: 'Trạng thái tài khoản đã được cập nhật' },
-        401: { description: 'Chưa đăng nhập' },
-        403: { description: 'Chỉ ADMIN được phép thực hiện' },
-        404: { description: 'Không tìm thấy tài khoản' },
-      },
-    },
-  },
-  '/users/{id}/station-manager': {
-    patch: {
-      tags: ['Users'],
-      summary: 'Gán quyền STATION_MANAGER cho user (Chỉ ADMIN)',
-      parameters: [
-        { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
-      ],
-      responses: {
-        200: { description: 'Đã cập nhật role thành STATION_MANAGER' },
+        400: {
+          description: 'User ID không hợp lệ',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ErrorResponse' },
+            },
+          },
+        },
+        401: {
+          description: 'Chưa đăng nhập hoặc token không hợp lệ',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ErrorResponse' },
+            },
+          },
+        },
+        403: {
+          description: 'Chỉ ADMIN mới có quyền thực hiện hành động này',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ErrorResponse' },
+            },
+          },
+        },
+        404: {
+          description: 'Không tìm thấy user',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ErrorResponse' },
+            },
+          },
+        },
+        409: {
+          description: 'Chỉ có thể nâng tài khoản đang có role USER hoặc user đã được gán vào trạm này',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ErrorResponse' },
+            },
+          },
+        },
+        500: {
+          description: 'Lỗi server (ví dụ chưa có role STATION_MANAGER trong hệ thống)',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ErrorResponse' },
+            },
+          },
+        },
       },
     },
   },

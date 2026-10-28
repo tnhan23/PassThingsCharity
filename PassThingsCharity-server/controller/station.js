@@ -3,6 +3,8 @@ const Organization = require('../models/organization');
 const Station = require('../models/station');
 const StationStaff = require('../models/stationstaff');
 const User = require('../models/user');
+const bcrypt = require('bcryptjs');
+const Role = require('../models/role');
 const { getOrganizationAccess, getStationAccess } = require('../utils/resourceAccess');
 
 function validateStation(body) {
@@ -15,22 +17,18 @@ function validateStation(body) {
     return false;
   }
 
-  if (
-    body.latitude !== undefined &&
-    (typeof body.latitude !== 'number' ||
-      body.latitude < -90 ||
-      body.latitude > 90)
-  ) {
-    return false;
+  if (body.latitude !== undefined) {
+    const lat = Number(body.latitude);
+    if (isNaN(lat) || lat < -90 || lat > 90) {
+      return false;
+    }
   }
 
-  if (
-    body.longitude !== undefined &&
-    (typeof body.longitude !== 'number' ||
-      body.longitude < -180 ||
-      body.longitude > 180)
-  ) {
-    return false;
+  if (body.longitude !== undefined) {
+    const lng = Number(body.longitude);
+    if (isNaN(lng) || lng < -180 || lng > 180) {
+      return false;
+    }
   }
 
   return true;
@@ -57,7 +55,7 @@ async function listStations(req, res, next) {
     };
 
     if (req.user.role.name !== 'ADMIN' &&
-        req.user.role.name !== 'STATION_MANAGER') {
+      req.user.role.name !== 'STATION_MANAGER') {
       stationFilter.isActive = true;
     }
 
@@ -88,7 +86,7 @@ async function getStation(req, res, next) {
 
 async function createStation(req, res, next) {
   try {
-    const { organizationId } = req.params;
+    const organizationId = req.params.organizationId || (req.body && req.body.organizationId);
     const body = req.body || {};
 
     if (!validateStation(body)) {
@@ -291,6 +289,153 @@ async function removeStaffFromStation(req, res, next) {
     return next(error);
   }
 }
+// 1. Tạo tài khoản mới trực tiếp và gán làm Trưởng trạm
+async function createAndAssignStationManager(req, res, next) {
+  try {
+    const { id } = req.params; // Station ID
+    const { email, username, password, fullName, phone } = req.body || {};
+
+    if (
+      !email?.trim() || !username?.trim() || !password ||
+      !fullName?.trim() || !phone || !/^\d{10}$/.test(phone.trim())
+    ) {
+      return res.status(400).json({ error: 'Thông tin không hợp lệ; phone phải gồm đúng 10 chữ số.' });
+    }
+
+    const station = await Station.findById(id);
+    if (!station) return res.status(404).json({ error: 'Không tìm thấy trạm.' });
+
+    const organization = await Organization.findById(station.organizationId);
+    if (!organization) return res.status(404).json({ error: 'Không tìm thấy tổ chức của trạm.' });
+
+    // Kiểm tra quyền: Phải là Admin hoặc Chủ của tổ chức đó
+    const isAdmin = req.user.role.name === 'ADMIN';
+    const isOrgOwner = String(organization.submittedBy) === String(req.user._id);
+    if (!isAdmin && !isOrgOwner) {
+      return res.status(403).json({ error: 'Bạn không có quyền quản lý trạm thuộc tổ chức này.' });
+    }
+
+    const managerRole = await Role.findOne({ name: 'STATION_MANAGER' });
+    if (!managerRole) {
+      return res.status(500).json({ error: 'Chưa cấu hình role STATION_MANAGER trong hệ thống.' });
+    }
+
+    // Tạo tài khoản mới
+    const newManager = await User.create({
+      email: email.trim().toLowerCase(),
+      username: username.trim(),
+      password: await bcrypt.hash(password, 12),
+      fullName: fullName.trim(),
+      phone: phone.trim(),
+      role: managerRole._id,
+    });
+
+    // Gán vào trạm
+    station.managerId = newManager._id;
+    await station.save();
+
+    return res.status(201).json({
+      message: 'Đã tạo tài khoản và gán làm Trưởng trạm thành công.',
+      manager: {
+        id: newManager._id,
+        username: newManager.username,
+        fullName: newManager.fullName,
+        role: 'STATION_MANAGER',
+      },
+      stationId: station._id,
+    });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({ error: 'Email hoặc username đã được sử dụng.' });
+    }
+    return next(error);
+  }
+}
+
+// 2. Bổ nhiệm một User đã có sẵn trên app làm Trưởng trạm (qua email hoặc SĐT)
+async function assignExistingUserAsManager(req, res, next) {
+  try {
+    const { id } = req.params; // Station ID
+    const { identifier } = req.body || {}; // Email hoặc SĐT
+
+    if (!identifier || typeof identifier !== 'string' || !identifier.trim()) {
+      return res.status(400).json({ error: 'Vui lòng cung cấp email hoặc số điện thoại của người dùng.' });
+    }
+
+    const station = await Station.findById(id);
+    if (!station) return res.status(404).json({ error: 'Không tìm thấy trạm.' });
+
+    const organization = await Organization.findById(station.organizationId);
+    if (!organization) return res.status(404).json({ error: 'Không tìm thấy tổ chức của trạm.' });
+
+    const isAdmin = req.user.role.name === 'ADMIN';
+    const isOrgOwner = String(organization.submittedBy) === String(req.user._id);
+    if (!isAdmin && !isOrgOwner) {
+      return res.status(403).json({ error: 'Bạn không có quyền quản lý trạm thuộc tổ chức này.' });
+    }
+
+    const cleanId = identifier.trim();
+    const user = await User.findOne({
+      $or: [{ email: cleanId.toLowerCase() }, { phone: cleanId }]
+    }).populate('role');
+
+    if (!user) {
+      return res.status(404).json({ error: 'Không tìm thấy người dùng với email hoặc số điện thoại này.' });
+    }
+
+    // Nâng role lên STATION_MANAGER nếu đang là USER/STAFF
+    const managerRole = await Role.findOne({ name: 'STATION_MANAGER' });
+    if (user.role?.name !== 'STATION_MANAGER' && user.role?.name !== 'ADMIN' && user.role?.name !== 'ORG_MANAGER') {
+      user.role = managerRole._id;
+      await user.save();
+    }
+
+    station.managerId = user._id;
+    await station.save();
+
+    return res.status(200).json({
+      message: `Đã bổ nhiệm ${user.fullName} làm Trưởng trạm thành công.`,
+      manager: {
+        id: user._id,
+        username: user.username,
+        fullName: user.fullName,
+        role: 'STATION_MANAGER',
+      },
+      stationId: station._id,
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+// 3. Gỡ quyền Trưởng trạm
+async function removeStationManager(req, res, next) {
+  try {
+    const { id } = req.params;
+    const station = await Station.findById(id);
+    if (!station) return res.status(404).json({ error: 'Không tìm thấy trạm.' });
+
+    const organization = await Organization.findById(station.organizationId);
+    if (!organization) return res.status(404).json({ error: 'Không tìm thấy tổ chức của trạm.' });
+
+    const isAdmin = req.user.role.name === 'ADMIN';
+    const isOrgOwner = String(organization.submittedBy) === String(req.user._id);
+    if (!isAdmin && !isOrgOwner) {
+      return res.status(403).json({ error: 'Bạn không có quyền quản lý trạm thuộc tổ chức này.' });
+    }
+
+    station.managerId = null;
+    await station.save();
+
+    return res.status(200).json({
+      message: 'Đã gỡ Trưởng trạm khỏi trạm này.',
+      stationId: station._id,
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
 
 module.exports = {
   listStations,
@@ -300,4 +445,7 @@ module.exports = {
   deleteStation,
   assignStaffToStation,
   removeStaffFromStation,
+  createAndAssignStationManager, 
+  assignExistingUserAsManager,  
+  removeStationManager, 
 };

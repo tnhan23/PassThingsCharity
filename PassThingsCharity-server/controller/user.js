@@ -121,13 +121,14 @@ async function setUserStatus(req, res, next) {
 
 async function updateMyProfile(req, res, next) {
   try {
-    const { email, username, fullName, phone } = req.body || {};
+    const { email, username, fullName, phone, avatarUrl } = req.body || {};
 
     if (
       email === undefined &&
       username === undefined &&
       fullName === undefined &&
-      phone === undefined
+      phone === undefined &&
+      avatarUrl === undefined
     ) {
       return res.status(400).json({
         error: 'Cần gửi ít nhất một thông tin hồ sơ cần cập nhật.',
@@ -156,6 +157,11 @@ async function updateMyProfile(req, res, next) {
       });
     }
 
+    if (avatarUrl !== undefined &&
+        (typeof avatarUrl !== 'string' || !/^https:\/\/.+/i.test(avatarUrl.trim()))) {
+      return res.status(400).json({ error: 'Ảnh hồ sơ phải là một đường dẫn https.' });
+    }
+
     const user = await User.findById(req.user._id);
 
     if (!user) {
@@ -174,6 +180,9 @@ async function updateMyProfile(req, res, next) {
     if (phone !== undefined) {
       user.phone = phone.trim();
     }
+    if (avatarUrl !== undefined) {
+      user.avatarUrl = avatarUrl.trim();
+    }
 
     await user.save();
     await user.populate('role', 'name');
@@ -186,6 +195,7 @@ async function updateMyProfile(req, res, next) {
         username: user.username,
         fullName: user.fullName,
         phone: user.phone,
+        avatarUrl: user.avatarUrl || '',
         role: user.role?.name,
         status: user.status,
       },
