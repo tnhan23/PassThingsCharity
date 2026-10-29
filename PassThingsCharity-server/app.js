@@ -19,7 +19,7 @@ const contributionsRouter = require('./routes/contribution');
 const transfersRouter = require('./routes/campaignTransfer');
 const reliefRouter = require('./routes/reliefDistribution');
 const workforceRouter = require('./routes/workforce');
-
+const shiftRouter = require('./routes/shift');
 const swaggerUi = require('swagger-ui-express');
 const createSwaggerDocument = require('./config/swagger');
 const app = express();
@@ -46,6 +46,7 @@ app.use('/uploads', require('./routes/upload'));
 app.use('/stationmanager', stationManagerRouter);
 app.use('/organizations', organizationsRouter);
 app.use('/stations', stationsRouter);
+app.use('/shiftstations', shiftRouter);
 app.use('/admin', adminApprovalRouter);
 
 // BE2 Route Middlewares
