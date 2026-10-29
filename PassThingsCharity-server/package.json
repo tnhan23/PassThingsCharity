@@ -21,6 +21,7 @@
     "mongoose": "^9.11.1",
     "morgan": "~1.9.1",
     "multer": "^2.4.0",
+    "node-app-attest": "^1.0.1",
     "nodemailer": "^10.1.2",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",

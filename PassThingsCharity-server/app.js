@@ -44,6 +44,9 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Bạn thử quá nhiều lần. Đợi một lát rồi thử lại.' },
 });
+const { requireAppAttest } = require('./middleware/requireAppAttest');
+app.use(requireAppAttest);
+
 app.use('/auth/login', authLimiter);
 app.use('/auth/register', authLimiter);
 app.use('/auth/forgot-password', authLimiter);
@@ -60,6 +63,7 @@ app.get('/', (req, res) => {
 });
 
 // Existing Route Middlewares
+app.use('/app-attest', require('./routes/appAttest'));
 app.use('/auth', authRouter);
 app.use('/users', usersRouter);
 app.use('/uploads', require('./routes/upload'));
