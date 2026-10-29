@@ -21,6 +21,7 @@ const transfersRouter = require('./routes/campaignTransfer');
 const reliefRouter = require('./routes/reliefDistribution');
 const workforceRouter = require('./routes/workforce');
 
+const rateLimit = require('express-rate-limit');
 const swaggerUi = require('swagger-ui-express');
 const createSwaggerDocument = require('./config/swagger');
 const app = express();
@@ -28,17 +29,34 @@ const mongoose = require('mongoose');
 
 const DEFAULT_PORT = Number(process.env.PORT) || 8080;
 const swaggerDocument = createSwaggerDocument(DEFAULT_PORT);
+const swaggerEnabled = !process.env.RENDER;
 
+app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(passport.initialize());
 
-// Swagger Documentation
-app.use(['/swagger', '/api-docs'], swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Bạn thử quá nhiều lần. Đợi một lát rồi thử lại.' },
+});
+app.use('/auth/login', authLimiter);
+app.use('/auth/register', authLimiter);
+app.use('/auth/forgot-password', authLimiter);
+app.use('/auth/reset-password', authLimiter);
+
+if (swaggerEnabled) {
+  app.use(['/swagger', '/api-docs'], swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+}
 
 app.get('/', (req, res) => {
-  res.send('PassThingsCharity API is running. View API docs at <a href="/swagger">/swagger</a>');
+  res.send(swaggerEnabled
+    ? 'PassThingsCharity API is running. View API docs at <a href="/swagger">/swagger</a>'
+    : 'PassThingsCharity API is running.');
 });
 
 // Existing Route Middlewares
@@ -76,8 +94,8 @@ const startServer = (port) => {
   const server = app.listen(port, "0.0.0.0", () => {
     process.env.PORT = String(port);
     swaggerDocument.servers[0].url = `http://localhost:${port}`;
-    console.log(`🚀 Server running at: http://localhost:${port}`);
-    console.log(`📚 Swagger API Docs:  http://localhost:${port}/swagger`);
+    console.log(`Server running at: http://localhost:${port}`);
+    if (swaggerEnabled) console.log(`Swagger API Docs: http://localhost:${port}/swagger`);
   });
 
   server.on('error', (error) => {
