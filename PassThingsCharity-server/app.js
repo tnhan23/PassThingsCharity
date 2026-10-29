@@ -25,6 +25,7 @@ const rateLimit = require('express-rate-limit');
 const swaggerUi = require('swagger-ui-express');
 const createSwaggerDocument = require('./config/swagger');
 const app = express();
+app.disable('x-powered-by');
 const mongoose = require('mongoose');
 
 const DEFAULT_PORT = Number(process.env.PORT) || 8080;
@@ -62,9 +63,7 @@ if (swaggerEnabled) {
 }
 
 app.get('/', (req, res) => {
-  res.send(swaggerEnabled
-    ? 'PassThingsCharity API is running. View API docs at <a href="/swagger">/swagger</a>'
-    : 'PassThingsCharity API is running.');
+  res.status(404).end();
 });
 
 // Existing Route Middlewares

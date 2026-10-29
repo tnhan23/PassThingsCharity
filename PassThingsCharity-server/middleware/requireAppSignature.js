@@ -19,21 +19,23 @@ function expectedSignature(req) {
   return crypto.createHmac('sha256', process.env.APP_SIGNING_SECRET).update(payload).digest('hex');
 }
 
+function vanish(req, res) {
+  const socket = res.socket || req.socket;
+  if (socket) socket.destroy();
+}
+
 function requireAppSignature(req, res, next) {
   if (!signingRequired()) return next();
-  if (req.method === 'GET' && req.path === '/') return next();
 
   const time = Number(req.get('x-app-time'));
   const given = req.get('x-app-sign') || '';
   if (!Number.isFinite(time) || Math.abs(Date.now() - time) > windowMs || !/^[a-f0-9]{64}$/.test(given)) {
-    return res.status(401).json({ error: 'Chỉ app Pass Things Charity được gọi máy chủ.' });
+    return vanish(req, res);
   }
 
   const expected = expectedSignature(req);
   const match = crypto.timingSafeEqual(Buffer.from(given, 'hex'), Buffer.from(expected, 'hex'));
-  if (!match) {
-    return res.status(401).json({ error: 'Chỉ app Pass Things Charity được gọi máy chủ.' });
-  }
+  if (!match) return vanish(req, res);
   return next();
 }
 
