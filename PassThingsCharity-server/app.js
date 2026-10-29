@@ -33,8 +33,11 @@ const swaggerEnabled = !process.env.RENDER;
 
 app.set('trust proxy', 1);
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+const captureRawBody = (req, res, buf) => {
+  if (buf?.length) req.rawBody = Buffer.from(buf);
+};
+app.use(express.json({ verify: captureRawBody }));
+app.use(express.urlencoded({ extended: false, verify: captureRawBody }));
 app.use(passport.initialize());
 
 const authLimiter = rateLimit({
@@ -45,6 +48,8 @@ const authLimiter = rateLimit({
   message: { error: 'Bạn thử quá nhiều lần. Đợi một lát rồi thử lại.' },
 });
 const { requireAppAttest } = require('./middleware/requireAppAttest');
+const { requireAppSignature } = require('./middleware/requireAppSignature');
+app.use(requireAppSignature);
 app.use(requireAppAttest);
 
 app.use('/auth/login', authLimiter);
