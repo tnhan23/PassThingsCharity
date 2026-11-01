@@ -19,7 +19,8 @@ const contributionsRouter = require('./routes/contribution');
 const transfersRouter = require('./routes/campaignTransfer');
 const reliefRouter = require('./routes/reliefDistribution');
 const workforceRouter = require('./routes/workforce');
-
+const shiftRouter = require('./routes/shift');
+const notificationRouter = require('./routes/notification');
 const swaggerUi = require('swagger-ui-express');
 const createSwaggerDocument = require('./config/swagger');
 const app = express();
@@ -46,6 +47,7 @@ app.use('/uploads', require('./routes/upload'));
 app.use('/stationmanager', stationManagerRouter);
 app.use('/organizations', organizationsRouter);
 app.use('/stations', stationsRouter);
+app.use('/shiftstations', shiftRouter);
 app.use('/admin', adminApprovalRouter);
 
 // BE2 Route Middlewares
@@ -59,6 +61,7 @@ app.use('/transfers', transfersRouter);
 app.use('/inventory', require('./routes/inventory'));
 app.use('/relief', reliefRouter);
 app.use('/workforce', workforceRouter);
+app.use('/notifications', notificationRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Không tìm thấy đường dẫn.' });
