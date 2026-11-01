@@ -31,7 +31,7 @@ router.get(
 
 router.patch(
   '/:id',
-  checkRole(['ADMIN', 'ORG_MANAGER']),
+  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER']),
   updateStation
 );
 

@@ -1,6 +1,8 @@
 const mongoose = require('mongoose')
 const stationSchema = new mongoose.Schema(
   {
+    imageUrl: { type: String, trim: true, default: null },
+    imagePublicId: { type: String, default: null },
     organizationId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Organization',

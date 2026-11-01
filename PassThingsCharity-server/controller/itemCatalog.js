@@ -8,6 +8,7 @@ const mongoose = require('mongoose');
  */
 async function createCategory(req, res, next) {
   try {
+    const imageFields = require('../utils/resourceImageFields')(req.body || {});
     const { name, description } = req.body || {};
 
     if (typeof name !== 'string' || !name.trim()) {
@@ -20,6 +21,8 @@ async function createCategory(req, res, next) {
     }
 
     const category = await ItemCategory.create({
+      createdBy: req.user._id,
+      ...imageFields,
       name: name.trim(),
       description: typeof description === 'string' ? description.trim() : '',
     });
@@ -71,6 +74,7 @@ async function updateCategory(req, res, next) {
     if (name !== undefined && (typeof name !== 'string' || !name.trim())) {
       return res.status(400).json({ error: 'Category name must be a non-empty string.' });
     }
+    await require('../utils/resourceImageAccess').applyImageFromForm(category, req.body || {}, 'item-categories', req.user);
     if (name !== undefined) {
       const duplicate = await ItemCategory.findOne({ name: name.trim(), _id: { $ne: id } });
       if (duplicate) {
@@ -137,6 +141,7 @@ async function deleteCategory(req, res, next) {
  */
 async function createItemType(req, res, next) {
   try {
+    const imageFields = require('../utils/resourceImageFields')(req.body || {});
     const { categoryId, name, unit, description } = req.body || {};
 
     if (!mongoose.isValidObjectId(categoryId)) {
@@ -161,6 +166,8 @@ async function createItemType(req, res, next) {
     }
 
     const itemType = await ItemType.create({
+      createdBy: req.user._id,
+      ...imageFields,
       categoryId,
       name: name.trim(),
       unit: formattedUnit,
@@ -235,6 +242,7 @@ async function updateItemType(req, res, next) {
       itemType.categoryId = categoryId;
     }
 
+    await require('../utils/resourceImageAccess').applyImageFromForm(itemType, req.body || {}, 'item-types', req.user);
     if (name !== undefined && (typeof name !== 'string' || !name.trim())) {
       return res.status(400).json({ error: 'Item type name must be a non-empty string.' });
     }

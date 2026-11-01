@@ -16,13 +16,13 @@ router.use(checkBearerToken);
 
 router.get(
   '/',
-  checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF', 'VOLUNTEER', 'USER']),
+  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'STAFF', 'VOLUNTEER', 'USER']),
   listOrganizations
 );
 
 router.get(
   '/:id',
-  checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF', 'VOLUNTEER', 'USER']),
+  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'STAFF', 'VOLUNTEER', 'USER']),
   getOrganization
 );
 
@@ -34,7 +34,7 @@ router.post(
 
 router.patch(
   '/:id',
-  checkRole(['ADMIN', 'STATION_MANAGER']),
+  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'USER']),
   updateOrganization
 );
 

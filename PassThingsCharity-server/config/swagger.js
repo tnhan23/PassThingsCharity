@@ -57,6 +57,7 @@ const createSwaggerDocument = (port = process.env.PORT || 8080) => ({
     ...campaignDocs,
     ...gamificationDocs,
     ...operationsDocs,
+    ...require('../docs/inventory.doc'),
     ...uploadDocs,
     ...shiftDocs,
     ...notificationDocs,

@@ -50,10 +50,8 @@ async function createDistribution(req, res, next) {
       return res.status(400).json({ error: 'Danh sách vật phẩm phân phối cứu trợ (items) không được để trống.' });
     }
 
-    const [campaign, station] = await Promise.all([
-      Campaign.findById(campaignId),
-      Station.findById(stationId),
-    ]);
+    const campaign = await Campaign.findById(campaignId);
+    const station = await Station.findById(stationId);
 
     if (!campaign) {
       return res.status(404).json({ error: 'Không tìm thấy chiến dịch.' });
@@ -86,6 +84,9 @@ async function createDistribution(req, res, next) {
         return res.status(404).json({ error: `Không tìm thấy loại vật phẩm với ID: ${it.itemTypeId}` });
       }
 
+      if (unit !== itemType.unit) {
+        return res.status(400).json({ error: `Vật phẩm thứ ${i + 1}: đơn vị phải là ${itemType.unit}.` });
+      }
       validatedItems.push({
         itemTypeId: it.itemTypeId,
         quantity: qty,
@@ -133,7 +134,7 @@ async function createDistribution(req, res, next) {
 
     // Auto close campaign if requested and status is COMPLETED
     let campaignUpdated = false;
-    if (closeCampaign === true && campaign.status !== 'COMPLETED') {
+    if (closeCampaign === true && finalStatus === 'COMPLETED' && campaign.status !== 'COMPLETED') {
       campaign.status = 'COMPLETED';
       await campaign.save();
       campaignUpdated = true;
@@ -264,6 +265,15 @@ async function updateDistributionStatus(req, res, next) {
       return res.status(404).json({ error: 'Không tìm thấy đợt phân phối.' });
     }
 
+    const transitions = {
+      PLANNED: ['IN_PROGRESS', 'COMPLETED', 'CANCELLED'],
+      IN_PROGRESS: ['COMPLETED', 'CANCELLED'],
+      COMPLETED: [],
+      CANCELLED: [],
+    };
+    if (newStatus !== distribution.status && !transitions[distribution.status].includes(newStatus)) {
+      return res.status(409).json({ error: `Không thể chuyển từ ${distribution.status} sang ${newStatus}.` });
+    }
     distribution.status = newStatus;
     if (typeof notes === 'string') {
       distribution.notes = notes.trim();
@@ -302,7 +312,7 @@ async function getCampaignReliefSummary(req, res, next) {
     const targets = await CampaignItem.find({ campaignId }).populate('itemTypeId', 'name unit');
 
     // 2. Distributions
-    const distributions = await ReliefDistribution.find({ campaignId });
+    const distributions = await ReliefDistribution.find({ campaignId, status: 'COMPLETED' });
     const distIds = distributions.map((d) => d._id);
     const distributedItems = await ReliefDistributionItem.find({
       distributionId: { $in: distIds },
@@ -350,10 +360,11 @@ async function getCampaignReliefSummary(req, res, next) {
   }
 }
 
+const { inventoryTransaction } = require('../services/inventory');
 module.exports = {
-  createDistribution,
+  createDistribution: inventoryTransaction(createDistribution),
   getAllDistributions,
   getDistributionById,
-  updateDistributionStatus,
+  updateDistributionStatus: inventoryTransaction(updateDistributionStatus),
   getCampaignReliefSummary,
 };

@@ -54,6 +54,7 @@ async function login(req, res, next) {
       user: {
         id: account._id,
         username: account.username,
+        avatarUrl: account.avatarUrl || null,
         phone: account.phone || null, // Phòng trường hợp model Admin không có sđt
         role: role,
       },
@@ -83,6 +84,7 @@ async function register(req, res, next) {
       });
     }
     const user = await User.create({
+      avatarUrl: null,
       email: email.trim().toLowerCase(),
       username: username.trim(),
       password: await bcrypt.hash(password, 12),
@@ -94,6 +96,7 @@ async function register(req, res, next) {
       message: 'Đăng ký thành công.',
       user: {
         id: user._id,
+        avatarUrl: user.avatarUrl,
         email: user.email,
         username: user.username,
         fullname: user.fullname,

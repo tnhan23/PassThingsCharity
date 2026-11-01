@@ -52,11 +52,9 @@ async function createTransfer(req, res, next) {
     }
 
     // Verify campaign & stations exist
-    const [campaign, fromStation, toStation] = await Promise.all([
-      Campaign.findById(campaignId),
-      Station.findById(fromStationId),
-      Station.findById(toStationId),
-    ]);
+    const campaign = await Campaign.findById(campaignId);
+    const fromStation = await Station.findById(fromStationId);
+    const toStation = await Station.findById(toStationId);
 
     if (!campaign) {
       return res.status(404).json({ error: 'Không tìm thấy chiến dịch.' });
@@ -92,6 +90,9 @@ async function createTransfer(req, res, next) {
         return res.status(404).json({ error: `Không tìm thấy loại vật phẩm ID: ${it.itemTypeId}` });
       }
 
+      if (unit !== itemType.unit) {
+        return res.status(400).json({ error: `Vật phẩm thứ ${i + 1}: đơn vị phải là ${itemType.unit}.` });
+      }
       validatedItems.push({
         itemTypeId: it.itemTypeId,
         quantity: qty,
@@ -257,6 +258,17 @@ async function updateTransferStatus(req, res, next) {
       return res.status(404).json({ error: 'Không tìm thấy lệnh điều phối.' });
     }
 
+    const transitions = {
+      PENDING: ['PREPARING', 'CANCELLED'],
+      PREPARING: ['IN_TRANSIT', 'CANCELLED'],
+      IN_TRANSIT: ['RECEIVED'],
+      RECEIVED: ['COMPLETED'],
+      COMPLETED: [],
+      CANCELLED: [],
+    };
+    if (newStatus !== transfer.status && !transitions[transfer.status].includes(newStatus)) {
+      return res.status(409).json({ error: `Không thể chuyển từ ${transfer.status} sang ${newStatus}.` });
+    }
     transfer.status = newStatus;
     if (typeof transportNote === 'string') {
       transfer.transportNote = transportNote.trim();
@@ -285,9 +297,10 @@ async function updateTransferStatus(req, res, next) {
   }
 }
 
+const { inventoryTransaction } = require('../services/inventory');
 module.exports = {
-  createTransfer,
+  createTransfer: inventoryTransaction(createTransfer),
   getAllTransfers,
   getTransferById,
-  updateTransferStatus,
+  updateTransferStatus: inventoryTransaction(updateTransferStatus),
 };

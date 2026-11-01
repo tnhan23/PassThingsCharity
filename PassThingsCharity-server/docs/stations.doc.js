@@ -37,6 +37,7 @@ module.exports = {
     patch: {
       tags: ['Stations'],
       summary: 'Cập nhật thông tin trạm',
+      description: 'Quản lý trạm được gán, chủ tổ chức có role phù hợp hoặc ADMIN được sửa. Upload qua POST /uploads/stations/image lấy imageUrl rồi gửi cùng thông tin khi bấm Lưu. Bỏ imageUrl giữ ảnh cũ, null để xóa. Người không phải ADMIN cập nhật sẽ đưa trạm về isActive=false để chờ duyệt lại theo quy tắc hiện tại.',
       parameters: [
         { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
       ],
