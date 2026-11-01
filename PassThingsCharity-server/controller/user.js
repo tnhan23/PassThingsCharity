@@ -186,6 +186,7 @@ async function updateMyProfile(req, res, next) {
         username: user.username,
         fullName: user.fullName,
         phone: user.phone,
+        avatarUrl: user.avatarUrl,
         role: user.role?.name,
         status: user.status,
       },

@@ -54,6 +54,7 @@ async function login(req, res, next) {
       user: {
         id: account._id,
         username: account.username,
+        avatarUrl: account.avatarUrl || null,
         phone: account.phone || null, // Phòng trường hợp model Admin không có sđt
         role: role,
       },

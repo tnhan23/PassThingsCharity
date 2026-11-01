@@ -5,6 +5,7 @@ const ItemType = require('../models/itemType');
 const Station = require('../models/station');
 const Organization = require('../models/organization');
 const mongoose = require('mongoose');
+const { getCampaignProgress, summarizeCampaignProgress } = require('../services/campaignProgress');
 
 const MIN_CAMPAIGN_DURATION_MS = 5 * 24 * 60 * 60 * 1000;
 const MAX_CAMPAIGN_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -130,7 +131,17 @@ async function getAllCampaigns(req, res, next) {
       .populate('createdBy', 'fullName username')
       .sort({ createdAt: -1 });
 
-    return res.status(200).json({ campaigns });
+    const progressItems = await getCampaignProgress(campaigns.map(campaign => campaign._id));
+    const byCampaign = new Map();
+    for (const item of progressItems) {
+      const key = String(item.campaignId);
+      if (!byCampaign.has(key)) byCampaign.set(key, []);
+      byCampaign.get(key).push(item);
+    }
+    return res.status(200).json({ campaigns: campaigns.map(campaign => {
+      const items = byCampaign.get(String(campaign._id)) || [];
+      return { ...campaign.toObject(), items, progress: summarizeCampaignProgress(items) };
+    }) });
   } catch (error) {
     return next(error);
   }
@@ -158,11 +169,7 @@ async function getCampaignById(req, res, next) {
     }
 
     // Fetch associated targeted items
-    const items = await CampaignItem.find({ campaignId: id }).populate({
-      path: 'itemTypeId',
-      select: 'name unit categoryId',
-      populate: { path: 'categoryId', select: 'name' },
-    });
+    const items = await getCampaignProgress([id]);
 
     // Fetch associated stations
     const stations = await CampaignStation.find({ campaignId: id }).populate({
@@ -173,6 +180,7 @@ async function getCampaignById(req, res, next) {
     return res.status(200).json({
       campaign,
       items,
+      progress: summarizeCampaignProgress(items),
       stations: stations.map((s) => s.stationId),
     });
   } catch (error) {

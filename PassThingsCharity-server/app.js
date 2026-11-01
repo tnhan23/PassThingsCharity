@@ -56,6 +56,7 @@ app.use('/gamification', gamificationRouter);
 // BE3 Route Middlewares
 app.use('/contributions', contributionsRouter);
 app.use('/transfers', transfersRouter);
+app.use('/inventory', require('./routes/inventory'));
 app.use('/relief', reliefRouter);
 app.use('/workforce', workforceRouter);
 

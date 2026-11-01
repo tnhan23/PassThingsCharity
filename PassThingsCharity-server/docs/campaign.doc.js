@@ -3,6 +3,7 @@ module.exports = {
     get: {
       tags: ['Campaigns'],
       summary: 'Lấy danh sách các Campaign cứu trợ (Public / Filter)',
+      description: 'Mỗi chiến dịch có items và progress. Mỗi vật phẩm có targetQuantity, currentQuantity/collectedQuantity, stockQuantity, inTransitQuantity, distributedQuantity, remainingQuantity, progressPercent, isFulfilled. Tiến độ tính từ các phiếu kho, cùng loại hàng và đơn vị chuẩn; chuyển trạm không cộng trùng, hàng đã trao vẫn tính hoàn thành mục tiêu.',
       security: [],
       parameters: [
         { name: 'status', in: 'query', schema: { type: 'string', enum: ['PUBLISHED', 'ACTIVE', 'COMPLETED', 'CANCELLED'] }, description: 'Lọc trạng thái công khai của chiến dịch' },
@@ -37,6 +38,7 @@ module.exports = {
     get: {
       tags: ['Campaigns'],
       summary: 'Xem chi tiết 1 Campaign (Kèm nhu cầu vật phẩm & các Trạm tiếp nhận)',
+      description: 'items trả mục tiêu và tiến độ từ kho: stockQuantity (tồn tại các trạm), inTransitQuantity (đang vận chuyển), distributedQuantity (đã trao), collectedQuantity/currentQuantity (tổng ba số), remainingQuantity (còn cần quyên góp), progressPercent (0–100), isFulfilled. progress tổng hợp số loại hàng đã đủ, không cộng các đơn vị khác nhau. MongoDB cần hỗ trợ transaction để đọc số liệu cùng một thời điểm.',
       security: [],
       parameters: [
         { name: 'id', in: 'path', required: true, schema: { type: 'string' } },

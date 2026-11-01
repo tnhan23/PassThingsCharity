@@ -6,6 +6,8 @@ const mongoose = require('mongoose');
  */
 const itemTypeSchema = new mongoose.Schema(
   {
+    imageUrl: { type: String, trim: true, default: null },
+    imagePublicId: { type: String, default: null },
     categoryId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'ItemCategory',

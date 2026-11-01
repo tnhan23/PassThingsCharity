@@ -122,6 +122,9 @@ async function createContribution(req, res, next) {
         return res.status(404).json({ error: `Không tìm thấy loại vật phẩm với ID: ${it.itemTypeId}` });
       }
 
+      if (unit !== itemType.unit) {
+        return res.status(400).json({ error: `Vật phẩm thứ ${i + 1}: đơn vị phải là ${itemType.unit}.` });
+      }
       validatedItems.push({
         itemTypeId: it.itemTypeId,
         quantity: qty,
@@ -349,14 +352,16 @@ async function updateContributionStatus(req, res, next) {
 
     const previousStatus = contribution.status;
 
-    // Rollback quantities if newly REJECTED from ACCEPTED/COMPLETED
-    if (newStatus === 'REJECTED' && ['ACCEPTED', 'COMPLETED'].includes(previousStatus)) {
+    const wasCounted = ['ACCEPTED', 'COMPLETED'].includes(previousStatus);
+    const isCounted = ['ACCEPTED', 'COMPLETED'].includes(newStatus);
+    // Keep campaign progress consistent when accepting or reversing a receipt.
+    if (wasCounted !== isCounted) {
       const items = await ContributionItem.find({ contributionId: id });
       for (const item of items) {
         if (item.campaignItemId) {
           const cItem = await CampaignItem.findById(item.campaignItemId);
           if (cItem) {
-            cItem.currentQuantity = Math.max(0, (cItem.currentQuantity || 0) - item.quantity);
+            cItem.currentQuantity = Math.max(0, (cItem.currentQuantity || 0) + (isCounted ? item.quantity : -item.quantity));
             await cItem.save();
           }
         }
@@ -419,11 +424,12 @@ async function addContributionImages(req, res, next) {
   }
 }
 
+const { inventoryTransaction } = require('../services/inventory');
 module.exports = {
   lookupDonor,
-  createContribution,
+  createContribution: inventoryTransaction(createContribution),
   getAllContributions,
   getContributionById,
-  updateContributionStatus,
+  updateContributionStatus: inventoryTransaction(updateContributionStatus),
   addContributionImages,
 };

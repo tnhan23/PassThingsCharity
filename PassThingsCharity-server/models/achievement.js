@@ -16,6 +16,7 @@ const achievementSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    imagePublicId: { type: String, default: null },
     badgeIconUrl: {
       type: String,
       trim: true,
