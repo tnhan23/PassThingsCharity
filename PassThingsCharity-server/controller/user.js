@@ -2,15 +2,36 @@ const User=require('../models/user');
 const Role=require('../models/role');
 const mongoose  = require('mongoose');
 const bcrypt = require('bcryptjs');
+const resourceImageFields = require('../utils/resourceImageFields');
+function getMyProfile(req, res) {
+  // checkBearerToken has already loaded this account and populated its role.
+  // Explicitly list public profile fields instead of serializing the account.
+  const user = req.user;
+  return res.status(200).json({
+    user: {
+      id: user._id,
+      email: user.email,
+      username: user.username,
+      fullName: user.fullName,
+      phone: user.phone || null,
+      avatarUrl: user.avatarUrl || null,
+      role: user.role?.name,
+      status: user.status || null,
+    },
+  });
+}
+
 async function updateMyProfile(req, res, next) {
   try {
-    const { email, username, fullName, phone } = req.body || {};
+    const { email, username, fullName, phone, avatarUrl } = req.body || {};
+    const imageFields = resourceImageFields(req.body || {}, 'avatarUrl');
 
     if (
       email === undefined &&
       username === undefined &&
       fullName === undefined &&
-      phone === undefined
+      phone === undefined &&
+      avatarUrl === undefined
     ) {
       return res.status(400).json({
         error: 'Cần gửi ít nhất một thông tin hồ sơ cần cập nhật.',
@@ -56,6 +77,11 @@ async function updateMyProfile(req, res, next) {
     }
     if (phone !== undefined) {
       user.phone = phone.trim();
+    }
+    if (avatarUrl !== undefined) {
+      user.avatarUrl = imageFields.avatarUrl;
+      // A URL supplied with the form has no verified Cloudinary public ID.
+      if (user.isModified('avatarUrl')) user.imagePublicId = null;
     }
 
     await user.save();
@@ -126,6 +152,7 @@ async function deleteMyAccount(req, res, next) {
   }
 }
 module.exports={
+  getMyProfile,
   updateMyProfile,
   deleteMyAccount,
 };

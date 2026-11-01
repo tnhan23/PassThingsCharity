@@ -88,6 +88,7 @@ async function createStation(req, res, next) {
   try {
     const organizationId = req.params.organizationId || (req.body && req.body.organizationId);
     const body = req.body || {};
+    const imageFields = require('../utils/resourceImageFields')(body);
 
     if (!validateStation(body)) {
       return res.status(400).json({
@@ -110,6 +111,7 @@ async function createStation(req, res, next) {
     }
 
     const station = await Station.create({
+      ...imageFields,
       organizationId: access.organization._id,
       name: body.name.trim(),
       address: body.address.trim(),
@@ -155,6 +157,11 @@ async function updateStation(req, res, next) {
       return res.status(access.status).json({ error: access.error });
     }
 
+    const { canEdit, applyImageFromForm } = require('../utils/resourceImageAccess');
+    if (!await canEdit('stations', access.station, req.user)) {
+      return res.status(403).json({ error: 'Bạn không có quyền sửa trạm này.' });
+    }
+    await applyImageFromForm(access.station, body, 'stations', req.user);
     if (typeof body.name === 'string') {
       access.station.name = body.name.trim();
     }
@@ -292,6 +299,7 @@ async function removeStaffFromStation(req, res, next) {
 // 1. Tạo tài khoản mới trực tiếp và gán làm Trưởng trạm
 async function createAndAssignStationManager(req, res, next) {
   try {
+    const imageFields = require('../utils/resourceImageFields')(req.body || {}, 'avatarUrl');
     const { id } = req.params; // Station ID
     const { email, username, password, fullName, phone } = req.body || {};
 
@@ -322,6 +330,7 @@ async function createAndAssignStationManager(req, res, next) {
 
     // Tạo tài khoản mới
     const newManager = await User.create({
+      ...imageFields,
       email: email.trim().toLowerCase(),
       username: username.trim(),
       password: await bcrypt.hash(password, 12),

@@ -1,9 +1,37 @@
 module.exports = {
   '/users/me/profile': {
+    get: {
+      tags: ['Users'],
+      summary: 'Lấy hồ sơ tài khoản đang đăng nhập',
+      description: 'Yêu cầu Bearer token. Không cần ID hoặc body; backend xác định tài khoản qua token. Chỉ trả thông tin hồ sơ, không trả password, resetPasswordToken hoặc resetPasswordExpires. FE dùng user để điền form PATCH cùng đường dẫn. Áp dụng cho mọi role đã đăng nhập; tài khoản Admin riêng có thể không có avatar/status (trả null).',
+      responses: {
+        200: {
+          description: 'Thông tin tài khoản hiện tại',
+          content: { 'application/json': { schema: {
+            type: 'object',
+            properties: { user: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                email: { type: 'string', format: 'email' },
+                username: { type: 'string' },
+                fullName: { type: 'string' },
+                phone: { type: 'string', nullable: true },
+                avatarUrl: { type: 'string', nullable: true },
+                role: { type: 'string' },
+                status: { type: 'string', nullable: true },
+              },
+            } },
+          } } },
+        },
+        401: { description: 'Thiếu token, token không hợp lệ/hết hạn hoặc tài khoản không hoạt động/không tồn tại' },
+        500: { description: 'Lỗi server' },
+      },
+    },
     patch: {
       tags: ['Users'],
       summary: 'User cập nhật hồ sơ của chính mình',
-      description: 'ID tài khoản được lấy từ Bearer token. Không thể thay đổi role hoặc status bằng endpoint này.',
+      description: 'ID tài khoản được lấy từ Bearer token. Đổi ảnh trong form: POST /uploads/users/image với file image để lấy avatarUrl (chưa sửa hồ sơ), sau đó gửi avatarUrl cùng các thông tin vào PATCH này khi bấm Lưu. Bỏ avatarUrl để giữ ảnh cũ; null hoặc chuỗi rỗng để bỏ avatar. Không thể thay đổi role hoặc status bằng endpoint này.',
       requestBody: {
         required: true,
         content: {
@@ -16,6 +44,7 @@ module.exports = {
                 username: { type: 'string' },
                 fullName: { type: 'string' },
                 phone: { type: 'string' },
+                avatarUrl: { type: 'string', format: 'uri', nullable: true, example: 'https://res.cloudinary.com/your-cloud/image/upload/avatar.jpg', description: 'URL HTTPS từ API upload; chỉ lưu vào hồ sơ khi gọi PATCH này.' },
               },
             },
           },

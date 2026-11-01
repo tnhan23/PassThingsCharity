@@ -157,7 +157,8 @@ async function getUserPoints(req, res, next) {
  */
 async function createAchievement(req, res, next) {
   try {
-    const { title, description, badgeIconUrl, criteriaType, criteriaValue, pointsReward } = req.body || {};
+    const { title, description, criteriaType, criteriaValue, pointsReward } = req.body || {};
+    const imageFields = require('../utils/resourceImageFields')(req.body || {}, 'badgeIconUrl');
 
     if (typeof title !== 'string' || !title.trim()) {
       return res.status(400).json({ error: 'Achievement title is required.' });
@@ -181,9 +182,10 @@ async function createAchievement(req, res, next) {
     }
 
     const achievement = await Achievement.create({
+      createdBy: req.user._id,
       title: title.trim(),
       description: typeof description === 'string' ? description.trim() : '',
-      badgeIconUrl: typeof badgeIconUrl === 'string' ? badgeIconUrl.trim() : '',
+      ...imageFields,
       criteriaType: formattedCriteria,
       criteriaValue: val,
       pointsReward: reward,
@@ -312,7 +314,51 @@ async function getUserCertificates(req, res, next) {
   }
 }
 
+async function updateAchievement(req, res, next) {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'ID thành tích không hợp lệ.' });
+    const achievement = await Achievement.findById(req.params.id);
+    if (!achievement) return res.status(404).json({ error: 'Không tìm thấy thành tích.' });
+    const { canEdit, applyImageFromForm } = require('../utils/resourceImageAccess');
+    if (!await canEdit('achievements', achievement, req.user)) return res.status(403).json({ error: 'Bạn không có quyền sửa thành tích này.' });
+    const body = req.body || {};
+    const fields = ['title', 'description', 'badgeIconUrl', 'criteriaType', 'criteriaValue', 'pointsReward', 'isActive'];
+    if (!fields.some(field => body[field] !== undefined)) return res.status(400).json({ error: 'Cần gửi ít nhất một trường cập nhật.' });
+    if (body.title !== undefined) {
+      if (typeof body.title !== 'string' || !body.title.trim()) return res.status(400).json({ error: 'Tiêu đề không được để trống.' });
+      achievement.title = body.title.trim();
+    }
+    if (body.description !== undefined) {
+      if (typeof body.description !== 'string') return res.status(400).json({ error: 'Mô tả phải là chuỗi.' });
+      achievement.description = body.description.trim();
+    }
+    if (body.criteriaType !== undefined) {
+      const value = typeof body.criteriaType === 'string' ? body.criteriaType.trim().toUpperCase() : '';
+      if (!['DONATION_COUNT', 'DONATION_WEIGHT_KG', 'VOLUNTEER_HOURS', 'CAMPAIGN_COUNT', 'POINTS_ACCUMULATED'].includes(value)) return res.status(400).json({ error: 'Loại tiêu chí không hợp lệ.' });
+      achievement.criteriaType = value;
+    }
+    for (const [field, minimum] of [['criteriaValue', 1], ['pointsReward', 0]]) {
+      if (body[field] !== undefined) {
+        const value = Number(body[field]);
+        if (body[field] === null || typeof body[field] === 'boolean' || body[field] === '' || !Number.isInteger(value) || value < minimum) return res.status(400).json({ error: `${field} phải là số nguyên từ ${minimum}.` });
+        achievement[field] = value;
+      }
+    }
+    if (body.isActive !== undefined) {
+      if (typeof body.isActive !== 'boolean') return res.status(400).json({ error: 'isActive phải là boolean.' });
+      achievement.isActive = body.isActive;
+    }
+    await applyImageFromForm(achievement, body, 'achievements', req.user);
+    await achievement.save();
+    return res.status(200).json({ message: 'Đã cập nhật thành tích.', achievement });
+  } catch (error) {
+    if (error.code === 11000) return res.status(409).json({ error: 'Tên thành tích đã tồn tại.' });
+    return next(error);
+  }
+}
+
 module.exports = {
+  updateAchievement,
   checkAndUnlockAchievements,
   awardPoints,
   getUserPoints,

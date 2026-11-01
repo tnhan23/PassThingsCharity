@@ -32,6 +32,7 @@ function getHaversineDistanceKm(lat1, lon1, lat2, lon2) {
  */
 async function createCampaign(req, res, next) {
   try {
+    const imageFields = require('../utils/resourceImageFields')(req.body || {});
     const { title, description, startDate, endDate, organizationId } = req.body || {};
 
     if (typeof title !== 'string' || !title.trim()) {
@@ -69,6 +70,7 @@ async function createCampaign(req, res, next) {
     }
 
     const campaign = await Campaign.create({
+      ...imageFields,
       title: title.trim(),
       description: typeof description === 'string' ? description.trim() : '',
       startDate: start,
@@ -208,6 +210,7 @@ async function updateCampaign(req, res, next) {
     if (title !== undefined && (typeof title !== 'string' || !title.trim())) {
       return res.status(400).json({ error: 'Campaign title must be a non-empty string.' });
     }
+    await require('../utils/resourceImageAccess').applyImageFromForm(campaign, req.body || {}, 'campaigns', req.user);
     if (title !== undefined) {
       campaign.title = title.trim();
     }

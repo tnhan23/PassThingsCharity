@@ -84,6 +84,7 @@ async function register(req, res, next) {
       });
     }
     const user = await User.create({
+      avatarUrl: null,
       email: email.trim().toLowerCase(),
       username: username.trim(),
       password: await bcrypt.hash(password, 12),
@@ -95,6 +96,7 @@ async function register(req, res, next) {
       message: 'Đăng ký thành công.',
       user: {
         id: user._id,
+        avatarUrl: user.avatarUrl,
         email: user.email,
         username: user.username,
         fullname: user.fullname,

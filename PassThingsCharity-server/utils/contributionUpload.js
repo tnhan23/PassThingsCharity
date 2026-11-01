@@ -91,5 +91,4 @@ function createUploadHandler(target) {
 }
 
 const uploadContributionImages = createUploadHandler('contributions');
-const uploadPersonalImages = createUploadHandler('personal');
-module.exports = { uploadContributionImages, uploadPersonalImages, imageType, uploadImage, configuration };
+module.exports = { uploadContributionImages, imageType, uploadImage, configuration };

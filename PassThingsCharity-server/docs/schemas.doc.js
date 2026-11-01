@@ -15,6 +15,7 @@ module.exports = {
   },
   RegisterRequest: {
     type: 'object',
+    description: 'Đăng ký không cần ảnh. Avatar mặc định null; thêm hoặc đổi sau khi đăng nhập qua màn hình cập nhật hồ sơ.',
     required: ['email', 'username', 'password', 'fullname', 'phone'],
     properties: {
       email: { type: 'string', example: 'user02@example.com' },
@@ -55,6 +56,7 @@ module.exports = {
     type: 'object',
     required: ['name', 'code', 'address'],
     properties: {
+      logoUrl: { type: 'string', format: 'uri', nullable: true, description: 'URL HTTPS trả từ POST /uploads/organizations/image. Không bắt buộc.' },
       name: { type: 'string', example: 'Quỹ Từ Thiện Ánh Sáng' },
       code: { type: 'string', example: 'ORG-LIGHT-01' },
       address: { type: 'string', example: '123 Đường Nguyễn Huệ, Q1, TP.HCM' },
@@ -65,10 +67,19 @@ module.exports = {
       idCardNumber: { type: 'string', example: '079123456789' },
     },
   },
+  OrganizationUpdateRequest: {
+    type: 'object', minProperties: 1,
+    properties: {
+      name: { type: 'string' }, code: { type: 'string' }, address: { type: 'string' },
+      phone: { type: 'string' }, email: { type: 'string', format: 'email' },
+      logoUrl: { type: 'string', format: 'uri', nullable: true, description: 'URL từ POST /uploads/organizations/image; bỏ qua giữ ảnh cũ, null để xóa. Chỉ lưu khi bấm Lưu và gửi PATCH.' },
+    },
+  },
   CreateStationManagerRequest: {
     type: 'object',
     required: ['email', 'username', 'password', 'fullName', 'phone'],
     properties: {
+      avatarUrl: { type: 'string', format: 'uri', nullable: true, description: 'Avatar tùy chọn, URL HTTPS.' },
       email: { type: 'string', format: 'email', example: 'manager_thuduc@gmail.com' },
       username: { type: 'string', example: 'manager_thuduc' },
       password: { type: 'string', format: 'password', example: 'Password123!' },
@@ -87,6 +98,7 @@ module.exports = {
     type: 'object',
     required: ['name', 'address', 'latitude', 'longitude'],
     properties: {
+      imageUrl: { type: 'string', format: 'uri', nullable: true, description: 'URL HTTPS trả từ POST /uploads/stations/image. Không bắt buộc.' },
       name: { type: 'string', example: 'Trạm Tiếp Nhận Quận 1' },
       address: { type: 'string', example: 'Số 1 Đinh Tiên Hoàng, Q1, TP.HCM' },
       organizationId: { type: 'string', example: '671000000000000000000001' },
@@ -100,6 +112,7 @@ module.exports = {
     type: 'object',
     minProperties: 1,
     properties: {
+      imageUrl: { type: 'string', format: 'uri', nullable: true, description: 'URL từ POST /uploads/stations/image. Chỉ lưu khi gửi PATCH; bỏ qua giữ ảnh cũ, null để xóa ảnh.' },
       name: { type: 'string', example: 'Trạm Tiếp Nhận Quận 1' },
       address: { type: 'string', example: 'Số 1 Đinh Tiên Hoàng, Q1, TP.HCM' },
       latitude: { type: 'string', example: '10.776889', description: 'Vĩ độ (Latitude)' },
@@ -114,6 +127,7 @@ module.exports = {
     type: 'object',
     required: ['name'],
     properties: {
+      imageUrl: { type: 'string', format: 'uri', nullable: true, description: 'URL HTTPS trả từ POST /uploads/item-categories/image. Không bắt buộc.' },
       name: { type: 'string', example: 'Thực phẩm' },
       description: { type: 'string', example: 'Các loại thực phẩm, đồ khô, đồ hộp cứu trợ' },
     },
@@ -122,6 +136,7 @@ module.exports = {
     type: 'object',
     minProperties: 1,
     properties: {
+      imageUrl: { type: 'string', format: 'uri', nullable: true, description: 'URL từ POST /uploads/item-categories/image. Chỉ người tạo hoặc ADMIN được đổi ảnh; null để xóa ảnh.' },
       name: { type: 'string', example: 'Thực phẩm' },
       description: { type: 'string', example: 'Các loại thực phẩm, đồ khô, đồ hộp cứu trợ' },
       isActive: { type: 'boolean', example: true },
@@ -131,6 +146,7 @@ module.exports = {
     type: 'object',
     required: ['categoryId', 'name', 'unit'],
     properties: {
+      imageUrl: { type: 'string', format: 'uri', nullable: true, description: 'URL HTTPS trả từ POST /uploads/item-types/image. Không bắt buộc.' },
       categoryId: { type: 'string', example: '6523456789abcdef00000101' },
       name: { type: 'string', example: 'Mì gói' },
       unit: { type: 'string', enum: ['KG', 'PAIR', 'BOX', 'PACK'], example: 'BOX' },
@@ -141,6 +157,7 @@ module.exports = {
     type: 'object',
     minProperties: 1,
     properties: {
+      imageUrl: { type: 'string', format: 'uri', nullable: true, description: 'URL từ POST /uploads/item-types/image. Chỉ người tạo hoặc ADMIN được đổi ảnh; null để xóa ảnh.' },
       categoryId: { type: 'string', example: '6523456789abcdef00000101' },
       name: { type: 'string', example: 'Mì gói' },
       unit: { type: 'string', enum: ['KG', 'PAIR', 'BOX', 'PACK'], example: 'BOX' },
@@ -153,6 +170,7 @@ module.exports = {
     description: 'Campaign duration must be between 120 and 168 hours.',
     required: ['title', 'startDate', 'endDate', 'organizationId'],
     properties: {
+      imageUrl: { type: 'string', format: 'uri', nullable: true, description: 'URL HTTPS trả từ POST /uploads/campaigns/image. Không bắt buộc.' },
       title: { type: 'string', example: 'Cứu trợ lũ lụt Miền Trung 2026' },
       description: { type: 'string', example: 'Chiến dịch quyên góp vật phẩm cứu trợ bà con vùng lũ' },
       startDate: { type: 'string', format: 'date-time', example: '2026-10-15T00:00:00.000Z' },
@@ -165,6 +183,7 @@ module.exports = {
     description: 'If either date is changed, the resulting campaign duration must be between 120 and 168 hours.',
     minProperties: 1,
     properties: {
+      imageUrl: { type: 'string', format: 'uri', nullable: true, description: 'URL từ POST /uploads/campaigns/image. Chỉ người tạo hoặc ADMIN được đổi ảnh; null để xóa ảnh.' },
       title: { type: 'string', example: 'Cứu trợ lũ lụt Miền Trung 2026' },
       description: { type: 'string', example: 'Chiến dịch quyên góp vật phẩm cứu trợ bà con vùng lũ' },
       startDate: { type: 'string', format: 'date-time', example: '2026-10-15T00:00:00.000Z' },

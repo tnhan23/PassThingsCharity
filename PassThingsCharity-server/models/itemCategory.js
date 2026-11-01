@@ -8,6 +8,7 @@ const itemCategorySchema = new mongoose.Schema(
   {
     imageUrl: { type: String, trim: true, default: null },
     imagePublicId: { type: String, default: null },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, immutable: true },
     name: {
       type: String,
       required: true,

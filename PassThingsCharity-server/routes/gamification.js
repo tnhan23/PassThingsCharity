@@ -4,6 +4,7 @@ const {
   awardPoints,
   getUserPoints,
   createAchievement,
+  updateAchievement,
   getAllAchievements,
   getUserAchievements,
   issueCertificate,
@@ -28,6 +29,7 @@ router.post(
 );
 
 // Achievements
+router.patch('/achievements/:id', checkBearerToken, checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER']), updateAchievement);
 router.get('/achievements', getAllAchievements);
 router.post(
   '/achievements',
