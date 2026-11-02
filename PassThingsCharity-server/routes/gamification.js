@@ -3,6 +3,7 @@ const router = express.Router();
 const {
   awardPoints,
   getUserPoints,
+  getPointPolicy,
   createAchievement,
   updateAchievement,
   getAllAchievements,
@@ -15,6 +16,7 @@ const checkBearerToken = require('../middleware/checkBearerToken');
 const checkRole = require('../middleware/checkRole');
 
 // Points
+router.get('/points/policy', getPointPolicy);
 router.get('/points/me', checkBearerToken, getUserPoints);
 router.get(
   '/points/user/:userId',

@@ -576,7 +576,7 @@ const paths = {
         content: { 'application/json': { schema: { $ref: '#/components/schemas/TaskAbsenceRequest' } } },
       },
       responses: {
-        200: { description: 'Đã đánh dấu vắng mặt, không trừ điểm đã có và mở lại slot nếu còn thiếu người' },
+        200: { description: 'Lần đầu cảnh cáo; từ lần vắng mặt thứ hai trừ tối đa 10 điểm theo số dư hiện có; mở lại slot nếu còn thiếu người' },
         400: { description: 'ID phân công không hợp lệ' },
         403: { description: 'Chỉ quản lý, nhân viên hoặc admin được xác nhận' },
         404: { description: 'Không tìm thấy phân công/công việc' },
@@ -633,7 +633,7 @@ const personalScopes = {
   'GET /workforce/tasks/me': 'Chỉ trả nhiệm vụ được phân công cho tài khoản trong token.',
   'POST /workforce/tasks/check-in': 'Người được phân công tự check-in; ADMIN, STATION_MANAGER hoặc STAFF được check-in thay người khác. Tài khoản khác nhận 403.',
   'POST /workforce/tasks/check-out': 'Người được phân công tự check-out; ADMIN, STATION_MANAGER hoặc STAFF được check-out thay người khác. Tài khoản khác nhận 403.',
-  'PATCH /workforce/tasks/assignments/{assignmentId}/absent': 'Chỉ ADMIN, STATION_MANAGER hoặc STAFF xác nhận vắng mặt; không trừ điểm và mở lại slot tuyển khi phù hợp.',
+  'PATCH /workforce/tasks/assignments/{assignmentId}/absent': 'Chỉ ADMIN, STATION_MANAGER hoặc STAFF xác nhận vắng mặt; lần đầu cảnh cáo, từ lần thứ hai trừ tối đa 10 điểm mỗi lần, không để số dư âm; mở lại slot tuyển khi phù hợp.',
 };
 
 for (const [url, path] of Object.entries(paths)) {

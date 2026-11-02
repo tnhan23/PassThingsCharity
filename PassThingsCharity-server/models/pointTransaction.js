@@ -18,7 +18,7 @@ const pointTransactionSchema = new mongoose.Schema(
     type: {
       type: String,
       required: true,
-      enum: ['DONATION', 'VOLUNTEER_TASK', 'BONUS', 'SYSTEM'],
+      enum: ['DONATION', 'VOLUNTEER_TASK', 'BONUS', 'SYSTEM', 'NO_SHOW_PENALTY'],
     },
     sourceId: {
       type: mongoose.Schema.Types.ObjectId,
