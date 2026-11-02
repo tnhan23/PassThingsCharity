@@ -22,8 +22,14 @@ const itemTypeSchema = new mongoose.Schema(
     unit: {
       type: String,
       required: true,
-      enum: ['KG', 'PAIR', 'BOX', 'PACK'],
+      enum: ['KG', 'PAIR', 'BOX', 'PACK', 'PIECE'],
       uppercase: true,
+    },
+    pointsPerUnit: {
+      type: Number,
+      default: 0,
+      min: 0,
+      validate: Number.isInteger,
     },
     description: {
       type: String,

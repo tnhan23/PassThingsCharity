@@ -346,6 +346,13 @@ Trước khi kêu gọi quyên góp hoặc tạo chiến dịch, Quản trị vi
 ```
 *(Đơn vị `unit` hỗ trợ: `KG`, `PAIR`, `BOX`, `PACK`, `PIECE`)*.
 * 👉 **Lưu lại `_id` của loại vật phẩm:** `ITEM_TYPE_ID`.
+* **Chính sách điểm:** cấu hình `pointsPerUnit` (số nguyên không âm) khi tạo hoặc cập nhật loại vật phẩm bằng `PATCH /catalog/items/<ITEM_TYPE_ID>`. Ví dụ:
+```json
+{
+  "pointsPerUnit": 5
+}
+```
+Mỗi phiếu được trạm tiếp nhận cộng **20 điểm cơ bản + tổng (số lượng × pointsPerUnit)**; điểm của từng dòng được làm tròn về số nguyên gần nhất. Loại chưa cấu hình mặc định 0 điểm/đơn vị; thay đổi chính sách chỉ áp dụng cho phiếu mới, không sửa lịch sử điểm.
 
 ##### 🔹 Bước 3: Xem danh sách vật phẩm trong hệ thống (`GET /catalog/items`)
 * **URL:** `GET http://localhost:8080/catalog/items` (Public không cần Token)
@@ -644,18 +651,26 @@ Quản lý vòng đời hoạt động của Tình nguyện viên: Đăng ký ch
 ```
 * **Kết quả:** Trạng thái ca làm chuyển sang `IN_PROGRESS`, ghi nhận thời gian bắt đầu thực tế.
 
-##### 🔹 Bước 7: TNV Check-out khi hoàn thành ca (`POST /workforce/tasks/check-out`)
+##### 🔹 Bước 7: User Check-out khi hoàn thành job (`POST /workforce/tasks/check-out`)
 * **URL:** `POST http://localhost:8080/workforce/tasks/check-out`
 * **Headers:** `Authorization: Bearer <VOLUNTEER_TOKEN>`
 * **Body (raw JSON):**
 ```json
 {
   "assignmentId": "<ASSIGNMENT_ID>",
-  "hoursSpent": 4.0,
   "completionNote": "Đã hoàn thành bốc xếp toàn bộ hàng lên xe tải an toàn"
 }
 ```
-* **Kết quả:** Ghi nhận hoàn tất nhiệm vụ, lưu số giờ cống hiến và **tự động cộng `50 điểm thưởng` Gamification** vào tài khoản của TNV!
+* **Kết quả:** Server tự tính thời lượng từ check-in đến check-out, ghi nhận hoàn tất và cộng điểm **một lần**. Dùng `rewardPoints` đã đặt trên job; nếu bằng 0/bỏ trống thì áp dụng 25 điểm/giờ, tối thiểu 25 điểm. User dùng tài khoản USER bình thường, không cần role VOLUNTEER.
+
+##### 🔹 Xác nhận User được duyệt nhưng vắng mặt
+Sau khi job kết thúc, quản lý/Staff xác nhận vắng mặt trong Swagger (`PATCH /workforce/tasks/assignments/<ASSIGNMENT_ID>/absent`):
+```json
+{
+  "reason": "Không có mặt sau giờ kết thúc job"
+}
+```
+Hệ thống ghi trạng thái `ABSENT`, không trừ điểm đã tích lũy (người chưa hoàn thành vốn chưa được thưởng) và tự mở lại tuyển nếu còn thiếu người. Chỉ quản lý xác nhận; không đánh dấu vắng mặt trước giờ kết thúc hoặc sau khi User đã check-in.
 
 ---
 
@@ -702,6 +717,7 @@ Ghi nhận và tri ân đóng góp của cộng đồng qua điểm số, huy hi
 ```
 
 ##### 🔹 Bước 5: Người dùng xem bộ sưu tập Chứng chỉ của mình (`GET /gamification/certificates/me`)
+Khi tổng điểm tích lũy lần đầu đạt **100, 500 hoặc 1.000**, hệ thống tự tạo chứng nhận mốc tương ứng. Mỗi chứng nhận có `pdfDownloadUrl`; mở endpoint đó bằng token của User để tải PDF. Có thể kiểm tra điểm, lịch sử, huy hiệu và chứng nhận trong `GET /users/me/profile` → `gamification`.
 * **URL:** `GET http://localhost:8080/gamification/certificates/me`
 * **Headers:** `Authorization: Bearer <VOLUNTEER_TOKEN>`
 

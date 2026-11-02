@@ -27,6 +27,7 @@ module.exports = {
     get: {
       tags: ['Gamification'],
       summary: 'Xem tổng điểm & Lịch sử cộng điểm của tôi',
+      description: 'Điểm được ghi nhận khi phiếu quyên góp được tiếp nhận hoặc User hoàn thành job; điểm job chỉ cấp một lần cho mỗi phân công.',
       responses: {
         200: { description: 'Tổng điểm và lịch sử giao dịch' },
       },
@@ -114,8 +115,22 @@ module.exports = {
     get: {
       tags: ['Gamification'],
       summary: 'Xem danh sách Giấy chứng nhận của tôi',
+      description: 'Các mốc tích lũy 100, 500 và 1.000 điểm tự động tạo chứng nhận MILESTONE; phản hồi cung cấp pdfDownloadUrl để tải PDF.',
       responses: {
         200: { description: 'Danh sách giấy chứng nhận' },
+      },
+    },
+  },
+  '/gamification/certificates/{id}/pdf': {
+    get: {
+      tags: ['Gamification'],
+      summary: 'Tải PDF chứng nhận mốc điểm',
+      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+      responses: {
+        200: { description: 'Tệp PDF chứng nhận', content: { 'application/pdf': { schema: { type: 'string', format: 'binary' } } } },
+        400: { description: 'Certificate ID không hợp lệ' },
+        403: { description: 'Không có quyền tải chứng nhận của người khác' },
+        404: { description: 'Không tìm thấy chứng nhận PDF mốc điểm' },
       },
     },
   },

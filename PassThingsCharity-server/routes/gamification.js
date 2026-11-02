@@ -9,6 +9,7 @@ const {
   getUserAchievements,
   issueCertificate,
   getUserCertificates,
+  downloadCertificatePdf,
 } = require('../controller/gamification');
 const checkBearerToken = require('../middleware/checkBearerToken');
 const checkRole = require('../middleware/checkRole');
@@ -47,6 +48,7 @@ router.get(
 
 // Certificates
 router.get('/certificates/me', checkBearerToken, getUserCertificates);
+router.get('/certificates/:id/pdf', checkBearerToken, downloadCertificatePdf);
 router.get(
   '/certificates/user/:userId',
   checkBearerToken,

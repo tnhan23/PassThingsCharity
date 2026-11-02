@@ -149,7 +149,8 @@ module.exports = {
       imageUrl: { type: 'string', format: 'uri', nullable: true, description: 'URL HTTPS trả từ POST /uploads/item-types/image. Không bắt buộc.' },
       categoryId: { type: 'string', example: '6523456789abcdef00000101' },
       name: { type: 'string', example: 'Mì gói' },
-      unit: { type: 'string', enum: ['KG', 'PAIR', 'BOX', 'PACK'], example: 'BOX' },
+      unit: { type: 'string', enum: ['KG', 'PAIR', 'BOX', 'PACK', 'PIECE'], example: 'BOX' },
+      pointsPerUnit: { type: 'integer', minimum: 0, example: 5, description: 'Điểm cộng trên mỗi đơn vị chuẩn; 0 nếu chưa cấu hình. Chỉ áp dụng khi phiếu được tiếp nhận; điểm từng dòng được làm tròn về số nguyên gần nhất.' },
       description: { type: 'string', example: 'Thùng mì gói các loại' },
     },
   },
@@ -160,7 +161,8 @@ module.exports = {
       imageUrl: { type: 'string', format: 'uri', nullable: true },
       categoryId: { type: 'string', example: '6523456789abcdef00000101' },
       name: { type: 'string', example: 'Mì gói' },
-      unit: { type: 'string', enum: ['KG', 'PAIR', 'BOX', 'PACK'], example: 'BOX' },
+      unit: { type: 'string', enum: ['KG', 'PAIR', 'BOX', 'PACK', 'PIECE'], example: 'BOX' },
+      pointsPerUnit: { type: 'integer', minimum: 0, example: 5, description: 'Điểm cộng trên mỗi đơn vị chuẩn; điểm từng dòng được làm tròn về số nguyên gần nhất.' },
       description: { type: 'string', example: 'Thùng mì gói các loại' },
       isActive: { type: 'boolean', example: true },
     },
@@ -390,7 +392,7 @@ module.exports = {
       recruitmentStatus: { type: 'string', enum: ['NOT_OPEN', 'OPEN', 'FILLED', 'CLOSED'], example: 'OPEN' },
       requiredVolunteers: { type: 'integer', example: 5 },
       volunteerDeadline: { type: 'string', format: 'date-time', example: '2026-10-16T07:00:00.000Z' },
-      rewardPoints: { type: 'integer', example: 50 },
+      rewardPoints: { type: 'integer', minimum: 0, example: 50, description: 'Điểm thưởng cố định khi User hoàn thành; 0/bỏ trống thì tính 25 điểm/giờ, tối thiểu 25.' },
     },
   },
   TaskUpdateRequest: {
@@ -405,7 +407,7 @@ module.exports = {
       recruitmentStatus: { type: 'string', enum: ['NOT_OPEN', 'OPEN', 'FILLED', 'CLOSED'], example: 'OPEN' },
       requiredVolunteers: { type: 'integer', example: 5 },
       volunteerDeadline: { type: 'string', format: 'date-time' },
-      rewardPoints: { type: 'integer', example: 50 },
+      rewardPoints: { type: 'integer', minimum: 0, example: 50, description: 'Điểm thưởng cố định khi User hoàn thành; 0 thì dùng quy tắc mặc định 25 điểm/giờ.' },
     },
   },
   TaskApplicationRequest: {
@@ -441,10 +443,16 @@ module.exports = {
   TaskCheckOutRequest: {
     type: 'object',
     required: ['assignmentId'],
+    description: 'Thời lượng do server tự tính từ check-in đến check-out, không nhận số giờ từ client. RewardPoints của task được cộng một lần khi người dùng hoàn thành.',
     properties: {
       assignmentId: { type: 'string', example: '6523456789abcdef00000911' },
-      hoursSpent: { type: 'number', minimum: 0.1, example: 4 },
       completionNote: { type: 'string', example: 'Đã hoàn tất phân loại 20 thùng quần áo' },
+    },
+  },
+  TaskAbsenceRequest: {
+    type: 'object',
+    properties: {
+      reason: { type: 'string', example: 'Không có mặt sau thời gian kết thúc ca' },
     },
   },
 };
