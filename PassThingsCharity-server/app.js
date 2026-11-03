@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const cors = require('cors');
 const passport = require('passport');
 require('./config/passport');
 
@@ -25,6 +26,8 @@ const swaggerUi = require('swagger-ui-express');
 const createSwaggerDocument = require('./config/swagger');
 const app = express();
 const mongoose = require('mongoose');
+
+app.use(cors());
 
 const DEFAULT_PORT = Number(process.env.PORT) || 8080;
 const swaggerDocument = createSwaggerDocument(DEFAULT_PORT);
