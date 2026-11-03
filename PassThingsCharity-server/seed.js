@@ -49,7 +49,6 @@ const rolesData = [
   { _id: new mongoose.Types.ObjectId("6523456789abcdef00000006"), name: "ORG_MANAGER", description: "Quản lý tổ chức từ thiện" },
   { _id: new mongoose.Types.ObjectId("6523456789abcdef00000002"), name: "STATION_MANAGER", description: "Quản lý trạm tiếp nhận quyên góp" },
   { _id: new mongoose.Types.ObjectId("6523456789abcdef00000003"), name: "STAFF", description: "Nhân viên điều phối và xác nhận" },
-  { _id: new mongoose.Types.ObjectId("6523456789abcdef00000004"), name: "VOLUNTEER", description: "Tình nguyện viên nhận nhiệm vụ" },
   { _id: new mongoose.Types.ObjectId("6523456789abcdef00000005"), name: "USER", description: "Người dùng đăng tải đồ quyên góp" }
 ];
 
@@ -91,7 +90,7 @@ const usersData = [
     username: "volunteer_test_01",
     password: TEST_PASSWORD_HASH,
     fullName: "Tình Nguyện Viên Test",
-    role: new mongoose.Types.ObjectId("6523456789abcdef00000004"),
+    role: new mongoose.Types.ObjectId("6523456789abcdef00000005"),
     status: "active",
     phone: "0912345679"
   },
@@ -564,6 +563,7 @@ async function seedAll() {
 
     console.log('[Seed] 1/25 Roles...');
     for (const item of rolesData) await upsertDoc(Role, { name: item.name }, item);
+    await require('./services/retireVolunteerRole')();
 
     console.log('[Seed] 2/25 Users...');
     for (const item of usersData) await upsertDoc(User, { username: item.username }, item);

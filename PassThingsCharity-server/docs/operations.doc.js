@@ -388,7 +388,7 @@ const paths = {
   '/workforce/tasks/{taskId}/apply': {
     post: {
       tags: ['BE3 - Task Recruitment & Applications'],
-      summary: 'User nộp đơn ứng tuyển vào job đang mở tuyển; không yêu cầu role VOLUNTEER',
+      summary: 'User nộp đơn ứng tuyển vào job đang mở tuyển',
       parameters: [
         { name: 'taskId', in: 'path', required: true, schema: { type: 'string' } },
       ],

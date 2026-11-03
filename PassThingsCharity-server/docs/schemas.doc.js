@@ -430,7 +430,7 @@ module.exports = {
     properties: {
       taskId: { type: 'string', example: '6523456789abcdef00000901' },
       assigneeId: { type: 'string', example: '6acbbb6a7faf5d01bb5261e6' },
-      assigneeType: { type: 'string', enum: ['STAFF', 'VOLUNTEER'], example: 'VOLUNTEER' },
+      assigneeType: { type: 'string', enum: ['STAFF', 'VOLUNTEER'], example: 'VOLUNTEER', description: 'Loại tham gia nhiệm vụ, không phải role tài khoản. USER đăng ký nhận việc được phân công theo loại VOLUNTEER.' },
     },
   },
   TaskCheckInRequest: {
