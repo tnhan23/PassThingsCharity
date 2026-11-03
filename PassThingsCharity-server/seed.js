@@ -121,12 +121,12 @@ const organizationsData = [
   }
 ];
 
-// 4. Station
+// 4. Stations (Comprehensive GPS stations across TP.HCM)
 const stationsData = [
   {
     _id: new mongoose.Types.ObjectId("671000000000000000000011"),
     organizationId: new mongoose.Types.ObjectId("671000000000000000000001"),
-    name: "Trạm Tiếp Nhận Trung Tâm 01",
+    name: "Trạm Tiếp Nhận Trung Tâm 01 (Quận 1)",
     address: "456 Đường Lê Lợi, Quận 1, TP.HCM",
     latitude: "10.776889",
     longitude: "106.700806",
@@ -141,6 +141,50 @@ const stationsData = [
     address: "789 Đường An Dương Vương, Quận 5, TP.HCM",
     latitude: "10.758889",
     longitude: "106.666806",
+    openingTime: "08:00",
+    closingTime: "17:00",
+    isActive: true
+  },
+  {
+    _id: new mongoose.Types.ObjectId("671000000000000000000013"),
+    organizationId: new mongoose.Types.ObjectId("671000000000000000000001"),
+    name: "Trạm Tiếp Nhận Quận 3",
+    address: "280 Nam Kỳ Khởi Nghĩa, Quận 3, TP.HCM",
+    latitude: "10.787800",
+    longitude: "106.688100",
+    openingTime: "08:00",
+    closingTime: "17:00",
+    isActive: true
+  },
+  {
+    _id: new mongoose.Types.ObjectId("671000000000000000000014"),
+    organizationId: new mongoose.Types.ObjectId("671000000000000000000001"),
+    name: "Trạm Tiếp Nhận Quận 7",
+    address: "1058 Nguyễn Văn Linh, Quận 7, TP.HCM",
+    latitude: "10.729800",
+    longitude: "106.702200",
+    openingTime: "08:00",
+    closingTime: "17:00",
+    isActive: true
+  },
+  {
+    _id: new mongoose.Types.ObjectId("671000000000000000000015"),
+    organizationId: new mongoose.Types.ObjectId("671000000000000000000001"),
+    name: "Trạm Tiếp Nhận Bình Thạnh",
+    address: "49 Đinh Bộ Lĩnh, Quận Bình Thạnh, TP.HCM",
+    latitude: "10.803800",
+    longitude: "106.711800",
+    openingTime: "08:00",
+    closingTime: "17:00",
+    isActive: true
+  },
+  {
+    _id: new mongoose.Types.ObjectId("671000000000000000000016"),
+    organizationId: new mongoose.Types.ObjectId("671000000000000000000001"),
+    name: "Trạm Tiếp Nhận Gò Vấp",
+    address: "12 Nguyễn Văn Bảo, Quận Gò Vấp, TP.HCM",
+    latitude: "10.822200",
+    longitude: "106.687200",
     openingTime: "08:00",
     closingTime: "17:00",
     isActive: true
@@ -240,12 +284,48 @@ const campaignItemsData = [
   }
 ];
 
-// 10. Campaign Stations
+// 10. Campaign Stations (Multi-station coverage for Map Testing)
 const campaignStationsData = [
   {
     _id: new mongoose.Types.ObjectId("6523456789abcdef00000501"),
     campaignId: new mongoose.Types.ObjectId("6acdef2e9fc3bf0d61d9d00b"),
     stationId: new mongoose.Types.ObjectId("671000000000000000000011"),
+    assignedAt: new Date()
+  },
+  {
+    _id: new mongoose.Types.ObjectId("6523456789abcdef00000502"),
+    campaignId: new mongoose.Types.ObjectId("6acdef2e9fc3bf0d61d9d00b"),
+    stationId: new mongoose.Types.ObjectId("6ad5fa91793cb88b3338723d"),
+    assignedAt: new Date()
+  },
+  {
+    _id: new mongoose.Types.ObjectId("6523456789abcdef00000503"),
+    campaignId: new mongoose.Types.ObjectId("6acdef2e9fc3bf0d61d9d00b"),
+    stationId: new mongoose.Types.ObjectId("671000000000000000000012"),
+    assignedAt: new Date()
+  },
+  {
+    _id: new mongoose.Types.ObjectId("6523456789abcdef00000504"),
+    campaignId: new mongoose.Types.ObjectId("6acdef2e9fc3bf0d61d9d00b"),
+    stationId: new mongoose.Types.ObjectId("671000000000000000000013"),
+    assignedAt: new Date()
+  },
+  {
+    _id: new mongoose.Types.ObjectId("6523456789abcdef00000505"),
+    campaignId: new mongoose.Types.ObjectId("6acdef2e9fc3bf0d61d9d00b"),
+    stationId: new mongoose.Types.ObjectId("671000000000000000000014"),
+    assignedAt: new Date()
+  },
+  {
+    _id: new mongoose.Types.ObjectId("6523456789abcdef00000506"),
+    campaignId: new mongoose.Types.ObjectId("6acdef2e9fc3bf0d61d9d00b"),
+    stationId: new mongoose.Types.ObjectId("671000000000000000000015"),
+    assignedAt: new Date()
+  },
+  {
+    _id: new mongoose.Types.ObjectId("6523456789abcdef00000507"),
+    campaignId: new mongoose.Types.ObjectId("6acdef2e9fc3bf0d61d9d00b"),
+    stationId: new mongoose.Types.ObjectId("671000000000000000000016"),
     assignedAt: new Date()
   }
 ];
@@ -482,74 +562,74 @@ async function seedAll() {
     console.log(`[Seed All] Connecting to Cloud Atlas: ${mongoUri}`);
     await mongoose.connect(mongoUri);
 
-    console.log('[Seed] 1/24 Roles...');
-    for (const item of rolesData) await upsertDoc(Role, { _id: item._id }, item);
+    console.log('[Seed] 1/25 Roles...');
+    for (const item of rolesData) await upsertDoc(Role, { name: item.name }, item);
 
-    console.log('[Seed] 2/24 Users...');
-    for (const item of usersData) await upsertDoc(User, { _id: item._id }, item);
+    console.log('[Seed] 2/25 Users...');
+    for (const item of usersData) await upsertDoc(User, { username: item.username }, item);
 
-    console.log('[Seed] 3/24 Organizations...');
-    for (const item of organizationsData) await upsertDoc(Organization, { _id: item._id }, item);
+    console.log('[Seed] 3/25 Organizations...');
+    for (const item of organizationsData) await upsertDoc(Organization, { code: item.code }, item);
 
-    console.log('[Seed] 4/24 Stations...');
+    console.log('[Seed] 4/25 Stations...');
     for (const item of stationsData) await upsertDoc(Station, { _id: item._id }, item);
 
-    console.log('[Seed] 5/24 StationStaffs...');
+    console.log('[Seed] 5/25 StationStaffs...');
     for (const item of stationStaffsData) await upsertDoc(StationStaff, { stationId: item.stationId, userId: item.userId }, item);
 
-    console.log('[Seed] 6/24 Item Categories...');
+    console.log('[Seed] 6/25 Item Categories...');
     for (const item of categoriesData) await upsertDoc(ItemCategory, { _id: item._id }, item);
 
-    console.log('[Seed] 7/24 Item Types...');
+    console.log('[Seed] 7/25 Item Types...');
     for (const item of itemTypesData) await upsertDoc(ItemType, { _id: item._id }, item);
 
-    console.log('[Seed] 8/24 Campaigns...');
+    console.log('[Seed] 8/25 Campaigns...');
     for (const item of campaignsData) await upsertDoc(Campaign, { _id: item._id }, item);
 
-    console.log('[Seed] 9/24 Campaign Items...');
+    console.log('[Seed] 9/25 Campaign Items...');
     for (const item of campaignItemsData) await upsertDoc(CampaignItem, { campaignId: item.campaignId, itemTypeId: item.itemTypeId }, item);
 
-    console.log('[Seed] 10/24 Campaign Stations...');
+    console.log('[Seed] 10/25 Campaign Stations...');
     for (const item of campaignStationsData) await upsertDoc(CampaignStation, { campaignId: item.campaignId, stationId: item.stationId }, item);
 
-    console.log('[Seed] 11/24 Point Transactions...');
+    console.log('[Seed] 11/25 Point Transactions...');
     for (const item of pointTransactionsData) await upsertDoc(PointTransaction, { _id: item._id }, item);
 
-    console.log('[Seed] 12/24 Achievements...');
+    console.log('[Seed] 12/25 Achievements...');
     for (const item of achievementsData) await upsertDoc(Achievement, { _id: item._id }, item);
 
-    console.log('[Seed] 13/24 User Achievements...');
+    console.log('[Seed] 13/25 User Achievements...');
     for (const item of userAchievementsData) await upsertDoc(UserAchievement, { userId: item.userId, achievementId: item.achievementId }, item);
 
-    console.log('[Seed] 14/24 Certificates...');
+    console.log('[Seed] 14/25 Certificates...');
     for (const item of certificatesData) await upsertDoc(Certificate, { _id: item._id }, item);
 
     // BE3 Seed Execution
-    console.log('[Seed] 15/24 Contributions...');
+    console.log('[Seed] 15/25 Contributions...');
     for (const item of contributionsData) await upsertDoc(Contribution, { _id: item._id }, item);
 
-    console.log('[Seed] 16/24 Contribution Items...');
+    console.log('[Seed] 16/25 Contribution Items...');
     for (const item of contributionItemsData) await upsertDoc(ContributionItem, { _id: item._id }, item);
 
-    console.log('[Seed] 17/24 Contribution Images...');
+    console.log('[Seed] 17/25 Contribution Images...');
     for (const item of contributionImagesData) await upsertDoc(ContributionImage, { _id: item._id }, item);
 
-    console.log('[Seed] 18/24 Campaign Transfers...');
+    console.log('[Seed] 18/25 Campaign Transfers...');
     for (const item of transfersData) await upsertDoc(CampaignTransfer, { _id: item._id }, item);
 
-    console.log('[Seed] 19/24 Campaign Transfer Items...');
+    console.log('[Seed] 19/25 Campaign Transfer Items...');
     for (const item of transferItemsData) await upsertDoc(CampaignTransferItem, { _id: item._id }, item);
 
-    console.log('[Seed] 20/24 Relief Distributions...');
+    console.log('[Seed] 20/25 Relief Distributions...');
     for (const item of reliefDistributionsData) await upsertDoc(ReliefDistribution, { _id: item._id }, item);
 
-    console.log('[Seed] 21/24 Relief Distribution Items...');
+    console.log('[Seed] 21/25 Relief Distribution Items...');
     for (const item of reliefDistributionItemsData) await upsertDoc(ReliefDistributionItem, { _id: item._id }, item);
 
-    console.log('[Seed] 22/24 Volunteer Registrations...');
+    console.log('[Seed] 22/25 Volunteer Registrations...');
     for (const item of volunteerRegistrationsData) await upsertDoc(VolunteerRegistration, { campaignId: item.campaignId, userId: item.userId }, item);
 
-    console.log('[Seed] 23/24 Tasks...');
+    console.log('[Seed] 23/25 Tasks...');
     for (const item of tasksData) await upsertDoc(Task, { _id: item._id }, item);
 
     console.log('[Seed] 24/25 Task Assignments...');

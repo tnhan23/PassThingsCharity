@@ -144,13 +144,15 @@ module.exports = {
   '/campaigns/{id}/stations': {
     get: {
       tags: ['Campaigns'],
-      summary: 'Tra cứu danh sách Trạm tiếp nhận đang hỗ trợ Campaign này (Public)',
+      summary: 'Tra cứu các Trạm tiếp nhận đang hỗ trợ Campaign (Tính khoảng cách gần nhất nếu truyền userLat, userLng)',
       security: [],
       parameters: [
         { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+        { name: 'userLat', in: 'query', schema: { type: 'number' }, description: 'Vĩ độ vị trí hiện tại của người dùng (VD: 10.7769)' },
+        { name: 'userLng', in: 'query', schema: { type: 'number' }, description: 'Kinh độ vị trí hiện tại của người dùng (VD: 106.7009)' },
       ],
       responses: {
-        200: { description: 'Danh sách trạm tiếp nhận' },
+        200: { description: 'Danh sách trạm tiếp nhận kèm khoảng cách kilomet (distanceKm)' },
         404: { description: 'Không tìm thấy chiến dịch công khai' },
       },
     },
