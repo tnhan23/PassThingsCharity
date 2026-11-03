@@ -1,5 +1,6 @@
 const schemas = require('../docs/schemas.doc');
 const authDocs = require('../docs/auth.doc');
+const authAdminDocs = require('../docs/authAdmin.doc');
 const usersDocs = require('../docs/users.doc');
 const organizationsDocs = require('../docs/organizations.doc');
 const stationsDocs = require('../docs/stations.doc');
@@ -13,6 +14,7 @@ const gamificationDocs = require('../docs/gamification.doc');
 
 // BE3 Swagger Docs
 const operationsDocs = require('../docs/operations.doc');
+const uploadDocs = require('../docs/upload.doc');
 
 const createSwaggerDocument = (port = process.env.PORT || 8080) => ({
   openapi: '3.0.0',
@@ -33,7 +35,7 @@ const createSwaggerDocument = (port = process.env.PORT || 8080) => ({
         type: 'http',
         scheme: 'bearer',
         bearerFormat: 'JWT',
-        description: 'Nhập token JWT lấy được từ API /auth/login (không cần gõ chữ Bearer, Swagger sẽ tự thêm)',
+        description: 'Nhập token JWT lấy được từ API /auth/login hoặc /authadmin/login (không cần gõ chữ Bearer, Swagger sẽ tự thêm)',
       },
     },
     schemas,
@@ -45,6 +47,7 @@ const createSwaggerDocument = (port = process.env.PORT || 8080) => ({
   ],
   paths: {
     ...authDocs,
+    ...authAdminDocs,
     ...usersDocs,
     ...organizationsDocs,
     ...stationsDocs,
@@ -54,6 +57,7 @@ const createSwaggerDocument = (port = process.env.PORT || 8080) => ({
     ...campaignDocs,
     ...gamificationDocs,
     ...operationsDocs,
+    ...uploadDocs,
   },
 });
 

@@ -1,4 +1,31 @@
 module.exports = {
+  '/contributions/upload-images': {
+    post: {
+      tags: ['BE3 - Operations & Inbound'],
+      summary: 'Upload staff evidence images to the configured BE3 Cloudinary folder',
+      description: 'Upload first, then pass the returned imageUrls to POST /contributions or POST /contributions/{id}/images. Images are auto-oriented, metadata removed, flattened onto white, resized within 1600px and compressed to JPEG up to 500 KB. Response includes originalBytes, bytes, width and height. If a later file fails, the error response includes successfully uploaded URLs.',
+      requestBody: {
+        required: true,
+        content: {
+          'multipart/form-data': {
+            schema: {
+              type: 'object', required: ['images'],
+              properties: { images: { type: 'array', minItems: 1, maxItems: 5, items: { type: 'string', format: 'binary' }, description: 'JPEG, PNG or WebP; maximum 5 MB per image.' } },
+            },
+          },
+        },
+      },
+      responses: {
+        201: { description: 'Uploaded images and imageUrls' },
+        400: { description: 'Invalid image or multipart fields' },
+        401: { description: 'Authentication required' },
+        403: { description: 'Staff, station manager or admin role required' },
+        413: { description: 'Image exceeds 5 MB' },
+        502: { description: 'Cloudinary upload failed' },
+        503: { description: 'Cloudinary BE3 configuration missing' },
+      },
+    },
+  },
   // ==========================================
   // INBOUND CONTRIBUTIONS
   // ==========================================
