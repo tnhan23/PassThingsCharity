@@ -21,19 +21,19 @@ router.get('/:id', getCampaignById);
 router.post(
   '/',
   checkBearerToken,
-  checkRole(['ADMIN', 'STATION_MANAGER']),
+  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER']),
   createCampaign
 );
 router.patch(
   '/:id',
   checkBearerToken,
-  checkRole(['ADMIN', 'STATION_MANAGER']),
+  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER']),
   updateCampaign
 );
 router.patch(
   '/:id/status',
   checkBearerToken,
-  checkRole(['ADMIN', 'STATION_MANAGER']),
+  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER']),
   updateCampaignStatus
 );
 
@@ -41,13 +41,13 @@ router.patch(
 router.post(
   '/:id/items',
   checkBearerToken,
-  checkRole(['ADMIN', 'STATION_MANAGER']),
+  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER']),
   addCampaignItem
 );
 router.delete(
   '/:id/items/:itemId',
   checkBearerToken,
-  checkRole(['ADMIN', 'STATION_MANAGER']),
+  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER']),
   removeCampaignItem
 );
 
@@ -55,13 +55,13 @@ router.delete(
 router.post(
   '/:id/stations',
   checkBearerToken,
-  checkRole(['ADMIN', 'STATION_MANAGER']),
+  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER']),
   assignStationToCampaign
 );
 router.delete(
   '/:id/stations/:stationId',
   checkBearerToken,
-  checkRole(['ADMIN', 'STATION_MANAGER']),
+  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER']),
   removeStationFromCampaign
 );
 router.get('/:id/stations', findStationsForCampaign);

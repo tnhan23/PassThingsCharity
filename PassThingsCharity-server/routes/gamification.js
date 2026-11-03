@@ -14,11 +14,16 @@ const checkRole = require('../middleware/checkRole');
 
 // Points
 router.get('/points/me', checkBearerToken, getUserPoints);
-router.get('/points/user/:userId', checkBearerToken, checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF']), getUserPoints);
+router.get(
+  '/points/user/:userId',
+  checkBearerToken,
+  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'STAFF']),
+  getUserPoints
+);
 router.post(
   '/points/award',
   checkBearerToken,
-  checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF']),
+  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'STAFF']),
   awardPoints
 );
 
@@ -27,14 +32,14 @@ router.get('/achievements', getAllAchievements);
 router.post(
   '/achievements',
   checkBearerToken,
-  checkRole(['ADMIN', 'STATION_MANAGER']),
+  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER']),
   createAchievement
 );
 router.get('/achievements/me', checkBearerToken, getUserAchievements);
 router.get(
   '/achievements/user/:userId',
   checkBearerToken,
-  checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF']),
+  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'STAFF']),
   getUserAchievements
 );
 
@@ -43,13 +48,13 @@ router.get('/certificates/me', checkBearerToken, getUserCertificates);
 router.get(
   '/certificates/user/:userId',
   checkBearerToken,
-  checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF']),
+  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'STAFF']),
   getUserCertificates
 );
 router.post(
   '/certificates',
   checkBearerToken,
-  checkRole(['ADMIN', 'STATION_MANAGER']),
+  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER']),
   issueCertificate
 );
 
