@@ -1,32 +1,42 @@
-import Constants from "expo-constants";
+import { Platform } from "react-native";
+import { attestationHeaders, resetAttestation } from "@/api/attest";
+import { apiBaseUrl } from "@/api/base";
+import { signatureHeaders } from "@/api/sign";
 
-const extra = Constants.expoConfig?.extra as { apiUrl?: string } | undefined;
-
-export const apiBaseUrl = process.env.EXPO_PUBLIC_API_URL || extra?.apiUrl || "http://localhost:8080";
+export { apiBaseUrl };
 
 export class ApiError extends Error {
   status: number;
+  code: string;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, code = "") {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
 export async function api<T>(
   path: string,
   options?: { method?: string; body?: unknown; token?: string | null },
+  retried = false,
 ): Promise<T> {
-  const headers: Record<string, string> = { Accept: "application/json" };
+  const method = options?.method ?? "GET";
+  const bodyText = options?.body !== undefined ? JSON.stringify(options.body) : "";
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    ...signatureHeaders(method, path, bodyText),
+    ...(await attestationHeaders()),
+  };
   if (options?.body !== undefined) headers["Content-Type"] = "application/json";
   if (options?.token) headers.Authorization = `Bearer ${options.token}`;
 
   let response: Response;
   try {
     response = await fetch(`${apiBaseUrl}${path}`, {
-      method: options?.method ?? "GET",
+      method,
       headers,
-      body: options?.body !== undefined ? JSON.stringify(options.body) : undefined,
+      body: bodyText || undefined,
     });
   } catch {
     throw new ApiError(0, "Không kết nối được máy chủ.");
@@ -36,16 +46,72 @@ export async function api<T>(
   let data: { error?: unknown } = {};
   if (text) {
     try {
-      data = JSON.parse(text) as { error?: unknown };
+      data = JSON.parse(text) as { error?: unknown; code?: unknown };
     } catch {
-      throw new ApiError(response.status, "Máy chủ trả về dữ liệu không đọc được.");
+      const expired = response.status === 401;
+      throw new ApiError(response.status, expired ? "Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại." : "Máy chủ trả về dữ liệu không đọc được.");
     }
   }
 
   if (!response.ok) {
+    const code = typeof data.code === "string" ? data.code : "";
+    if (!retried && code === "app_attest_unknown") {
+      await resetAttestation();
+      return api(path, options, true);
+    }
     const message = typeof data.error === "string" ? data.error : "Máy chủ từ chối yêu cầu.";
-    throw new ApiError(response.status, message);
+    throw new ApiError(response.status, message, code);
   }
 
+  return data as T;
+}
+
+export type UploadFile = { uri: string; name: string; type: string };
+
+export async function uploadImages<T>(path: string, token: string, files: UploadFile[], retried = false): Promise<T> {
+  const body = new FormData();
+  for (const file of files) {
+    if (Platform.OS === "web") {
+      const blob = await fetch(file.uri).then((response) => response.blob());
+      body.append("images", blob, file.name);
+    } else {
+      body.append("images", { uri: file.uri, name: file.name, type: file.type } as unknown as Blob);
+    }
+  }
+  const fileMark = files.map((file) => `${encodeURIComponent(file.name)}:${encodeURIComponent(file.type)}`).join(",");
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}${path}`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+        ...signatureHeaders("POST", path, fileMark),
+        "X-App-Files": fileMark,
+        ...(await attestationHeaders()),
+      },
+      body,
+    });
+  } catch {
+    throw new ApiError(0, "Không kết nối được máy chủ.");
+  }
+  const text = await response.text();
+  let data: { error?: unknown } = {};
+  if (text) {
+    try {
+      data = JSON.parse(text) as { error?: unknown; code?: unknown };
+    } catch {
+      throw new ApiError(response.status, "Máy chủ trả về dữ liệu không đọc được.");
+    }
+  }
+  if (!response.ok) {
+    const code = typeof data.code === "string" ? data.code : "";
+    if (!retried && code === "app_attest_unknown") {
+      await resetAttestation();
+      return uploadImages(path, token, files, true);
+    }
+    const message = typeof data.error === "string" ? data.error : "Không tải được ảnh.";
+    throw new ApiError(response.status, message, code);
+  }
   return data as T;
 }
