@@ -7,7 +7,15 @@ const Campaign = require('../models/campaign');
 const Contribution = require('../models/contribution');
 const ContributionItem = require('../models/contributionItem');
 const TaskAssignment = require('../models/taskAssignment');
-const { getReachedPointMilestones } = require('../services/gamificationPolicy');
+const ItemType = require('../models/itemType');
+const {
+  POINT_MILESTONES,
+  DONATION_BASE_POINTS,
+  DEFAULT_TASK_POINTS_PER_HOUR,
+  NO_SHOW_FIRST_WARNING_COUNT,
+  NO_SHOW_PENALTY_POINTS,
+  getReachedPointMilestones,
+} = require('../services/gamificationPolicy');
 const { createCertificatePdf } = require('../utils/certificatePdf');
 const mongoose = require('mongoose');
 
@@ -206,6 +214,53 @@ async function getUserPoints(req, res, next) {
       userId,
       totalPoints,
       transactions,
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function getPointPolicy(req, res, next) {
+  try {
+    const itemTypes = await ItemType.find({ isActive: true })
+      .select('name unit pointsPerUnit categoryId')
+      .populate('categoryId', 'name')
+      .sort({ name: 1 });
+
+    return res.status(200).json({
+      policy: {
+        donation: {
+          basePoints: DONATION_BASE_POINTS,
+          awardEvent: 'Awarded when the receiving station accepts the contribution.',
+          formula: 'basePoints + sum(quantity * pointsPerUnit)',
+          itemPointRounding: 'Round each item line to the nearest whole point.',
+          itemTypes: itemTypes.map((itemType) => ({
+            id: itemType._id,
+            category: itemType.categoryId?.name || null,
+            name: itemType.name,
+            unit: itemType.unit,
+            pointsPerUnit: itemType.pointsPerUnit || 0,
+          })),
+        },
+        task: {
+          configuredRewardPoints: 'Use the rewardPoints configured on each task when greater than zero.',
+          fallbackPointsPerHour: DEFAULT_TASK_POINTS_PER_HOUR,
+          minimumFallbackPoints: DEFAULT_TASK_POINTS_PER_HOUR,
+          rewardFrequency: 'Once per completed task assignment.',
+        },
+        noShow: {
+          appliesTo: 'Users approved for and assigned to a job.',
+          firstConfirmedAbsence: { action: 'WARNING', penaltyPoints: 0 },
+          repeatConfirmedAbsence: {
+            startsAtAbsenceNumber: NO_SHOW_FIRST_WARNING_COUNT + 1,
+            action: 'PENALTY',
+            requestedPenaltyPoints: NO_SHOW_PENALTY_POINTS,
+            maximumDeduction: 'The lesser of the requested penalty and the current point balance.',
+            balanceCanFallBelowZero: false,
+          },
+        },
+        certificateMilestones: POINT_MILESTONES,
+      },
     });
   } catch (error) {
     return next(error);
@@ -470,6 +525,7 @@ module.exports = {
   checkAndUnlockAchievements,
   awardPoints,
   getUserPoints,
+  getPointPolicy,
   createAchievement,
   getAllAchievements,
   getUserAchievements,

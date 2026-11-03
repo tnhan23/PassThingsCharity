@@ -11,7 +11,7 @@ const User = require('../models/user');
 const PointTransaction = require('../models/pointTransaction');
 const Certificate = require('../models/certificate');
 const { checkAndUnlockAchievements } = require('./gamification');
-const { calculateTaskPoints } = require('../services/gamificationPolicy');
+const { calculateTaskPoints, getNoShowConsequence } = require('../services/gamificationPolicy');
 const { createOrGetPointTransaction } = require('../services/pointTransactions');
 
 // ==========================================
@@ -915,7 +915,46 @@ async function markAssignmentAbsent(req, res, next) {
       return res.status(409).json({ error: 'Chỉ có thể xác nhận vắng mặt sau thời gian kết thúc công việc.' });
     }
 
+    const appliesNoShowPolicy = assignment.assigneeType === 'VOLUNTEER';
+    const previousConfirmedAbsences = appliesNoShowPolicy
+      ? await TaskAssignment.countDocuments({
+        assigneeId: assignment.assigneeId,
+        assigneeType: 'VOLUNTEER',
+        status: 'ABSENT',
+      })
+      : 0;
+    let consequence = {
+      absenceNumber: null,
+      action: 'NONE',
+      penaltyPoints: 0,
+    };
+
+    if (appliesNoShowPolicy) {
+      const balanceResult = await PointTransaction.aggregate([
+        { $match: { userId: assignment.assigneeId } },
+        { $group: { _id: null, totalPoints: { $sum: '$points' } } },
+      ]);
+      consequence = getNoShowConsequence(
+        previousConfirmedAbsences,
+        balanceResult[0]?.totalPoints || 0
+      );
+      if (consequence.penaltyPoints > 0) {
+        await createOrGetPointTransaction(`no-show-assignment:${assignment._id}`, {
+          userId: assignment.assigneeId,
+          points: -consequence.penaltyPoints,
+          type: 'NO_SHOW_PENALTY',
+          sourceId: assignment._id,
+          description: `Trừ ${consequence.penaltyPoints} điểm do vắng mặt lần thứ ${consequence.absenceNumber} ở công việc "${task.title}".`,
+        });
+      }
+    }
+
     assignment.status = 'ABSENT';
+    if (appliesNoShowPolicy) {
+      assignment.absenceNumber = consequence.absenceNumber;
+      assignment.absenceConsequence = consequence.action;
+      assignment.absencePenaltyPoints = consequence.penaltyPoints;
+    }
     assignment.completionNote = typeof reason === 'string' && reason.trim()
       ? `Vắng mặt: ${reason.trim()}`
       : 'Vắng mặt do quản lý xác nhận.';
@@ -935,9 +974,14 @@ async function markAssignmentAbsent(req, res, next) {
     await task.save();
 
     return res.status(200).json({
-      message: 'Đã ghi nhận vắng mặt; không trừ điểm đã tích lũy và đã mở lại chỉ tiêu tuyển người.',
+      message: consequence.action === 'WARNING'
+        ? 'Đã ghi nhận vắng mặt lần đầu và cảnh cáo người được phân công.'
+        : consequence.action === 'PENALTY'
+          ? `Đã ghi nhận vắng mặt lần thứ ${consequence.absenceNumber} và trừ ${consequence.penaltyPoints} điểm.`
+          : 'Đã ghi nhận vắng mặt.',
       assignment,
       task,
+      consequence,
     });
   } catch (error) {
     return next(error);

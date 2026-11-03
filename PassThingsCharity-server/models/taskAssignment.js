@@ -26,6 +26,19 @@ const taskAssignmentSchema = new mongoose.Schema(
       enum: ['ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'ABSENT', 'CANCELLED'],
       default: 'ASSIGNED',
     },
+    absenceNumber: {
+      type: Number,
+      min: 1,
+    },
+    absenceConsequence: {
+      type: String,
+      enum: ['WARNING', 'PENALTY'],
+    },
+    absencePenaltyPoints: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
     hoursSpent: {
       type: Number,
       default: 0,

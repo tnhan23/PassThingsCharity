@@ -354,6 +354,8 @@ Trước khi kêu gọi quyên góp hoặc tạo chiến dịch, Quản trị vi
 ```
 Mỗi phiếu được trạm tiếp nhận cộng **20 điểm cơ bản + tổng (số lượng × pointsPerUnit)**; điểm của từng dòng được làm tròn về số nguyên gần nhất. Loại chưa cấu hình mặc định 0 điểm/đơn vị; thay đổi chính sách chỉ áp dụng cho phiếu mới, không sửa lịch sử điểm.
 
+FE có thể lấy chính sách điểm và các mức điểm vật phẩm hiện hành qua `GET /gamification/points/policy` (public, không cần token).
+
 ##### 🔹 Bước 3: Xem danh sách vật phẩm trong hệ thống (`GET /catalog/items`)
 * **URL:** `GET http://localhost:8080/catalog/items` (Public không cần Token)
 
@@ -670,17 +672,22 @@ Sau khi job kết thúc, quản lý/Staff xác nhận vắng mặt trong Swagger
   "reason": "Không có mặt sau giờ kết thúc job"
 }
 ```
-Hệ thống ghi trạng thái `ABSENT`, không trừ điểm đã tích lũy (người chưa hoàn thành vốn chưa được thưởng) và tự mở lại tuyển nếu còn thiếu người. Chỉ quản lý xác nhận; không đánh dấu vắng mặt trước giờ kết thúc hoặc sau khi User đã check-in.
+Hệ thống ghi trạng thái `ABSENT` và tự mở lại tuyển nếu còn thiếu người. Lần vắng mặt đầu tiên được cảnh cáo; từ lần thứ hai trở đi, mỗi lần trừ tối đa **10 điểm**, không để số dư âm. Người vắng mặt chưa hoàn thành nên không nhận điểm thưởng của ca đó. Khoản trừ được ghi vào lịch sử điểm với loại `NO_SHOW_PENALTY`. Chỉ quản lý xác nhận; không đánh dấu vắng mặt trước giờ kết thúc hoặc sau khi User đã check-in.
 
 ---
 
 #### 5.8. Hệ Thống Gamification, Thành Tích & Cấp Chứng Chỉ Tình Nguyện
 Ghi nhận và tri ân đóng góp của cộng đồng qua điểm số, huy hiệu vinh danh và giấy chứng nhận điện tử.
 
-##### 🔹 Bước 1: Xem điểm tích lũy của bản thân (`GET /gamification/points/me`)
+##### 🔹 Bước 1: Xem chính sách tính điểm hiện tại (`GET /gamification/points/policy`)
+* **URL:** `GET http://localhost:8080/gamification/points/policy`
+* **Headers:** Không cần token.
+* **Kết quả:** Trả về điểm cơ bản quyên góp, điểm/đơn vị của các vật phẩm đang hoạt động, cách tính điểm job, quy định vắng mặt và các mốc chứng nhận. FE có thể gọi API này để hiển thị chính sách điểm.
+
+##### 🔹 Bước 2: Xem điểm tích lũy và lịch sử của bản thân (`GET /gamification/points/me`)
 * **URL:** `GET http://localhost:8080/gamification/points/me`
 * **Headers:** `Authorization: Bearer <USER_TOKEN>`
-* **Kết quả:** Trả về tổng điểm hiện có (`totalPoints`) và lịch sử biến động điểm từ thiện.
+* **Kết quả:** Trả về tổng điểm hiện có (`totalPoints`) và lịch sử giao dịch, bao gồm cả khoản trừ do vắng mặt (`NO_SHOW_PENALTY`).
 
 ##### 🔹 Bước 2: Thưởng điểm thưởng đặc biệt (`POST /gamification/points/award`)
 *(Dành cho Quản lý tổ chức / Trưởng trạm thưởng điểm cống hiến xuất sắc)*

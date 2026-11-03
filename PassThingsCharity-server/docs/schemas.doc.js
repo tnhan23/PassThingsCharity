@@ -208,7 +208,7 @@ module.exports = {
     properties: {
       userId: { type: 'string', example: '6ac7b15a501de8a3e18592ca' },
       points: { type: 'integer', minimum: 1, example: 50 },
-      type: { type: 'string', enum: ['DONATION', 'VOLUNTEER_TASK', 'BONUS', 'SYSTEM'], example: 'DONATION' },
+      type: { type: 'string', enum: ['DONATION', 'VOLUNTEER_TASK', 'BONUS', 'SYSTEM', 'NO_SHOW_PENALTY'], example: 'DONATION' },
       sourceId: { type: 'string', example: '6523456789abcdef00000601' },
       description: { type: 'string', example: 'Thưởng điểm quyên góp 10 KG quần áo' },
     },
