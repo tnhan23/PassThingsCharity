@@ -26,10 +26,21 @@ module.exports = {
   '/gamification/points/me': {
     get: {
       tags: ['Gamification'],
-      summary: 'Xem tổng điểm & Lịch sử cộng điểm của tôi',
-      description: 'Điểm được ghi nhận khi phiếu quyên góp được tiếp nhận hoặc User hoàn thành job; điểm job chỉ cấp một lần cho mỗi phân công.',
+      summary: 'Xem tổng điểm & lịch sử giao dịch điểm của tôi',
+      description: 'Lịch sử bao gồm điểm cộng và các khoản điều chỉnh/trừ điểm.',
       responses: {
         200: { description: 'Tổng điểm và lịch sử giao dịch' },
+      },
+    },
+  },
+  '/gamification/points/policy': {
+    get: {
+      tags: ['Gamification'],
+      summary: 'Xem chính sách tính điểm hiện tại để hiển thị trên FE',
+      description: 'Public API trả điểm cơ bản quyên góp, điểm/đơn vị đang cấu hình cho vật phẩm, cách tính điểm job, quy định vắng mặt và các mốc chứng nhận.',
+      security: [],
+      responses: {
+        200: { description: 'Chính sách điểm và điểm thưởng hiện cấu hình cho các vật phẩm đang hoạt động' },
       },
     },
   },
