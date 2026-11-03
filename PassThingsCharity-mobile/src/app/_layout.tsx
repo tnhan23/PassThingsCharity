@@ -3,8 +3,8 @@ import {
   BeVietnamPro_500Medium,
   BeVietnamPro_600SemiBold,
   BeVietnamPro_700Bold,
-  useFonts,
 } from "@expo-google-fonts/be-vietnam-pro";
+import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
@@ -21,6 +21,7 @@ export default function RootLayout() {
     BeVietnamPro_500Medium,
     BeVietnamPro_600SemiBold,
     BeVietnamPro_700Bold,
+    LibreBaskerville_Italic: require("../../assets/fonts/LibreBaskerville-Italic.ttf"),
   });
 
   useEffect(() => {
@@ -41,7 +42,11 @@ export default function RootLayout() {
               contentStyle: { backgroundColor: colors.surface },
             }}
           >
-            <Stack.Screen name="menu" options={{ presentation: "transparentModal", animation: "fade" }} />
+            <Stack.Screen name="index" options={{ animation: "none" }} />
+            <Stack.Screen name="campaign/index" options={{ animation: "none" }} />
+            <Stack.Screen name="stations/[mode]" options={{ animation: "none" }} />
+            <Stack.Screen name="profile/[mode]" options={{ animation: "none" }} />
+            <Stack.Screen name="login" options={{ animation: "none" }} />
           </Stack>
         </SessionProvider>
       </SafeAreaProvider>

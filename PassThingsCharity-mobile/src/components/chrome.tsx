@@ -1,9 +1,10 @@
-import { router, usePathname } from "expo-router";
-import { type ReactNode } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { router, usePathname, type Href } from "expo-router";
+import { type ReactNode, useEffect, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useSession } from "@/api/session";
-import { Icon, Tap } from "@/components/ui";
+import { isOperator, useSession } from "@/api/session";
+import { Button, Icon, Tap, Title } from "@/components/ui";
 import { colors, fonts } from "@/theme";
 
 export type TabKey = "home" | "give" | "stations" | "profile";
@@ -20,6 +21,7 @@ export function Screen({
   scroll?: boolean;
 }) {
   const insets = useSafeAreaInsets();
+  const [sheet, setSheet] = useState(false);
   return (
     <View style={styles.frame}>
       <View style={styles.root}>
@@ -31,16 +33,17 @@ export function Screen({
           contentContainerStyle={{
             paddingHorizontal: 16,
             paddingTop: 12,
-            paddingBottom: insets.bottom + 108,
+            paddingBottom: insets.bottom + 136,
             gap: 14,
           }}
         >
           {children}
         </ScrollView>
       ) : (
-        <View style={{ flex: 1, paddingBottom: insets.bottom + 88 }}>{children}</View>
+        <View style={{ flex: 1, paddingBottom: insets.bottom + 88, overflow: "hidden" }}>{children}</View>
       )}
-      <TabBar active={tab} />
+      <TabBar active={tab} sheet={sheet} onCreate={() => setSheet((open) => !open)} />
+      <CreateSheet open={sheet} onClose={() => setSheet(false)} />
       </View>
     </View>
   );
@@ -61,10 +64,8 @@ function Header() {
           </Tap>
         ) : (
           <View style={styles.brand}>
-            <Text style={styles.logo}>PASS ĐỒ</Text>
-            <View style={styles.year}>
-              <Text style={styles.yearText}>2025</Text>
-            </View>
+            <Text style={styles.logo}>Pass Things</Text>
+            <Text style={styles.logoSub}>Charity</Text>
           </View>
         )}
         <Tap onPress={() => router.push("/stations/list")} style={styles.location}>
@@ -90,7 +91,7 @@ function Header() {
   );
 }
 
-function TabBar({ active }: { active: TabKey }) {
+function TabBar({ active, sheet, onCreate }: { active: TabKey; sheet: boolean; onCreate: () => void }) {
   const insets = useSafeAreaInsets();
   const { user } = useSession();
   return (
@@ -101,9 +102,9 @@ function TabBar({ active }: { active: TabKey }) {
       <TabItem label="Trạm gom" icon="warehouse" active={active === "stations"} href="/stations/list" />
       <TabItem label="Hồ sơ" icon="account-circle" active={active === "profile"} href={user ? "/profile/full" : "/login"} />
       <Tap
-        onPress={() => router.push("/menu")}
+        onPress={onCreate}
         style={styles.plus}
-        accessibilityLabel="Tạo mới"
+        accessibilityLabel={sheet ? "Đóng" : "Tạo mới"}
       >
         <Icon name="add" size={28} color={colors.onPrimary} />
       </Tap>
@@ -122,11 +123,71 @@ function TabItem({
   active: boolean;
   href: "/" | "/campaign" | "/stations/list" | "/profile/full" | "/login";
 }) {
+  const path = usePathname();
   return (
-    <Tap onPress={() => router.push(href)} style={styles.tab} accessibilityLabel={label}>
+    <Tap
+      onPress={() => {
+        if (path === href) return;
+        router.navigate(href);
+      }}
+      style={styles.tab}
+      accessibilityLabel={label}
+    >
       <Icon name={icon} size={22} color={active ? colors.primary : colors.outline} />
       <Text style={[styles.tabLabel, { color: active ? colors.primary : colors.outline }]}>{label}</Text>
     </Tap>
+  );
+}
+
+const actions: { label: string; href: Href; tone?: "ghost"; roles?: string[] }[] = [
+  { label: "Mang đồ tới trạm", href: "/stations/map" },
+  { label: "Đăng ký tình nguyện", href: "/volunteer/form", tone: "ghost" },
+  { label: "Ca trực", href: "/shifts", tone: "ghost", roles: ["STATION_MANAGER", "ORG_MANAGER", "STAFF"] },
+  { label: "Vận hành", href: "/desk", tone: "ghost" },
+  { label: "Xin nhận hỗ trợ", href: "/receive/form", tone: "ghost" },
+  { label: "Quét mã QR", href: "/qr/scan", tone: "ghost" },
+];
+
+function CreateSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { user } = useSession();
+  const visible = actions.filter((action) => {
+    if (action.href === "/desk") return isOperator(user?.role);
+    if (action.roles) return Boolean(user?.role && action.roles.includes(user.role));
+    return true;
+  });
+  const insets = useSafeAreaInsets();
+  const progress = useSharedValue(0);
+  const [mounted, setMounted] = useState(open);
+  useEffect(() => {
+    if (open) setMounted(true);
+    progress.value = withTiming(open ? 1 : 0, { duration: open ? 280 : 220, easing: Easing.out(Easing.cubic) }, (finished) => {
+      if (finished && !open) runOnJS(setMounted)(false);
+    });
+  }, [open, progress]);
+  const backdrop = useAnimatedStyle(() => ({ opacity: progress.value }));
+  const panel = useAnimatedStyle(() => ({ transform: [{ translateY: (1 - progress.value) * 520 }] }));
+  if (!mounted) return null;
+  return (
+    <View style={styles.sheetRoot}>
+      <Animated.View style={[styles.backdrop, backdrop]}>
+        <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityLabel="Đóng" />
+      </Animated.View>
+      <Animated.View style={[styles.sheet, { paddingBottom: insets.bottom + 20 }, panel]}>
+        <Title>Bạn muốn làm gì?</Title>
+        {visible.map((action) => (
+          <Button
+            key={action.href.toString()}
+            label={action.label}
+            tone={action.tone}
+            onPress={() => {
+              onClose();
+              router.push(action.href);
+            }}
+          />
+        ))}
+        <Button label="Đóng" tone="ghost" onPress={onClose} />
+      </Animated.View>
+    </View>
   );
 }
 
@@ -145,15 +206,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     gap: 4,
   },
-  brand: { flexDirection: "row", alignItems: "center", gap: 6 },
-  logo: { fontFamily: fonts.bold, fontSize: 16, letterSpacing: 0.4, color: colors.primary },
-  year: {
-    backgroundColor: colors.coralSoft,
-    borderRadius: 999,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  yearText: { fontFamily: fonts.semibold, fontSize: 11, color: colors.onSecondaryContainer },
+  brand: { justifyContent: "center" },
+  logo: { fontFamily: fonts.italic, fontSize: 15, lineHeight: 17, color: colors.primary },
+  logoSub: { fontFamily: fonts.italic, fontSize: 12, lineHeight: 14, color: colors.primary },
   location: { flexDirection: "row", alignItems: "center", gap: 2, maxWidth: 108, marginLeft: 4 },
   locationText: { fontFamily: fonts.medium, fontSize: 12, color: colors.muted, flexShrink: 1 },
   trust: {
@@ -194,5 +249,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     boxShadow: "0 6px 16px rgba(7, 36, 26, 0.28)",
+  },
+  sheetRoot: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, zIndex: 20, justifyContent: "flex-end" },
+  backdrop: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, backgroundColor: "rgba(7, 36, 26, 0.45)" },
+  sheet: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    gap: 10,
   },
 });

@@ -1,6 +1,7 @@
 import { router } from "expo-router";
 import { Text } from "react-native";
 import { Screen } from "@/components/chrome";
+import { ServerRelief, ServerTransfers } from "@/components/server-flow";
 import { Body, Button, Card, Eyebrow, LineItem, Title } from "@/components/ui";
 import { colors, fonts } from "@/theme";
 
@@ -13,7 +14,7 @@ export function TransferScreen({
     return (
       <Screen tab="stations">
         <Title>Chưa có lệnh chuyển</Title>
-        <Body>Tồn đang giữ vẫn ở từng trạm. Số đã nhận của chiến dịch không đổi vì chưa có hàng rời kho.</Body>
+        <Body>Máy chủ không có kho theo trạm. Một lệnh chuyển không đổi số đã ghi nhận của chiến dịch.</Body>
         <Button label="Tạo lệnh" onPress={() => router.push("/transfer/create")} />
       </Screen>
     );
@@ -41,7 +42,7 @@ export function TransferScreen({
       <Screen tab="stations">
         <Eyebrow>#TF-2025-042 · đang soạn</Eyebrow>
         <Title>Hàng chưa rời Đa Kao</Title>
-        <Body>60 kg áo ấm và 25 thùng mì đã giữ chỗ. Cột đã nhận không đổi. Cột đang giữ cũng chưa đổi cho đến khi xe rời trạm.</Body>
+        <Body>Số trên màn này là bản vẽ. Trên máy chủ, đổi trạng thái lệnh không trừ currentQuantity.</Body>
         <Button label="Xuất kho" onPress={() => router.push("/transfer/transit")} />
         <Button label="Hủy lệnh" tone="ghost" onPress={() => router.push("/transfer/cancelled")} />
       </Screen>
@@ -93,7 +94,7 @@ export function TransferScreen({
         <LineItem title="Mì gói" detail="Xuất 25 thùng · nhận 25 thùng" amount="Khớp" ok />
         <Card>
           <Text style={{ fontFamily: fonts.semibold, color: colors.primary }}>Đã nhận chiến dịch: không tăng</Text>
-          <Body muted>Đa Kao đang giữ giảm 60 kg. Phú Mỹ Hưng đang giữ tăng 60 kg.</Body>
+          <Body muted>Máy chủ cũng không chuyển số từ trạm này sang trạm kia. Hai trạm không có cột tồn riêng.</Body>
         </Card>
         <Button label="Tạo lệnh khác" tone="ghost" onPress={() => router.push("/transfer/create")} />
       </Screen>
@@ -101,9 +102,10 @@ export function TransferScreen({
   }
   return (
     <Screen tab="stations">
+      <ServerTransfers />
       <Eyebrow>Điều phối trong chiến dịch Hà Giang</Eyebrow>
-      <Title>Cân tồn giữa các trạm</Title>
-      <Body>Chỉ chuyển phần đang giữ. Không cộng vào số đã nhận.</Body>
+      <Title>Lệnh chuyển giữa các trạm</Title>
+      <Body>Bản vẽ bên dưới không phải tồn kho. Máy chủ chỉ lưu trạng thái lệnh.</Body>
       <Card>
         <Eyebrow>Trạm Đa Kao · dư</Eyebrow>
         <Body>Áo ấm khả dụng xuất: 120 kg. Mì gói: 45 thùng.</Body>
@@ -130,7 +132,7 @@ export function DistributionScreen({
     return (
       <Screen tab="stations">
         <Title>Chưa có đợt giao</Title>
-        <Body>Cửa sổ nhận vẫn mở. Cột đã giao đang là 0 vì chưa có biên bản nào được ký.</Body>
+        <Body>Máy chủ chưa có đợt nào thì phép tính đã giao là 0. Chiến dịch không tự đóng.</Body>
         <Button label="Xem các đợt mẫu" onPress={() => router.push("/distribution/lots")} />
       </Screen>
     );
@@ -157,8 +159,9 @@ export function DistributionScreen({
     return (
       <Screen tab="stations">
         <Eyebrow>Áo ấm Hà Giang · còn mở</Eyebrow>
-        <Title>Ba đợt phân phối</Title>
-        <Body>Cột đã giao chỉ tăng khi một đợt được ký. Chiến dịch chưa hoàn tất.</Body>
+        <ServerRelief />
+        <Title>Các đợt phân phối</Title>
+        <Body>Số đợt bên dưới là bản vẽ. Trên máy chủ, closeCampaign mới đóng cả chiến dịch.</Body>
         <Card>
           <Eyebrow>Đã ký</Eyebrow>
           <Text style={{ fontFamily: fonts.semibold, fontSize: 16 }}>Đợt Đồng Văn · 100 kg</Text>
@@ -201,7 +204,7 @@ export function DistributionScreen({
         <Title>Đợt này đã bàn giao</Title>
         <Body>755 kg áo ấm và chăn, 150 thùng lương thực, 320 hộ. Ông Sùng A Tủa đã ký, không cần tài khoản.</Body>
         <Card>
-          <Body muted>Chiến dịch vẫn mở cho đến khi hết cửa sổ nhận đồ và các đợt còn lại được giao. Một biên bản không tự đóng cả chiến dịch.</Body>
+          <Body muted>Ký trên màn này không gọi máy chủ. Máy chủ chỉ đóng chiến dịch khi phiếu giao có closeCampaign.</Body>
         </Card>
         <Button label="Báo cáo công khai" onPress={() => router.push("/report/content")} />
       </Screen>

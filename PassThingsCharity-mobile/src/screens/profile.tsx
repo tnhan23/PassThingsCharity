@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import { backend } from "@/api/backend";
 import { ApiError } from "@/api/client";
-import { useSession } from "@/api/session";
+import { isOperator, useSession } from "@/api/session";
 import { Screen } from "@/components/chrome";
 import { Body, Button, Card, Eyebrow, Photo, Title } from "@/components/ui";
 import { colors, fonts, photos } from "@/theme";
@@ -130,15 +130,17 @@ function AccountCard() {
   return (
     <Card>
       <Eyebrow>Tài khoản máy chủ</Eyebrow>
+      {user.avatarUrl ? <Photo uri={user.avatarUrl} height={96} width={96} radius={48} /> : <Body muted>Chưa có ảnh tài khoản.</Body>}
       <Title>{user.username}</Title>
       <Body muted>{user.phone}</Body>
       <Text style={{ fontFamily: fonts.bold, fontSize: 28, color: colors.primary }}>
         {points === null ? "…" : `${points} điểm`}
       </Text>
+      <Body muted>Điểm quyên góp là 20 mỗi phiếu cộng thêm tối đa 50 mỗi dòng. Điểm tình nguyện cộng lúc check-out.</Body>
       {problem ? <Body>{problem}</Body> : null}
       {lines ? <Body muted>{lines}</Body> : null}
       <Button label="Sửa tài khoản" tone="ghost" onPress={() => router.push("/account")} />
-      <Button label="Vận hành máy chủ" tone="ghost" onPress={() => router.push("/desk")} />
+      {isOperator(user.role) ? <Button label="Vận hành" tone="ghost" onPress={() => router.push("/desk")} /> : null}
       <Button
         label="Đăng xuất"
         tone="ghost"

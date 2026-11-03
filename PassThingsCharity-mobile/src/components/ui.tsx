@@ -1,11 +1,16 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
-import { type ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { colors, fonts } from "@/theme";
 
 type IconName = keyof typeof MaterialIcons.glyphMap;
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+const pressIn = { duration: 120, easing: Easing.out(Easing.quad) };
+const pressOut = { duration: 160, easing: Easing.out(Easing.quad) };
 
 export function tap() {
   if (process.env.EXPO_OS === "ios") {
@@ -26,19 +31,30 @@ export function Tap({
   disabled?: boolean;
   accessibilityLabel?: string;
 }) {
+  const depth = useSharedValue(0);
+  const motion = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 - depth.value * 0.02 }],
+    opacity: disabled ? 0.45 : 1 - depth.value * 0.08,
+  }));
   return (
-    <Pressable
+    <AnimatedPressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       disabled={disabled}
+      onPressIn={() => {
+        if (!disabled) depth.value = withTiming(1, pressIn);
+      }}
+      onPressOut={() => {
+        depth.value = withTiming(0, pressOut);
+      }}
       onPress={() => {
         if (!disabled) tap();
         onPress?.();
       }}
-      style={({ pressed }) => [style, pressed && !disabled ? styles.pressed : null, disabled ? styles.disabled : null]}
+      style={[style, motion]}
     >
       {children}
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 
@@ -102,11 +118,13 @@ export function Button({
   onPress,
   tone = "primary",
   icon,
+  disabled,
 }: {
   label: string;
   onPress?: () => void;
   tone?: "primary" | "coral" | "ghost" | "danger";
   icon?: IconName;
+  disabled?: boolean;
 }) {
   const palette = {
     primary: { bg: colors.primary, fg: colors.onPrimary, border: colors.primary },
@@ -116,6 +134,7 @@ export function Button({
   }[tone];
   return (
     <Tap
+      disabled={disabled}
       onPress={onPress}
       style={[styles.button, { backgroundColor: palette.bg, borderColor: palette.border }]}
     >
@@ -152,7 +171,12 @@ export function Meter({
   label: string;
   unit: string;
 }) {
-  const ratio = Math.max(0, Math.min(1, value / max));
+  const ratio = Math.max(0, Math.min(1, max > 0 ? value / max : 0));
+  const width = useSharedValue(ratio);
+  useEffect(() => {
+    width.value = withTiming(ratio, { duration: 240, easing: Easing.out(Easing.cubic) });
+  }, [ratio, width]);
+  const fill = useAnimatedStyle(() => ({ width: `${width.value * 100}%` }));
   return (
     <View style={{ gap: 6 }}>
       <View style={styles.meterRow}>
@@ -163,7 +187,7 @@ export function Meter({
         <Text style={styles.meterPct}>{Math.round(ratio * 100)}%</Text>
       </View>
       <View style={styles.track}>
-        <View style={[styles.fill, { width: `${ratio * 100}%` }]} />
+        <Animated.View style={[styles.fill, fill]} />
       </View>
       <Text style={styles.meterLabel}>{label}</Text>
     </View>
@@ -194,8 +218,6 @@ export function LineItem({
 }
 
 const styles = StyleSheet.create({
-  pressed: { transform: [{ scale: 0.98 }], opacity: 0.9 },
-  disabled: { opacity: 0.45 },
   pill: {
     flexDirection: "row",
     alignItems: "center",

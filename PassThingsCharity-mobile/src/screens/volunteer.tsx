@@ -1,6 +1,7 @@
 import { router } from "expo-router";
 import { Text, TextInput, View } from "react-native";
 import { Screen } from "@/components/chrome";
+import { ServerTasks } from "@/components/server-flow";
 import { Body, Button, Card, Eyebrow, Title } from "@/components/ui";
 import { colors, fonts } from "@/theme";
 
@@ -84,7 +85,7 @@ export function VolunteerScreen({
       <Screen tab="profile">
         <Eyebrow>Đã giao việc · chưa vào ca</Eyebrow>
         <Title>Đóng thùng lúc 18:00</Title>
-        <Body>Trạm Đa Kao. Điểm chỉ cộng sau khi quản lý chốt ca.</Body>
+        <Body>Trạm Đa Kao. Điểm cộng khi bấm check-out trên việc đã được giao, không cộng lúc nhận việc.</Body>
         <Button label="Xem mã check-in" onPress={() => router.push("/qr/scan")} />
       </Screen>
     );
@@ -93,8 +94,8 @@ export function VolunteerScreen({
     return (
       <Screen tab="profile">
         <Eyebrow>Ca đã chốt</Eyebrow>
-        <Title>+40 điểm tình nguyện</Title>
-        <Body>4 giờ phân loại áo ấm tại Đa Kao. Giờ được cộng lúc chốt, không phải lúc nhận ca.</Body>
+        <Title>Điểm tình nguyện là bản vẽ</Title>
+        <Body>Máy chủ cộng điểm lúc check-out. Nếu việc có rewardPoints thì cộng đúng số đó. Không thì tối thiểu 25 điểm.</Body>
         <Button label="Về bảng ca" onPress={() => router.push("/volunteer/tasks")} />
       </Screen>
     );
@@ -137,7 +138,7 @@ export function VolunteerScreen({
       <Screen tab="profile">
         <Eyebrow>Đang trong ca · Trạm Đa Kao</Eyebrow>
         <Title>Phân loại áo ấm</Title>
-        <Body>Check-in lúc 13:28. Ca 13:30–17:00. Điểm cộng khi quản lý chốt ca, không cộng lúc nhận ca.</Body>
+        <Body>Check-in trên máy chủ không cần mã QR. Điểm cộng lúc check-out.</Body>
         <Button label="Check-in QR" onPress={() => router.push("/qr/scan")} />
         <Button label="Xin hủy ca" tone="ghost" onPress={() => router.push("/shift/confirm")} />
       </Screen>
@@ -162,6 +163,7 @@ export function VolunteerScreen({
   }
   return (
     <Screen tab="profile">
+      <ServerTasks />
       <Eyebrow>Trần Minh Đức · TNV</Eyebrow>
       <Title>Ca hôm nay</Title>
       <Card>
@@ -237,7 +239,7 @@ export function ShiftScreen({
     return (
       <Screen tab="profile">
         <Title>Hủy ca chiều nay?</Title>
-        <Body>Ca phân loại 13:30 tại Đa Kao. Hủy sát giờ làm trạm thiếu người. Điểm giờ của ca này sẽ không được cộng.</Body>
+        <Body>Máy chủ không có route hủy ca. Bấm xác nhận ở đây không trừ điểm và không gỡ phân công.</Body>
         <Button label="Giữ ca" onPress={() => router.back()} />
         <Button label="Chọn lý do hủy" tone="ghost" onPress={() => router.push("/shift/reason")} />
       </Screen>

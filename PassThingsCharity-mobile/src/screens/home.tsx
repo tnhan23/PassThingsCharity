@@ -1,11 +1,13 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, ScrollView, Text, TextInput, View } from "react-native";
+import * as Location from "expo-location";
 import { backend } from "@/api/backend";
 import { ApiError } from "@/api/client";
 import { formatDay, itemName, itemUnit, orgName, statusLabel } from "@/api/labels";
 import type { CampaignDetail, CampaignSummary } from "@/api/types";
 import { Screen } from "@/components/chrome";
+import { ReliefNumbers } from "@/components/server-flow";
 import { Body, Button, Card, Eyebrow, Icon, Meter, Photo, Pill, Tap, Title } from "@/components/ui";
 import { colors, fonts, photos } from "@/theme";
 
@@ -117,7 +119,6 @@ export function HomeScreen({ state = "content" }: { state?: "content" | "loading
       </View>
       <Body muted>Mọi kiện được kiểm định tại trạm trước khi ghi nhận và trao đi.</Body>
       <FeaturedCampaigns />
-      <Button label="Chưa có chiến dịch đang mở" tone="ghost" onPress={() => router.push("/home/none")} />
     </Screen>
   );
 }
@@ -266,11 +267,6 @@ export function CampaignScreen({ mode = "content" }: { mode?: "content" | "loadi
     <Screen tab="give">
       <CampaignLive />
       <Button label="Tôi sẽ mang đồ tới trạm" onPress={() => router.push("/stations/map")} />
-      <Button label="Sổ đã nhận, đang giữ, đã giao" tone="ghost" onPress={() => router.push("/ledger/content")} />
-      <Button label="Trạng thái chiến dịch" tone="ghost" onPress={() => router.push("/board/active")} />
-      <Button label="Xem kiểm định tại quầy" tone="ghost" onPress={() => router.push("/intake/review")} />
-      <Button label="Chiến dịch chưa tải được" tone="ghost" onPress={() => router.push("/campaign/error")} />
-      <Button label="Chiến dịch chưa mở nhận" tone="ghost" onPress={() => router.push("/campaign/empty")} />
     </Screen>
   );
 }
@@ -361,7 +357,13 @@ function CampaignLive() {
         }
         const next = await backend.getCampaign(id);
         try {
-          const stationList = await backend.campaignStations(id);
+          let coords: { userLat: string; userLng: string } | undefined;
+          const permission = await Location.requestForegroundPermissionsAsync();
+          if (permission.granted) {
+            const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+            coords = { userLat: String(position.coords.latitude), userLng: String(position.coords.longitude) };
+          }
+          const stationList = await backend.campaignStations(id, coords);
           next.stations = stationList.stations;
         } catch {
           // Chi tiết chiến dịch đã kèm trạm. Route riêng lỗi thì vẫn hiện chi tiết.
@@ -427,11 +429,16 @@ function CampaignLive() {
         {stations.filter((station) => station && station.name).length === 0 ? <Body>Chưa gán trạm.</Body> : null}
         {stations.map((station, index) =>
           station?.name ? (
-            <Body key={station._id ?? `${station.name}-${index}`}>{`${station.name}. ${station.address ?? ""}`}</Body>
+            <Body key={station._id ?? `${station.name}-${index}`}>
+              {typeof station.distanceKm === "number"
+                ? `${station.name}. ${station.address ?? ""} Cách ${station.distanceKm.toFixed(1)} km.`
+                : `${station.name}. ${station.address ?? ""} Chưa có khoảng cách vì chưa có vị trí.`}
+            </Body>
           ) : null,
         )}
         <Button label="Xem danh sách trạm" tone="ghost" onPress={() => router.push("/stations/list")} />
       </Card>
+      <ReliefNumbers campaignId={campaign._id} />
     </View>
   );
 }

@@ -1,6 +1,7 @@
 import { router } from "expo-router";
 import { ActivityIndicator, Text, View } from "react-native";
 import { Screen } from "@/components/chrome";
+import { ServerReceipts } from "@/components/server-flow";
 import { Body, Button, Card, Eyebrow, LineItem, Meter, Photo, Title } from "@/components/ui";
 import { colors, fonts, photos } from "@/theme";
 
@@ -33,9 +34,9 @@ export function IntakeScreen({
   if (state === "guest") {
     return (
       <Screen tab="stations">
-        <Eyebrow>Khách tại quầy · không có tài khoản</Eyebrow>
-        <Title>Đã nhận 6,0 kg</Title>
-        <Body>Người mang đồ không để số điện thoại. Dòng này vào sổ chiến dịch. Cột điểm để trống.</Body>
+        <Eyebrow>Bản vẽ, máy chủ không nhận khách vãng lai</Eyebrow>
+        <Title>Phiếu này không ghi được</Title>
+        <Body>Máy chủ bắt buộc userId. Không có tài khoản thì không tạo phiếu và không để điểm trống để cộng sau.</Body>
         <LineItem title="Áo khoác trẻ em" detail="Sạch, khô, đúng mùa" amount="6,0 kg" ok />
         <Card>
           <Body muted>Nếu sau này họ đăng nhập cùng số điện thoại, điểm của lần này vẫn không tự cộng vì lúc ký không có tài khoản.</Body>
@@ -63,8 +64,8 @@ export function IntakeScreen({
         <Body>1,5 kg loại không cộng vào chiến dịch và không cộng điểm.</Body>
         <Meter value={348.5} max={500} unit="kg áo ấm" label="Đã nhận của chiến dịch Hà Giang. Điều phối sau này không cộng thêm vào số này." />
         <Card>
-          <Text style={{ fontFamily: fonts.bold, fontSize: 16, color: colors.primary }}>+85 điểm đóng góp</Text>
-          <Body muted>Chỉ tính trên 8,5 kg đã nhận. Tài khoản Lê Mai Anh.</Body>
+        <Text style={{ fontFamily: fonts.bold, fontSize: 16, color: colors.primary }}>+85 điểm là số minh họa</Text>
+        <Body muted>Máy chủ cộng 20 điểm cho cả phiếu, rồi mỗi dòng thêm tối đa 50. Không phải 10 điểm mỗi kg.</Body>
         </Card>
         <Button label="Xem biên lai" onPress={() => router.push("/receipt/done")} />
         <Button label="Về quầy" tone="ghost" onPress={() => router.push("/intake/review")} />
@@ -91,6 +92,7 @@ export function IntakeScreen({
   }
   return (
     <Screen tab="stations">
+      <ServerReceipts />
       <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
         <Body muted>Trạm Đa Kao · Ca sáng</Body>
         <Text style={{ fontFamily: fonts.semibold, color: colors.secondary }}>03 kiện trên bàn</Text>
@@ -102,7 +104,7 @@ export function IntakeScreen({
       </Card>
       <Card>
         <Text style={{ fontFamily: fonts.semibold, fontSize: 16 }}>Người trao: Lê Mai Anh</Text>
-        <Body muted>Có tài khoản. Khách không tài khoản vẫn ghi nhận được, điểm để trống.</Body>
+        <Body muted>Máy chủ chỉ ghi phiếu khi người trao đã có tài khoản.</Body>
       </Card>
       <Photo uri={photos.coats} height={180} radius={16} />
       <Card>
