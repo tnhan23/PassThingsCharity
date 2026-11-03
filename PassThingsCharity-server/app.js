@@ -4,13 +4,11 @@ const passport = require('passport');
 require('./config/passport');
 
 const usersRouter = require('./routes/users');
-const adminRouter=require('./routes/authAdmin')
 const authRouter = require('./routes/auth');
 const organizationsRouter = require('./routes/organization');
 const stationsRouter = require('./routes/station');
 const adminApprovalRouter = require('./routes/adminApproval');
 const stationManagerRouter = require('./routes/stationManager');
-
 // BE2 Routers (Catalog, Campaign & Gamification)
 const itemCatalogRouter = require('./routes/itemCatalog');
 const campaignRouter = require('./routes/campaign');
@@ -21,7 +19,7 @@ const contributionsRouter = require('./routes/contribution');
 const transfersRouter = require('./routes/campaignTransfer');
 const reliefRouter = require('./routes/reliefDistribution');
 const workforceRouter = require('./routes/workforce');
-
+const shiftRouter = require('./routes/shift');
 const swaggerUi = require('swagger-ui-express');
 const createSwaggerDocument = require('./config/swagger');
 const app = express();
@@ -42,13 +40,13 @@ app.get('/', (req, res) => {
 });
 
 // Existing Route Middlewares
-app.use('/authadmin',adminRouter)
 app.use('/auth', authRouter);
 app.use('/users', usersRouter);
 app.use('/uploads', require('./routes/upload'));
 app.use('/stationmanager', stationManagerRouter);
 app.use('/organizations', organizationsRouter);
 app.use('/stations', stationsRouter);
+app.use('/shiftstations', shiftRouter);
 app.use('/admin', adminApprovalRouter);
 
 // BE2 Route Middlewares
