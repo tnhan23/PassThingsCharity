@@ -1,3 +1,5 @@
+import { Platform } from "react-native";
+
 export const colors = {
   primary: "#07241a",
   onPrimary: "#ffffff",
@@ -28,6 +30,7 @@ export const fonts = {
   medium: "BeVietnamPro_500Medium",
   semibold: "BeVietnamPro_600SemiBold",
   bold: "BeVietnamPro_700Bold",
+  italic: Platform.OS === "ios" ? "Baskerville-Italic" : "LibreBaskerville_Italic",
 };
 
 export const space = {
