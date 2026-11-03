@@ -6,6 +6,7 @@ const User = require('../models/user');
 const bcrypt = require('bcryptjs');
 const Role = require('../models/role');
 const { getOrganizationAccess, getStationAccess } = require('../utils/resourceAccess');
+const { getHaversineDistanceKm } = require('../utils/geoDistance');
 
 function validateStation(body) {
   if (
@@ -38,9 +39,10 @@ async function listStations(req, res, next) {
   try {
     let organizationFilter = {};
 
-    if (req.user.role.name === 'STATION_MANAGER') {
+    const roleName = req.user?.role?.name;
+    if (roleName === 'STATION_MANAGER') {
       organizationFilter.submittedBy = req.user._id;
-    } else if (req.user.role.name !== 'ADMIN') {
+    } else if (roleName !== 'ADMIN') {
       organizationFilter.isVerified = true;
     }
 
@@ -54,14 +56,163 @@ async function listStations(req, res, next) {
       organizationId: { $in: organizationIds },
     };
 
-    if (req.user.role.name !== 'ADMIN' &&
-      req.user.role.name !== 'STATION_MANAGER') {
+    if (roleName !== 'ADMIN' && roleName !== 'STATION_MANAGER') {
       stationFilter.isActive = true;
     }
 
     const stations = await Station.find(stationFilter).sort({ createdAt: -1 });
 
+    const lat = req.query.latitude || req.query.lat || req.query.userLat;
+    const lng = req.query.longitude || req.query.lng || req.query.userLng;
+    const userLat = parseFloat(lat);
+    const userLng = parseFloat(lng);
+    const hasCoordinates = !isNaN(userLat) && !isNaN(userLng);
+
+    if (hasCoordinates && req.user) {
+      const sortedData = stations.map((st) => {
+        const stObj = st.toObject();
+        if (stObj.latitude && stObj.longitude) {
+          const stLat = parseFloat(stObj.latitude);
+          const stLng = parseFloat(stObj.longitude);
+          if (!isNaN(stLat) && !isNaN(stLng)) {
+            stObj.distanceKm = getHaversineDistanceKm(userLat, userLng, stLat, stLng);
+            if (stObj.distanceKm !== null) {
+              stObj.distanceMeters = Math.round(stObj.distanceKm * 1000);
+              stObj.formattedDistance = stObj.distanceKm >= 1 ? `${stObj.distanceKm} km` : `${stObj.distanceMeters} m`;
+            }
+          }
+        }
+        return stObj;
+      });
+
+      sortedData.sort((a, b) => {
+        if (a.distanceKm !== undefined && b.distanceKm !== undefined) {
+          return a.distanceKm - b.distanceKm;
+        }
+        if (a.distanceKm !== undefined) return -1;
+        if (b.distanceKm !== undefined) return 1;
+        return 0;
+      });
+
+      return res.status(200).json({ total: sortedData.length, data: sortedData });
+    }
+
     return res.status(200).json({ total: stations.length, data: stations });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+/**
+ * Public / Authenticated Endpoint: Đề xuất trạm tiếp nhận gần nhất theo vị trí GPS.
+ * - Chưa đăng nhập (Guest): Trả về danh sách trạm với thông tin địa chỉ, ẨN chi tiết khoảng cách (distanceKm).
+ * - Đã đăng nhập (Logged in): Tính toán khoảng cách (distanceKm, distanceMeters), sắp xếp trạm gần nhất đẩy lên đầu.
+ */
+async function getNearbyStations(req, res, next) {
+  try {
+    const lat = req.query.latitude || req.query.lat || req.query.userLat;
+    const lng = req.query.longitude || req.query.lng || req.query.userLng;
+    const radiusStr = req.query.radius;
+    const limitStr = req.query.limit;
+
+    // Fetch verified organizations
+    const organizations = await Organization.find({ isVerified: true }, { _id: 1, name: 1, code: 1 });
+    const organizationIds = organizations.map((org) => org._id);
+
+    const stationFilter = {
+      organizationId: { $in: organizationIds },
+      isActive: true,
+    };
+
+    const stations = await Station.find(stationFilter)
+      .populate('organizationId', 'name code description phone email')
+      .populate('managerId', 'fullName phone email')
+      .lean();
+
+    const isLoggedIn = !!(req.user && req.user._id);
+
+    // TH 1: NẾU CHƯA ĐĂNG NHẬP (Unauthenticated / Guest)
+    // Chỉ xem được thông tin trạm và địa chỉ, KHÔNG xem được chi tiết khoảng cách
+    if (!isLoggedIn) {
+      const sanitizedData = stations.map((st) => {
+        const { distanceKm, distanceMeters, formattedDistance, ...rest } = st;
+        return rest;
+      });
+
+      return res.status(200).json({
+        isLoggedIn: false,
+        total: sanitizedData.length,
+        message: 'Bạn chưa đăng nhập. Vui lòng đăng nhập để xem chi tiết khoảng cách và đề xuất trạm gần nhất theo vị trí của bạn.',
+        data: sanitizedData,
+      });
+    }
+
+    // TH 2: NẾU ĐÃ ĐĂNG NHẬP (Authenticated)
+    // Tính khoảng cách GPS và sắp xếp trạm gần nhất đẩy lên đầu (trạm gần nhất -> trạm gần nhì)
+    const userLat = parseFloat(lat);
+    const userLng = parseFloat(lng);
+    const hasCoordinates = !isNaN(userLat) && !isNaN(userLng);
+
+    let resultList = stations.map((st) => {
+      let distanceKm = null;
+      let distanceMeters = null;
+      let formattedDistance = null;
+
+      if (hasCoordinates && st.latitude !== undefined && st.longitude !== undefined) {
+        const stLat = parseFloat(st.latitude);
+        const stLng = parseFloat(st.longitude);
+        if (!isNaN(stLat) && !isNaN(stLng)) {
+          distanceKm = getHaversineDistanceKm(userLat, userLng, stLat, stLng);
+          if (distanceKm !== null) {
+            distanceMeters = Math.round(distanceKm * 1000);
+            formattedDistance = distanceKm >= 1 ? `${distanceKm} km` : `${distanceMeters} m`;
+          }
+        }
+      }
+
+      return {
+        ...st,
+        distanceKm,
+        distanceMeters,
+        formattedDistance,
+      };
+    });
+
+    if (hasCoordinates) {
+      // Sắp xếp trạm nào gần nhất thì đẩy lên đầu
+      resultList.sort((a, b) => {
+        if (a.distanceKm !== null && b.distanceKm !== null) {
+          return a.distanceKm - b.distanceKm;
+        }
+        if (a.distanceKm !== null) return -1;
+        if (b.distanceKm !== null) return 1;
+        return 0;
+      });
+    }
+
+    if (radiusStr) {
+      const radiusNum = parseFloat(radiusStr);
+      if (!isNaN(radiusNum) && radiusNum > 0 && hasCoordinates) {
+        resultList = resultList.filter((st) => st.distanceKm !== null && st.distanceKm <= radiusNum);
+      }
+    }
+
+    if (limitStr) {
+      const limitNum = parseInt(limitStr, 10);
+      if (!isNaN(limitNum) && limitNum > 0) {
+        resultList = resultList.slice(0, limitNum);
+      }
+    }
+
+    return res.status(200).json({
+      isLoggedIn: true,
+      total: resultList.length,
+      userCoordinates: hasCoordinates ? { latitude: userLat, longitude: userLng } : null,
+      message: hasCoordinates
+        ? 'Danh sách trạm tiếp nhận đã được sắp xếp theo khoảng cách gần nhất.'
+        : 'Đã đăng nhập. Vui lòng truyền tham số latitude và longitude để tính toán và sắp xếp khoảng cách chi tiết.',
+      data: resultList,
+    });
   } catch (error) {
     return next(error);
   }
@@ -449,6 +600,7 @@ async function removeStationManager(req, res, next) {
 module.exports = {
   listStations,
   getStation,
+  getNearbyStations,
   createStation,
   updateStation,
   deleteStation,

@@ -26,8 +26,8 @@ const createSwaggerDocument = (port = process.env.PORT || 8080) => ({
   },
   servers: [
     {
-      url: `http://localhost:${port}`,
-      description: 'Local Development Server',
+      url: '/',
+      description: 'Current Server',
     },
   ],
   components: {
