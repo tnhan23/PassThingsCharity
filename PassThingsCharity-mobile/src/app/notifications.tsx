@@ -1,5 +1,5 @@
-import { InboxScreen } from "@/screens/coverage";
+import { NoticesScreen } from "@/screens/notices";
 
 export default function Page() {
-  return <InboxScreen mode="content" />;
+  return <NoticesScreen />;
 }
