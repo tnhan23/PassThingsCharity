@@ -23,8 +23,32 @@ type SessionValue = {
 
 const SessionContext = createContext<SessionValue | null>(null);
 
-function asUser(raw: { id: unknown; username: string; phone: string }): SessionUser {
-  return { id: String(raw.id), username: raw.username, phone: raw.phone };
+const roleNames = ["ADMIN", "ORG_MANAGER", "STATION_MANAGER", "STAFF", "VOLUNTEER", "USER"];
+
+export function isOperator(role?: string) {
+  return role === "ADMIN" || role === "ORG_MANAGER" || role === "STATION_MANAGER" || role === "STAFF";
+}
+
+function roleName(role: unknown) {
+  if (typeof role === "string" && roleNames.includes(role)) return role;
+  if (role && typeof role === "object" && "name" in role) {
+    const name = (role as { name?: unknown }).name;
+    if (typeof name === "string" && roleNames.includes(name)) return name;
+  }
+  return undefined;
+}
+
+function asUser(raw: { id: unknown; username: string; phone?: string | null; role?: unknown; email?: string | null; fullName?: string | null; avatarUrl?: string | null }): SessionUser {
+  const role = roleName(raw.role);
+  return {
+    id: String(raw.id),
+    username: raw.username,
+    phone: raw.phone || "",
+    email: raw.email || undefined,
+    fullName: raw.fullName || undefined,
+    avatarUrl: raw.avatarUrl || undefined,
+    role,
+  };
 }
 
 export function SessionProvider({ children }: { children: ReactNode }) {

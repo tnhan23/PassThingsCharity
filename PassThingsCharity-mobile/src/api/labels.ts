@@ -10,6 +10,7 @@ export function unitLabel(unit: string | undefined) {
   if (unit === "PAIR") return "đôi";
   if (unit === "BOX") return "thùng";
   if (unit === "PACK") return "gói";
+  if (unit === "PIECE") return "cái";
   return "đơn vị";
 }
 

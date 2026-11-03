@@ -1,5 +1,18 @@
-import { api } from "@/api/client";
-import type { CampaignDetail, CampaignSummary, PointsPayload, StationRow } from "@/api/types";
+import { api, uploadImages, type UploadFile } from "@/api/client";
+import type {
+  AssignmentRow,
+  CampaignDetail,
+  CampaignSummary,
+  ContributionRow,
+  PointsPayload,
+  ReliefRow,
+  ReliefSummaryItem,
+  StationRow,
+  TaskRow,
+  TransferRow,
+  ShiftScheduleRow,
+  NoticeRow,
+} from "@/api/types";
 
 type Token = string;
 type Body = Record<string, unknown>;
@@ -18,7 +31,7 @@ export function resultText(data: unknown) {
 
 export const backend = {
   login(username: string, password: string) {
-    return api<{ token: string; user: { id: unknown; username: string; phone: string } }>("/auth/login", {
+    return api<{ token: string; user: { id: unknown; username: string; phone?: string | null; email?: string | null; fullName?: string | null; avatarUrl?: string | null; role?: string } }>("/auth/login", {
       method: "POST",
       body: { username, password },
     });
@@ -50,7 +63,7 @@ export const backend = {
     return api<{ message: string }>("/users", withToken(token, "POST", body));
   },
   updateProfile(token: Token, body: Body) {
-    return api<{ message: string; user: { username: string; phone: string; email?: string; fullName?: string; role?: string } }>(
+    return api<{ message: string; user: { username: string; phone: string; email?: string; fullName?: string; avatarUrl?: string; role?: string } }>(
       "/users/me/profile",
       withToken(token, "PATCH", body),
     );
@@ -174,8 +187,174 @@ export const backend = {
   removeCampaignStation(token: Token, campaignId: string, stationId: string) {
     return api<{ message: string }>(`/campaigns/${campaignId}/stations/${stationId}`, withToken(token, "DELETE"));
   },
-  campaignStations(campaignId: string) {
-    return api<{ totalStations: number; stations: { name?: string; address?: string }[] }>(`/campaigns/${campaignId}/stations`);
+  campaignStations(campaignId: string, coords?: { userLat: string; userLng: string }) {
+    const query = coords ? `?userLat=${encodeURIComponent(coords.userLat)}&userLng=${encodeURIComponent(coords.userLng)}` : "";
+    return api<{ totalStations: number; stations: { _id?: string; name?: string; address?: string; distanceKm?: number }[] }>(
+      `/campaigns/${campaignId}/stations${query}`,
+    );
+  },
+  listContributions(token: Token) {
+    return api<{ data: ContributionRow[] }>("/contributions?limit=100", { token });
+  },
+  listTransfers(token: Token) {
+    return api<{ data: TransferRow[] }>("/transfers?limit=100", { token });
+  },
+  listRelief(token: Token) {
+    return api<{ data: ReliefRow[] }>("/relief?limit=100", { token });
+  },
+  reliefSummary(token: Token, campaignId: string) {
+    return api<{ totalDistributionBatches: number; itemsSummary: ReliefSummaryItem[] }>(`/relief/summary/${campaignId}`, { token });
+  },
+  listTasks(token: Token, stationId?: string) {
+    const station = stationId ? `&stationId=${encodeURIComponent(stationId)}` : "";
+    return api<{ data: TaskRow[] }>(`/workforce/tasks?limit=100${station}`, { token });
+  },
+  myAssignments(token: Token) {
+    return api<{ data: AssignmentRow[] }>("/workforce/tasks/me", { token });
+  },
+  registerVolunteer(token: Token, campaignId: string) {
+    return api<{ message: string }>("/workforce/volunteers/register", withToken(token, "POST", { campaignId }));
+  },
+  applyTask(token: Token, taskId: string) {
+    return api<{ message: string }>(`/workforce/tasks/${taskId}/apply`, withToken(token, "POST", {}));
+  },
+  checkInTask(token: Token, assignmentId: string) {
+    return api<{ message: string }>("/workforce/tasks/check-in", withToken(token, "POST", { assignmentId }));
+  },
+  checkOutTask(token: Token, assignmentId: string, body?: Body) {
+    return api<{ message: string; gamification?: { pointsAwarded?: number } }>("/workforce/tasks/check-out", withToken(token, "POST", { assignmentId, ...body }));
+  },
+  forgotPassword(email: string) {
+    return api<{ message: string }>("/auth/forgot-password", { method: "POST", body: { email } });
+  },
+  resetPassword(body: { email: string; otp: string; newPassword: string }) {
+    return api<{ message: string }>("/auth/reset-password", { method: "POST", body });
+  },
+  rejectOrganization(token: Token, id: string, rejectionReason: string) {
+    return api<{ message: string }>(`/admin/organizations/${id}/reject`, withToken(token, "PATCH", { rejectionReason }));
+  },
+  createStationManager(token: Token, stationId: string, body: Body) {
+    return api<{ message: string }>(`/stations/${stationId}/manager`, withToken(token, "POST", body));
+  },
+  assignStationManagerByContact(token: Token, stationId: string, identifier: string) {
+    return api<{ message: string }>(`/stations/${stationId}/manager`, withToken(token, "PATCH", { identifier }));
+  },
+  removeStationManager(token: Token, stationId: string) {
+    return api<{ message: string }>(`/stations/${stationId}/manager`, withToken(token, "DELETE"));
+  },
+  updateStaff(token: Token, stationId: string, staffId: string, body: Body) {
+    return api<{ message: string }>(`/stationmanager/${stationId}/staff/${staffId}`, withToken(token, "PATCH", body));
+  },
+  lookupDonor(token: Token, q: string) {
+    return api<{ data: { _id: string; fullName?: string; phone?: string; username?: string }[] }>(
+      `/contributions/lookup?q=${encodeURIComponent(q)}`,
+      { token },
+    );
+  },
+  createContribution(token: Token, body: Body) {
+    return api<{ message: string }>("/contributions", withToken(token, "POST", body));
+  },
+  getContribution(token: Token, id: string) {
+    return api<unknown>(`/contributions/${id}`, { token });
+  },
+  updateContributionStatus(token: Token, id: string, body: Body) {
+    return api<{ message: string }>(`/contributions/${id}/status`, withToken(token, "PATCH", body));
+  },
+  addContributionImages(token: Token, id: string, imageUrls: string[]) {
+    return api<{ message: string }>(`/contributions/${id}/images`, withToken(token, "POST", { imageUrls }));
+  },
+  uploadContributionImages(token: Token, files: UploadFile[]) {
+    return uploadImages<{ imageUrls: string[] }>("/contributions/upload-images", token, files);
+  },
+  uploadPersonalImages(token: Token, files: UploadFile[]) {
+    return uploadImages<{ imageUrls: string[] }>("/uploads/images", token, files);
+  },
+  createTransfer(token: Token, body: Body) {
+    return api<{ message: string }>("/transfers", withToken(token, "POST", body));
+  },
+  getTransfer(token: Token, id: string) {
+    return api<unknown>(`/transfers/${id}`, { token });
+  },
+  updateTransferStatus(token: Token, id: string, body: Body) {
+    return api<{ message: string }>(`/transfers/${id}/status`, withToken(token, "PATCH", body));
+  },
+  createRelief(token: Token, body: Body) {
+    return api<{ message: string }>("/relief", withToken(token, "POST", body));
+  },
+  getRelief(token: Token, id: string) {
+    return api<unknown>(`/relief/${id}`, { token });
+  },
+  updateReliefStatus(token: Token, id: string, body: Body) {
+    return api<{ message: string }>(`/relief/${id}/status`, withToken(token, "PATCH", body));
+  },
+  myVolunteerRegistrations(token: Token) {
+    return api<unknown>("/workforce/volunteers/me", { token });
+  },
+  campaignVolunteers(token: Token, campaignId: string) {
+    return api<unknown>(`/workforce/volunteers/campaign/${campaignId}`, { token });
+  },
+  updateVolunteerStatus(token: Token, id: string, body: Body) {
+    return api<{ message: string }>(`/workforce/volunteers/${id}/status`, withToken(token, "PATCH", body));
+  },
+  myTaskApplications(token: Token) {
+    return api<unknown>("/workforce/tasks/applications/me", { token });
+  },
+  taskApplications(token: Token, taskId: string) {
+    return api<unknown>(`/workforce/tasks/${taskId}/applications`, { token });
+  },
+  reviewTaskApplication(token: Token, id: string, body: Body) {
+    return api<{ message: string }>(`/workforce/tasks/applications/${id}/review`, withToken(token, "PATCH", body));
+  },
+  createTask(token: Token, body: Body) {
+    return api<{ message: string }>("/workforce/tasks", withToken(token, "POST", body));
+  },
+  getTask(token: Token, id: string) {
+    return api<unknown>(`/workforce/tasks/${id}`, { token });
+  },
+  updateTask(token: Token, id: string, body: Body) {
+    return api<{ message: string }>(`/workforce/tasks/${id}`, withToken(token, "PATCH", body));
+  },
+  assignTask(token: Token, body: Body) {
+    return api<{ message: string }>("/workforce/tasks/assign", withToken(token, "POST", body));
+  },
+
+  listShiftTemplates(token: Token, stationId: string) {
+    return api<{ data: { _id: string; name: string; startTime: string; endTime: string; requiredStaff?: number; description?: string }[] }>(
+      `/shiftstations/${stationId}/shift-templates`,
+      { token },
+    );
+  },
+  createShiftTemplate(token: Token, stationId: string, body: Body) {
+    return api<{ message: string }>(`/shiftstations/${stationId}/shift-templates`, withToken(token, "POST", body));
+  },
+  listShiftSchedules(token: Token, stationId: string, date?: string) {
+    const query = date ? `?date=${encodeURIComponent(date)}` : "";
+    return api<{ data: ShiftScheduleRow[] }>(`/shiftstations/${stationId}/schedules${query}`, { token });
+  },
+  createShiftSchedule(token: Token, stationId: string, body: Body) {
+    return api<{ message: string }>(`/shiftstations/${stationId}/schedules`, withToken(token, "POST", body));
+  },
+  checkInShift(token: Token, scheduleId: string) {
+    return api<{ message: string }>(`/shiftstations/schedules/${scheduleId}/check-in`, withToken(token, "POST", {}));
+  },
+  checkOutShift(token: Token, scheduleId: string) {
+    return api<{ message: string }>(`/shiftstations/schedules/${scheduleId}/check-out`, withToken(token, "POST", {}));
+  },
+  listStationStaff(token: Token, stationId: string) {
+    return api<{ data: { _id: string; fullName?: string; username?: string }[] }>(`/stationmanager/${stationId}/staff`, { token });
+  },
+
+  myNotifications(token: Token) {
+    return api<{ unreadCount: number; data: NoticeRow[] }>("/notifications/me", { token });
+  },
+  sendNotification(token: Token, body: Body) {
+    return api<{ message: string }>("/notifications", withToken(token, "POST", body));
+  },
+  markNotificationRead(token: Token, id: string) {
+    return api<{ message: string }>(`/notifications/${id}/read`, withToken(token, "PATCH", {}));
+  },
+  markAllNotificationsRead(token: Token) {
+    return api<{ message: string }>("/notifications/me/read-all", withToken(token, "PATCH", {}));
   },
 
   myPoints(token: Token) {
