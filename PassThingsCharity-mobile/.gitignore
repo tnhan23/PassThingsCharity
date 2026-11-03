@@ -37,5 +37,5 @@ yarn-error.*
 *.tsbuildinfo
 
 # generated native folders
-/ios
+# The ios project is tracked on this branch.
 /android
