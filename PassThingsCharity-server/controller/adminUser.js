@@ -1,10 +1,10 @@
-const User=require('../models/user');
-const Role=require('../models/role');
+const User = require('../models/user');
+const Role = require('../models/role');
 const mongoose = require('mongoose');
-async function assignStationManager(req,res,next){
-    try{
-        const {id}=req.params;
-        if (!mongoose.isValidObjectId(id)) {
+async function assignStationManager(req, res, next) {
+  try {
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id)) {
       return res.status(400).json({ error: 'User ID không hợp lệ.' });
     }
     const user = await User.findById(id).populate('role', 'name');
@@ -24,17 +24,17 @@ async function assignStationManager(req,res,next){
       });
     }
 
-    user.role=managerRole._id;
+    user.role = managerRole._id;
     await user.save();
     return res.status(200).json({
-        message:'Đã cấp role STATION_MANAGER và gán trạm',
-        user:{
-            id: user._id,
-            username:user.username,
-            role:'STATION_MANAGER',
-        },
+      message: 'Đã cấp role STATION_MANAGER và gán trạm',
+      user: {
+        id: user._id,
+        username: user.username,
+        role: 'STATION_MANAGER',
+      },
     });
-    }catch (error) {
+  } catch (error) {
     if (error.code === 11000) {
       return res.status(409).json({
         error: 'User đã được gán vào trạm này.',
@@ -43,4 +43,4 @@ async function assignStationManager(req,res,next){
     return next(error);
   }
 }
-module.exports={assignStationManager}
+module.exports = { assignStationManager }

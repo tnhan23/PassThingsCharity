@@ -9,7 +9,7 @@ module.exports = {
     },
     post: {
       tags: ['Organizations'],
-      summary: 'Tạo tổ chức từ thiện mới (ADMIN, STATION_MANAGER)',
+      summary: 'Tạo tổ chức từ thiện mới (ADMIN, ORG_MANAGER, USER)',
       requestBody: {
         required: true,
         content: {
@@ -19,7 +19,8 @@ module.exports = {
         },
       },
       responses: {
-        201: { description: 'Tạo tổ chức thành công' },
+        201: { description: 'Tạo tổ chức thành công, chờ Admin duyệt' },
+        400: { description: 'Dữ liệu không hợp lệ hoặc đã có đơn chờ duyệt' },
       },
     },
   },
@@ -36,7 +37,7 @@ module.exports = {
     },
     patch: {
       tags: ['Organizations'],
-      summary: 'Cập nhật thông tin tổ chức',
+      summary: 'Cập nhật thông tin tổ chức (ADMIN, ORG_MANAGER)',
       parameters: [
         { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
       ],
@@ -53,7 +54,7 @@ module.exports = {
     },
     delete: {
       tags: ['Organizations'],
-      summary: 'Xóa tổ chức',
+      summary: 'Xóa tổ chức (ADMIN, ORG_MANAGER)',
       parameters: [
         { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
       ],
@@ -65,7 +66,7 @@ module.exports = {
   '/organizations/{organizationId}/stations': {
     post: {
       tags: ['Organizations'],
-      summary: 'Tạo trạm mới thuộc tổ chức',
+      summary: 'Tạo trạm mới thuộc tổ chức (ADMIN, ORG_MANAGER)',
       parameters: [
         { name: 'organizationId', in: 'path', required: true, schema: { type: 'string' } },
       ],

@@ -1,34 +1,4 @@
 module.exports = {
-  '/users': {
-    get: {
-      tags: ['Users'],
-      summary: 'Lấy danh sách người dùng (Chỉ ADMIN)',
-      parameters: [
-        { name: 'role', in: 'query', schema: { type: 'string' }, description: 'Lọc theo role name (ADMIN, USER, STAFF...)' },
-        { name: 'status', in: 'query', schema: { type: 'string' }, description: 'Lọc theo status (active, inactive, banned)' },
-      ],
-      responses: {
-        200: { description: 'Danh sách người dùng' },
-        401: { description: 'Chưa đăng nhập' },
-        403: { description: 'Không có quyền truy cập' },
-      },
-    },
-    post: {
-      tags: ['Users'],
-      summary: 'Tạo người dùng mới',
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: { $ref: '#/components/schemas/RegisterRequest' },
-          },
-        },
-      },
-      responses: {
-        201: { description: 'Tạo thành công' },
-      },
-    },
-  },
   '/users/me/profile': {
     patch: {
       tags: ['Users'],
@@ -96,39 +66,6 @@ module.exports = {
         400: { description: 'ID hoặc mật khẩu không hợp lệ' },
         401: { description: 'Token hoặc mật khẩu không hợp lệ' },
         403: { description: 'Chỉ được xóa tài khoản của chính mình' },
-        404: { description: 'Không tìm thấy tài khoản' },
-      },
-    },
-  },
-  '/users/{id}/status': {
-    patch: {
-      tags: ['Users'],
-      summary: 'Thay đổi trạng thái tài khoản (Chỉ ADMIN)',
-      description: 'Gửi active để bật lại, inactive để vô hiệu hóa hoặc banned để khóa tài khoản. Nếu không gửi body, mặc định chuyển sang inactive.',
-      parameters: [
-        { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
-      ],
-      requestBody: {
-        required: false,
-        content: {
-          'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                status: {
-                  type: 'string',
-                  enum: ['active', 'inactive', 'banned'],
-                  example: 'inactive',
-                },
-              },
-            },
-          },
-        },
-      },
-      responses: {
-        200: { description: 'Trạng thái tài khoản đã được cập nhật' },
-        401: { description: 'Chưa đăng nhập' },
-        403: { description: 'Chỉ ADMIN được phép thực hiện' },
         404: { description: 'Không tìm thấy tài khoản' },
       },
     },

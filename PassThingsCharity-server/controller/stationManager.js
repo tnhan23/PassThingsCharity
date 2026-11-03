@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const User = require('../models/user');
 const Role = require('../models/role');
 const Organization = require('../models/organization');
-const Station=require('../models/station')
+const Station = require('../models/station')
 const StationStaff = require('../models/stationstaff');
 async function managerCanUseStation(userId, stationId) {
   const station = await Station.findById(stationId);
@@ -26,30 +26,31 @@ async function managerCanUseStation(userId, stationId) {
     return { error: 'Tổ chức chưa được Admin duyệt.' };
   }
 
-  if (String(organization.submittedBy) !== String(userId)) {
+  const isStationManager = station.managerId && String(station.managerId) === String(userId);
+  const isOrgOwner = String(organization.submittedBy) === String(userId);
+  if (!isStationManager && !isOrgOwner) {
     return { error: 'Bạn không quản lý trạm này.' };
   }
 
   return { station };
 }
-async function createStaff(req,res,next){
-    try{
-        const {stationId}=req.params;
-        const {email,username,password,fullName,phone}=req.body || {};
-      if(
-        !mongoose.isValidObjectId(stationId) ||
+async function createStaff(req, res, next) {
+  try {
+    const { stationId } = req.params;
+    const { email, username, password, fullName, phone } = req.body || {};
+    if (
+      !mongoose.isValidObjectId(stationId) ||
       typeof email !== 'string' || !email.trim() ||
       typeof username !== 'string' || !username.trim() ||
       typeof password !== 'string' || !password ||
       typeof fullName !== 'string' || !fullName.trim() ||
       typeof phone !== 'string' || !/^\d{10}$/.test(phone.trim())
-      )
-      {
-        return res.status(400).json({
+    ) {
+      return res.status(400).json({
         error: 'Thông tin không hợp lệ; phone phải gồm đúng 10 chữ số.',
-        })
+      })
     }
-     const access = await managerCanUseStation(req.user._id, stationId);
+    const access = await managerCanUseStation(req.user._id, stationId);
     if (access.error) {
       return res.status(403).json({ error: access.error });
     }
@@ -60,7 +61,7 @@ async function createStaff(req,res,next){
         error: 'Chưa có role STAFF trong collection roles.',
       });
     }
-    const staff=await User.create({
+    const staff = await User.create({
       email: email.trim().toLowerCase(),
       username: username.trim(),
       password: await bcrypt.hash(password, 12),
@@ -69,10 +70,10 @@ async function createStaff(req,res,next){
       role: staffRole._id,
     });
     await StationStaff.create({
-          stationId: access.station._id,
-           userId: staff._id,
+      stationId: access.station._id,
+      userId: staff._id,
     });
- return res.status(201).json({
+    return res.status(201).json({
       message: 'Đã tạo tài khoản STAFF.',
       user: {
         id: staff._id,
@@ -82,7 +83,7 @@ async function createStaff(req,res,next){
         stationId: access.station._id,
       },
     });
-}catch (error) {
+  } catch (error) {
     if (error.code === 11000) {
       return res.status(409).json({
         error: 'Email hoặc username đã được sử dụng.',
@@ -194,6 +195,111 @@ async function deleteStaff(req, res, next) {
   }
 }
 
+async function updateStaff(req, res, next) {
+  try {
+    const { stationId, staffId } = req.params;
+    const { fullName, phone, email, password, status } = req.body || {};
+
+    if (
+      !mongoose.isValidObjectId(stationId) ||
+      !mongoose.isValidObjectId(staffId)
+    ) {
+      return res.status(400).json({
+        error: 'Station ID hoặc Staff ID không hợp lệ.',
+      });
+    }
+
+    const access = await managerCanUseStation(req.user._id, stationId);
+    if (access.error) {
+      return res.status(403).json({ error: access.error });
+    }
+
+    const assignment = await StationStaff.findOne({
+      stationId: access.station._id,
+      userId: staffId,
+    });
+
+    if (!assignment) {
+      return res.status(404).json({
+        error: 'Nhân viên này không thuộc trạm của bạn.',
+      });
+    }
+
+    const staffRole = await Role.findOne({ name: 'STAFF' });
+    const staff = await User.findOne({
+      _id: staffId,
+      role: staffRole ? staffRole._id : undefined,
+    });
+
+    if (!staff) {
+      return res.status(404).json({
+        error: 'Không tìm thấy tài khoản nhân viên.',
+      });
+    }
+
+    if (fullName !== undefined) {
+      if (typeof fullName !== 'string' || !fullName.trim()) {
+        return res.status(400).json({ error: 'Họ tên không hợp lệ.' });
+      }
+      staff.fullName = fullName.trim();
+    }
+
+    if (phone !== undefined) {
+      if (typeof phone !== 'string' || !/^\d{10}$/.test(phone.trim())) {
+        return res.status(400).json({ error: 'Số điện thoại phải gồm đúng 10 chữ số.' });
+      }
+      staff.phone = phone.trim();
+    }
+
+    if (email !== undefined) {
+      if (typeof email !== 'string' || !email.trim()) {
+        return res.status(400).json({ error: 'Email không hợp lệ.' });
+      }
+      staff.email = email.trim().toLowerCase();
+    }
+
+    if (password !== undefined) {
+      if (typeof password !== 'string' || password.length < 6) {
+        return res.status(400).json({ error: 'Mật khẩu mới phải có ít nhất 6 ký tự.' });
+      }
+      staff.password = await bcrypt.hash(password, 12);
+    }
+
+    if (status !== undefined) {
+      if (!['active', 'inactive'].includes(status)) {
+        return res.status(400).json({ error: 'Trạng thái chỉ có thể là active hoặc inactive.' });
+      }
+      staff.status = status;
+    }
+
+    await staff.save();
+
+    return res.status(200).json({
+      message: 'Đã cập nhật thông tin nhân viên thành công.',
+      user: {
+        id: staff._id,
+        username: staff.username,
+        fullName: staff.fullName,
+        email: staff.email,
+        phone: staff.phone,
+        status: staff.status,
+        role: 'STAFF',
+        stationId: access.station._id,
+      },
+    });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({
+        error: 'Email đã được sử dụng bởi tài khoản khác.',
+      });
+    }
+    return next(error);
+  }
+}
+
 module.exports = {
-  createStaff,getStaff,deleteStaff
+  createStaff,
+  getStaff,
+  updateStaff,
+  deleteStaff,
 };

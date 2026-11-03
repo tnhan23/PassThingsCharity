@@ -1,7 +1,7 @@
-const mongoose=require('mongoose')
-const organizationSchema=new mongoose.Schema(
-    {
-       name: {
+const mongoose = require('mongoose')
+const organizationSchema = new mongoose.Schema(
+  {
+    name: {
       type: String,
       required: true,
       trim: true,
@@ -20,16 +20,36 @@ const organizationSchema=new mongoose.Schema(
     },
     phone: String,
     email: String,
-submittedBy: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: 'User',
-  required: true,
-},
-isVerified: {
-  type: Boolean,
-  default: false,
-},
+    description: {
+      type: String,
+      trim: true,
+      default: '',
     },
-    { timestamps: true }
+    operatingArea: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    idCardNumber: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    submittedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+    status: {
+      type: String,
+      enum: ['PENDING', 'APPROVED', 'REJECTED'],
+      default: 'PENDING',
+    },
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  { timestamps: true }
 )
-module.exports=mongoose.model('Organization',organizationSchema)
+module.exports = mongoose.model('Organization', organizationSchema)

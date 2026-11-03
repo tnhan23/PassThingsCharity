@@ -1,13 +1,13 @@
-const mongoose=require('mongoose');
-const roleSchema=new mongoose.Schema({
-    name:{
-        type:String,
-        required:true,
-        unique:true,
-        enum:['ADMIN','STATION_MANAGER','STAFF','VOLUNTEER','USER']
+const mongoose = require('mongoose');
+const roleSchema = new mongoose.Schema({
+    name: {
+        type: String,
+        required: true,
+        unique: true,
+        enum: ['ADMIN','ORG_MANAGER', 'STATION_MANAGER', 'STAFF', 'VOLUNTEER', 'USER']
     },
-    description:{
-        type:String
+    description: {
+        type: String
     }
 });
-module.exports=mongoose.model('Role',roleSchema)
+module.exports = mongoose.model('Role', roleSchema)

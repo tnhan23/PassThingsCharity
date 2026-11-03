@@ -40,15 +40,18 @@ async function getStationAccess(stationId, user) {
     return { error: 'Không tìm thấy tổ chức của trạm.', status: 404 };
   }
 
-  const isAdmin = user.role.name === 'ADMIN';
-  const isOwner =
-    String(organization.submittedBy) === String(user._id);
-  const canView =
-    organization.isVerified && station.isActive;
+    const isAdmin = user.role.name === 'ADMIN';
+  const isOwner = String(organization.submittedBy) === String(user._id);
+  
+  // 👉 THÊM: Kiểm tra xem user có phải là Trưởng trạm được gán không:
+  const isStationManager = station.managerId && String(station.managerId) === String(user._id);
+  
+  const canView = (organization.status === 'APPROVED' || organization.isVerified) && station.isActive;
 
-  if (isAdmin || isOwner || canView) {
+  if (isAdmin || isOwner || isStationManager || canView) {
     return { station, organization };
   }
+
 
   return { error: 'Bạn không có quyền truy cập trạm này.', status: 403 };
 }

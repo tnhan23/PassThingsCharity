@@ -3,7 +3,8 @@ const {
   login,
   register,
   changePassword,
-  adminResetPassword,
+  forgotPassword,
+  resetPassword,
 } = require('../controller/auth');
 const checkBearerToken = require('../middleware/checkBearerToken');
 const checkRole = require('../middleware/checkRole');
@@ -11,12 +12,8 @@ const checkRole = require('../middleware/checkRole');
 const router = express.Router();
 
 router.post('/login', login);
-router.post('/register',register)
+router.post('/register', register)
 router.patch('/change-password', checkBearerToken, changePassword);
-router.patch(
-  '/reset-password/:id',
-  checkBearerToken,
-  checkRole(['ADMIN']),
-  adminResetPassword
-);
+router.post('/forgot-password', forgotPassword);
+router.post('/reset-password', resetPassword);
 module.exports = router;
