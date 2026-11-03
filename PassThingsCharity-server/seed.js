@@ -17,6 +17,19 @@ const Achievement = require('./models/achievement');
 const UserAchievement = require('./models/userAchievement');
 const Certificate = require('./models/certificate');
 
+// BE3 Models
+const Contribution = require('./models/contribution');
+const ContributionItem = require('./models/contributionItem');
+const ContributionImage = require('./models/contributionImage');
+const CampaignTransfer = require('./models/campaignTransfer');
+const CampaignTransferItem = require('./models/campaignTransferItem');
+const ReliefDistribution = require('./models/reliefDistribution');
+const ReliefDistributionItem = require('./models/reliefDistributionItem');
+const VolunteerRegistration = require('./models/volunteerRegistration');
+const Task = require('./models/task');
+const TaskAssignment = require('./models/taskAssignment');
+const TaskApplication = require('./models/taskApplication');
+
 // Password hash for '123456'
 const TEST_PASSWORD_HASH = bcrypt.hashSync('123456', 12);
 
@@ -114,6 +127,13 @@ const stationsData = [
     organizationId: new mongoose.Types.ObjectId("671000000000000000000001"),
     name: "Trạm Tiếp Nhận Trung Tâm 01",
     address: "456 Đường Lê Lợi, Quận 1, TP.HCM",
+    isActive: true
+  },
+  {
+    _id: new mongoose.Types.ObjectId("671000000000000000000012"),
+    organizationId: new mongoose.Types.ObjectId("671000000000000000000001"),
+    name: "Trạm Tiếp Nhận Quận 5",
+    address: "789 Đường An Dương Vương, Quận 5, TP.HCM",
     isActive: true
   }
 ];
@@ -284,56 +304,253 @@ const certificatesData = [
   }
 ];
 
+// 15. Contributions (Inbound)
+const contributionsData = [
+  {
+    _id: new mongoose.Types.ObjectId("6523456789abcdef00000a01"),
+    code: "CTB-20261015-0001",
+    userId: new mongoose.Types.ObjectId("6acbbb6a7faf5d01bb5261e7"),
+    stationId: new mongoose.Types.ObjectId("671000000000000000000011"),
+    campaignId: new mongoose.Types.ObjectId("6acdef2e9fc3bf0d61d9d00b"),
+    staffId: new mongoose.Types.ObjectId("6acbbb6a7faf5d01bb5261e4"),
+    status: "ACCEPTED",
+    notes: "Quyên góp 10 thùng mì và 20kg quần áo ấm",
+    createdAt: new Date()
+  }
+];
+
+// 16. Contribution Items
+const contributionItemsData = [
+  {
+    _id: new mongoose.Types.ObjectId("6523456789abcdef00000b01"),
+    contributionId: new mongoose.Types.ObjectId("6523456789abcdef00000a01"),
+    campaignItemId: new mongoose.Types.ObjectId("6523456789abcdef00000401"),
+    itemTypeId: new mongoose.Types.ObjectId("6523456789abcdef00000202"),
+    quantity: 10,
+    unit: "BOX",
+    note: "10 thùng mì Hảo Hảo còn nguyên bao bì"
+  },
+  {
+    _id: new mongoose.Types.ObjectId("6523456789abcdef00000b02"),
+    contributionId: new mongoose.Types.ObjectId("6523456789abcdef00000a01"),
+    campaignItemId: new mongoose.Types.ObjectId("6523456789abcdef00000402"),
+    itemTypeId: new mongoose.Types.ObjectId("6523456789abcdef00000201"),
+    quantity: 20,
+    unit: "KG",
+    note: "Quần áo thun và áo ấm sạch sẽ"
+  }
+];
+
+// 17. Contribution Images
+const contributionImagesData = [
+  {
+    _id: new mongoose.Types.ObjectId("6523456789abcdef00000c01"),
+    contributionId: new mongoose.Types.ObjectId("6523456789abcdef00000a01"),
+    imageUrl: "https://images.unsplash.com/photo-1488521787991-ed7bbaae773c"
+  }
+];
+
+// 18. Campaign Transfers (Inter-Station)
+const transfersData = [
+  {
+    _id: new mongoose.Types.ObjectId("6523456789abcdef00000d01"),
+    code: "TRF-20261015-0001",
+    campaignId: new mongoose.Types.ObjectId("6acdef2e9fc3bf0d61d9d00b"),
+    fromStationId: new mongoose.Types.ObjectId("671000000000000000000011"),
+    toStationId: new mongoose.Types.ObjectId("671000000000000000000012"),
+    status: "IN_TRANSIT",
+    createdBy: new mongoose.Types.ObjectId("6acbbb6a7faf5d01bb5261e4"),
+    responsibleUserId: new mongoose.Types.ObjectId("6acbbb6a7faf5d01bb5261e4"),
+    transportMethod: "Xe tải 2.5 tấn",
+    transportNote: "Xe tải chuyển 50 thùng mì sang trạm Quận 5 để tập kết"
+  }
+];
+
+// 19. Campaign Transfer Items
+const transferItemsData = [
+  {
+    _id: new mongoose.Types.ObjectId("6523456789abcdef00000e01"),
+    transferId: new mongoose.Types.ObjectId("6523456789abcdef00000d01"),
+    itemTypeId: new mongoose.Types.ObjectId("6523456789abcdef00000202"),
+    quantity: 50,
+    unit: "BOX"
+  }
+];
+
+// 20. Relief Distributions (Outbound)
+const reliefDistributionsData = [
+  {
+    _id: new mongoose.Types.ObjectId("6523456789abcdef00000f01"),
+    code: "DST-20261015-0001",
+    campaignId: new mongoose.Types.ObjectId("6acdef2e9fc3bf0d61d9d00b"),
+    stationId: new mongoose.Types.ObjectId("671000000000000000000011"),
+    recipientName: "Ông Nguyễn Văn B",
+    recipientRole: "Chủ tịch Ủy ban MTTQ Xã",
+    recipientPhone: "0988776655",
+    recipientAddress: "UBND Xã Lộc An, Huyện Phú Lộc, Thừa Thiên Huế",
+    distributionDate: new Date("2026-10-20T10:00:00.000Z"),
+    status: "PLANNED",
+    notes: "Bàn giao đợt 1 trực tiếp cho chính quyền địa phương",
+    handledBy: new mongoose.Types.ObjectId("6acbbb6a7faf5d01bb5261e4")
+  }
+];
+
+// 21. Relief Distribution Items
+const reliefDistributionItemsData = [
+  {
+    _id: new mongoose.Types.ObjectId("6523456789abcdef00001001"),
+    distributionId: new mongoose.Types.ObjectId("6523456789abcdef00000f01"),
+    itemTypeId: new mongoose.Types.ObjectId("6523456789abcdef00000202"),
+    quantity: 100,
+    unit: "BOX"
+  }
+];
+
+// 22. Volunteer Registrations
+const volunteerRegistrationsData = [
+  {
+    _id: new mongoose.Types.ObjectId("6523456789abcdef00001101"),
+    campaignId: new mongoose.Types.ObjectId("6acdef2e9fc3bf0d61d9d00b"),
+    userId: new mongoose.Types.ObjectId("6acbbb6a7faf5d01bb5261e6"),
+    status: "APPROVED",
+    registeredAt: new Date(),
+    approvedBy: new mongoose.Types.ObjectId("6ac7b15a501de8a3e18592c9"),
+    note: "Có thể tham gia hỗ trợ khuân vác và phân loại hàng"
+  }
+];
+
+// 23. Tasks
+const tasksData = [
+  {
+    _id: new mongoose.Types.ObjectId("6523456789abcdef00001201"),
+    campaignId: new mongoose.Types.ObjectId("6acdef2e9fc3bf0d61d9d00b"),
+    stationId: new mongoose.Types.ObjectId("671000000000000000000011"),
+    transferId: new mongoose.Types.ObjectId("6523456789abcdef00000d01"),
+    title: "Phân loại và đóng thùng quần áo ấm đợt 1",
+    description: "Phân loại đồ nam, nữ, trẻ em và cân theo kiện 10kg",
+    startTime: new Date("2026-10-16T08:00:00.000Z"),
+    endTime: new Date("2026-10-16T12:00:00.000Z"),
+    status: "IN_PROGRESS",
+    recruitmentStatus: "OPEN",
+    requiredVolunteers: 5,
+    volunteerDeadline: new Date("2026-10-16T07:00:00.000Z"),
+    rewardPoints: 50,
+    createdBy: new mongoose.Types.ObjectId("6acbbb6a7faf5d01bb5261e4")
+  }
+];
+
+// 24. Task Assignments
+const taskAssignmentsData = [
+  {
+    _id: new mongoose.Types.ObjectId("6523456789abcdef00001301"),
+    taskId: new mongoose.Types.ObjectId("6523456789abcdef00001201"),
+    assigneeId: new mongoose.Types.ObjectId("6acbbb6a7faf5d01bb5261e6"),
+    assigneeType: "VOLUNTEER",
+    assignedBy: new mongoose.Types.ObjectId("6acbbb6a7faf5d01bb5261e4"),
+    assignedAt: new Date(),
+    hoursSpent: 4,
+    completionNote: "Đã phân loại xong 15 kiện đồ",
+    checkInTime: new Date("2026-10-16T08:00:00.000Z"),
+    status: "IN_PROGRESS"
+  }
+];
+
+// 25. Task Applications
+const taskApplicationsData = [
+  {
+    _id: new mongoose.Types.ObjectId("6523456789abcdef00001401"),
+    taskId: new mongoose.Types.ObjectId("6523456789abcdef00001201"),
+    userId: new mongoose.Types.ObjectId("6acbbb6a7faf5d01bb5261e7"),
+    status: "PENDING",
+    appliedAt: new Date(),
+    note: "Em muốn tham gia hỗ trợ phân loại quần áo đợt này ạ"
+  }
+];
+
 async function seedAll() {
   try {
     const mongoUri = process.env.MONGODB_URI;
     console.log(`[Seed All] Connecting to Cloud Atlas: ${mongoUri}`);
     await mongoose.connect(mongoUri);
 
-    console.log('[Seed] 1/14 Roles...');
+    console.log('[Seed] 1/24 Roles...');
     for (const item of rolesData) await upsertDoc(Role, { _id: item._id }, item);
 
-    console.log('[Seed] 2/14 Users...');
+    console.log('[Seed] 2/24 Users...');
     for (const item of usersData) await upsertDoc(User, { _id: item._id }, item);
 
-    console.log('[Seed] 3/14 Organizations...');
+    console.log('[Seed] 3/24 Organizations...');
     for (const item of organizationsData) await upsertDoc(Organization, { _id: item._id }, item);
 
-    console.log('[Seed] 4/14 Stations...');
+    console.log('[Seed] 4/24 Stations...');
     for (const item of stationsData) await upsertDoc(Station, { _id: item._id }, item);
 
-    console.log('[Seed] 5/14 StationStaffs...');
+    console.log('[Seed] 5/24 StationStaffs...');
     for (const item of stationStaffsData) await upsertDoc(StationStaff, { stationId: item.stationId, userId: item.userId }, item);
 
-    console.log('[Seed] 6/14 Item Categories...');
+    console.log('[Seed] 6/24 Item Categories...');
     for (const item of categoriesData) await upsertDoc(ItemCategory, { _id: item._id }, item);
 
-    console.log('[Seed] 7/14 Item Types...');
+    console.log('[Seed] 7/24 Item Types...');
     for (const item of itemTypesData) await upsertDoc(ItemType, { _id: item._id }, item);
 
-    console.log('[Seed] 8/14 Campaigns...');
+    console.log('[Seed] 8/24 Campaigns...');
     for (const item of campaignsData) await upsertDoc(Campaign, { _id: item._id }, item);
 
-    console.log('[Seed] 9/14 Campaign Items...');
+    console.log('[Seed] 9/24 Campaign Items...');
     for (const item of campaignItemsData) await upsertDoc(CampaignItem, { campaignId: item.campaignId, itemTypeId: item.itemTypeId }, item);
 
-    console.log('[Seed] 10/14 Campaign Stations...');
+    console.log('[Seed] 10/24 Campaign Stations...');
     for (const item of campaignStationsData) await upsertDoc(CampaignStation, { campaignId: item.campaignId, stationId: item.stationId }, item);
 
-    console.log('[Seed] 11/14 Point Transactions...');
+    console.log('[Seed] 11/24 Point Transactions...');
     for (const item of pointTransactionsData) await upsertDoc(PointTransaction, { _id: item._id }, item);
 
-    console.log('[Seed] 12/14 Achievements...');
+    console.log('[Seed] 12/24 Achievements...');
     for (const item of achievementsData) await upsertDoc(Achievement, { _id: item._id }, item);
 
-    console.log('[Seed] 13/14 User Achievements...');
+    console.log('[Seed] 13/24 User Achievements...');
     for (const item of userAchievementsData) await upsertDoc(UserAchievement, { userId: item.userId, achievementId: item.achievementId }, item);
 
-    console.log('[Seed] 14/14 Certificates...');
+    console.log('[Seed] 14/24 Certificates...');
     for (const item of certificatesData) await upsertDoc(Certificate, { _id: item._id }, item);
 
+    // BE3 Seed Execution
+    console.log('[Seed] 15/24 Contributions...');
+    for (const item of contributionsData) await upsertDoc(Contribution, { _id: item._id }, item);
+
+    console.log('[Seed] 16/24 Contribution Items...');
+    for (const item of contributionItemsData) await upsertDoc(ContributionItem, { _id: item._id }, item);
+
+    console.log('[Seed] 17/24 Contribution Images...');
+    for (const item of contributionImagesData) await upsertDoc(ContributionImage, { _id: item._id }, item);
+
+    console.log('[Seed] 18/24 Campaign Transfers...');
+    for (const item of transfersData) await upsertDoc(CampaignTransfer, { _id: item._id }, item);
+
+    console.log('[Seed] 19/24 Campaign Transfer Items...');
+    for (const item of transferItemsData) await upsertDoc(CampaignTransferItem, { _id: item._id }, item);
+
+    console.log('[Seed] 20/24 Relief Distributions...');
+    for (const item of reliefDistributionsData) await upsertDoc(ReliefDistribution, { _id: item._id }, item);
+
+    console.log('[Seed] 21/24 Relief Distribution Items...');
+    for (const item of reliefDistributionItemsData) await upsertDoc(ReliefDistributionItem, { _id: item._id }, item);
+
+    console.log('[Seed] 22/24 Volunteer Registrations...');
+    for (const item of volunteerRegistrationsData) await upsertDoc(VolunteerRegistration, { campaignId: item.campaignId, userId: item.userId }, item);
+
+    console.log('[Seed] 23/24 Tasks...');
+    for (const item of tasksData) await upsertDoc(Task, { _id: item._id }, item);
+
+    console.log('[Seed] 24/25 Task Assignments...');
+    for (const item of taskAssignmentsData) await upsertDoc(TaskAssignment, { taskId: item.taskId, assigneeId: item.assigneeId }, item);
+
+    console.log('[Seed] 25/25 Task Applications...');
+    for (const item of taskApplicationsData) await upsertDoc(TaskApplication, { taskId: item.taskId, userId: item.userId }, item);
+
     console.log('===========================================================');
-    console.log('🎉 SEEDED ALL 14 COLLECTIONS TO MONGODB ATLAS CLOUD SUCCESSFULLY!');
+    console.log('🎉 SEEDED ALL 25 COLLECTIONS TO MONGODB ATLAS CLOUD SUCCESSFULLY!');
     console.log('===========================================================');
   } catch (error) {
     console.error('❌ Error seeding database:', error);

@@ -303,6 +303,7 @@ async function getUserCertificates(req, res, next) {
 }
 
 module.exports = {
+  checkAndUnlockAchievements,
   awardPoints,
   getUserPoints,
   createAchievement,

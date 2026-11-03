@@ -11,6 +11,9 @@ const itemCatalogDocs = require('../docs/itemCatalog.doc');
 const campaignDocs = require('../docs/campaign.doc');
 const gamificationDocs = require('../docs/gamification.doc');
 
+// BE3 Swagger Docs
+const operationsDocs = require('../docs/operations.doc');
+
 const swaggerDocument = {
   openapi: '3.0.0',
   info: {
@@ -50,6 +53,7 @@ const swaggerDocument = {
     ...itemCatalogDocs,
     ...campaignDocs,
     ...gamificationDocs,
+    ...operationsDocs,
   },
 };
 
