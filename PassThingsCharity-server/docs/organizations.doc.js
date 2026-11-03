@@ -75,10 +75,14 @@ module.exports = {
           'application/json': {
             schema: {
               type: 'object',
-              required: ['name', 'address'],
+              required: ['name', 'address', 'latitude', 'longitude'],
               properties: {
                 name: { type: 'string', example: 'Trạm Tiếp Nhận Cơ Sở 1' },
                 address: { type: 'string', example: '456 Lê Lợi, Q1, TP.HCM' },
+                latitude: { type: 'string', example: '10.776889', description: 'Vĩ độ (Latitude)' },
+                longitude: { type: 'string', example: '106.700806', description: 'Kinh độ (Longitude)' },
+                openingTime: { type: 'string', example: '08:00', description: 'Giờ mở cửa' },
+                closingTime: { type: 'string', example: '17:00', description: 'Giờ đóng cửa' },
               },
             },
           },
@@ -86,6 +90,10 @@ module.exports = {
       },
       responses: {
         201: { description: 'Tạo trạm thành công' },
+        400: { description: 'Thiếu name, address hoặc tọa độ không hợp lệ' },
+        401: { description: 'Chưa đăng nhập' },
+        403: { description: 'Không có quyền tạo trạm cho tổ chức này' },
+        409: { description: 'Tổ chức cần được Admin duyệt trước khi tạo trạm' },
       },
     },
   },

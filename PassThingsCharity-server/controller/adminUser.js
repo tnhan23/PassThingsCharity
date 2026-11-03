@@ -21,7 +21,7 @@ async function assignStationManager(req,res,next){
     if (!managerRole) {
       return res.status(500).json({
         error: 'Chưa có role STATION_MANAGER trong collection roles.',
-      });z
+      });
     }
 
     user.role=managerRole._id;

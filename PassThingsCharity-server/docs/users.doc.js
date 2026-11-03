@@ -137,11 +137,80 @@ module.exports = {
     patch: {
       tags: ['Users'],
       summary: 'Gán quyền STATION_MANAGER cho user (Chỉ ADMIN)',
+      description: 'Admin cấp role STATION_MANAGER cho tài khoản người dùng. Chỉ áp dụng cho tài khoản đang có role USER.',
       parameters: [
-        { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', example: '671000000000000000000001' }, description: 'ID của user cần gán quyền' },
       ],
       responses: {
-        200: { description: 'Đã cập nhật role thành STATION_MANAGER' },
+        200: {
+          description: 'Đã cấp role STATION_MANAGER và gán trạm thành công',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  message: { type: 'string', example: 'Đã cấp role STATION_MANAGER và gán trạm' },
+                  user: {
+                    type: 'object',
+                    properties: {
+                      id: { type: 'string', example: '671000000000000000000001' },
+                      username: { type: 'string', example: 'user_01' },
+                      role: { type: 'string', example: 'STATION_MANAGER' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        400: {
+          description: 'User ID không hợp lệ',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ErrorResponse' },
+            },
+          },
+        },
+        401: {
+          description: 'Chưa đăng nhập hoặc token không hợp lệ',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ErrorResponse' },
+            },
+          },
+        },
+        403: {
+          description: 'Chỉ ADMIN mới có quyền thực hiện hành động này',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ErrorResponse' },
+            },
+          },
+        },
+        404: {
+          description: 'Không tìm thấy user',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ErrorResponse' },
+            },
+          },
+        },
+        409: {
+          description: 'Chỉ có thể nâng tài khoản đang có role USER hoặc user đã được gán vào trạm này',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ErrorResponse' },
+            },
+          },
+        },
+        500: {
+          description: 'Lỗi server (ví dụ chưa có role STATION_MANAGER trong hệ thống)',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ErrorResponse' },
+            },
+          },
+        },
       },
     },
   },

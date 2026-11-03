@@ -15,22 +15,18 @@ function validateStation(body) {
     return false;
   }
 
-  if (
-    body.latitude !== undefined &&
-    (typeof body.latitude !== 'number' ||
-      body.latitude < -90 ||
-      body.latitude > 90)
-  ) {
-    return false;
+  if (body.latitude !== undefined) {
+    const lat = Number(body.latitude);
+    if (isNaN(lat) || lat < -90 || lat > 90) {
+      return false;
+    }
   }
 
-  if (
-    body.longitude !== undefined &&
-    (typeof body.longitude !== 'number' ||
-      body.longitude < -180 ||
-      body.longitude > 180)
-  ) {
-    return false;
+  if (body.longitude !== undefined) {
+    const lng = Number(body.longitude);
+    if (isNaN(lng) || lng < -180 || lng > 180) {
+      return false;
+    }
   }
 
   return true;
@@ -88,7 +84,7 @@ async function getStation(req, res, next) {
 
 async function createStation(req, res, next) {
   try {
-    const { organizationId } = req.params;
+    const organizationId = req.params.organizationId || (req.body && req.body.organizationId);
     const body = req.body || {};
 
     if (!validateStation(body)) {

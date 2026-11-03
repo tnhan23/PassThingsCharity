@@ -24,6 +24,33 @@ module.exports = {
       phone: { type: 'string', example: '0912345678' },
     },
   },
+  AdminLoginRequest: {
+    type: 'object',
+    required: ['username', 'password'],
+    properties: {
+      username: { type: 'string', example: 'admin_master' },
+      password: { type: 'string', example: 'Admin@123456' },
+    },
+  },
+  AdminRegisterRequest: {
+    type: 'object',
+    required: ['email', 'username', 'password', 'fullname', 'phone'],
+    properties: {
+      email: { type: 'string', format: 'email', example: 'admin@passthings.org' },
+      username: { type: 'string', example: 'admin_master' },
+      password: { type: 'string', format: 'password', example: 'Admin@123456' },
+      fullname: { type: 'string', example: 'Nguyễn Quản Trị' },
+      phone: { type: 'string', example: '0987654321', description: 'Số điện thoại đúng 10 chữ số' },
+    },
+  },
+  ChangePasswordRequest: {
+    type: 'object',
+    required: ['currentPassword', 'newPassword'],
+    properties: {
+      currentPassword: { type: 'string', format: 'password', example: 'Admin@123456' },
+      newPassword: { type: 'string', format: 'password', minLength: 8, example: 'Admin@654321' },
+    },
+  },
   OrganizationRequest: {
     type: 'object',
     required: ['name', 'code', 'address', 'phone', 'email'],
@@ -37,11 +64,28 @@ module.exports = {
   },
   StationRequest: {
     type: 'object',
-    required: ['name', 'address'],
+    required: ['name', 'address', 'latitude', 'longitude'],
     properties: {
       name: { type: 'string', example: 'Trạm Tiếp Nhận Quận 1' },
       address: { type: 'string', example: 'Số 1 Đinh Tiên Hoàng, Q1, TP.HCM' },
       organizationId: { type: 'string', example: '671000000000000000000001' },
+      latitude: { type: 'string', example: '10.776889', description: 'Vĩ độ (Latitude)' },
+      longitude: { type: 'string', example: '106.700806', description: 'Kinh độ (Longitude)' },
+      openingTime: { type: 'string', example: '08:00', description: 'Giờ mở cửa' },
+      closingTime: { type: 'string', example: '17:00', description: 'Giờ đóng cửa' },
+    },
+  },
+  StationUpdateRequest: {
+    type: 'object',
+    minProperties: 1,
+    properties: {
+      name: { type: 'string', example: 'Trạm Tiếp Nhận Quận 1' },
+      address: { type: 'string', example: 'Số 1 Đinh Tiên Hoàng, Q1, TP.HCM' },
+      latitude: { type: 'string', example: '10.776889', description: 'Vĩ độ (Latitude)' },
+      longitude: { type: 'string', example: '106.700806', description: 'Kinh độ (Longitude)' },
+      openingTime: { type: 'string', example: '08:00', description: 'Giờ mở cửa' },
+      closingTime: { type: 'string', example: '17:00', description: 'Giờ đóng cửa' },
+      isActive: { type: 'boolean', example: true },
     },
   },
   // BE2 Schemas
