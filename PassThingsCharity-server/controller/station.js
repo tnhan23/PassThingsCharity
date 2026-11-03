@@ -61,7 +61,7 @@ async function listStations(req, res, next) {
 
     const stations = await Station.find(stationFilter).sort({ createdAt: -1 });
 
-    return res.status(200).json({ data: stations });
+    return res.status(200).json({ total: stations.length, data: stations });
   } catch (error) {
     return next(error);
   }

@@ -31,7 +31,7 @@ module.exports = {
     patch: {
       tags: ['Users'],
       summary: 'User cập nhật hồ sơ của chính mình',
-      description: 'ID tài khoản được lấy từ Bearer token. Đổi ảnh trong form: POST /uploads/users/image với file image để lấy avatarUrl (chưa sửa hồ sơ), sau đó gửi avatarUrl cùng các thông tin vào PATCH này khi bấm Lưu. Bỏ avatarUrl để giữ ảnh cũ; null hoặc chuỗi rỗng để bỏ avatar. Không thể thay đổi role hoặc status bằng endpoint này.',
+      description: 'ID tài khoản được lấy từ Bearer token. Không thể thay đổi role hoặc status bằng endpoint này.',
       requestBody: {
         required: true,
         content: {
@@ -44,7 +44,7 @@ module.exports = {
                 username: { type: 'string' },
                 fullName: { type: 'string' },
                 phone: { type: 'string' },
-                avatarUrl: { type: 'string', format: 'uri', nullable: true, example: 'https://res.cloudinary.com/your-cloud/image/upload/avatar.jpg', description: 'URL HTTPS từ API upload; chỉ lưu vào hồ sơ khi gọi PATCH này.' },
+                avatarUrl: { type: 'string', format: 'uri', nullable: true, example: 'https://res.cloudinary.com/your-cloud/image/upload/avatar.jpg' },
               },
             },
           },

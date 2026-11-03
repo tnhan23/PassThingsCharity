@@ -427,9 +427,9 @@ async function addContributionImages(req, res, next) {
 const { inventoryTransaction } = require('../services/inventory');
 module.exports = {
   lookupDonor,
-  createContribution: inventoryTransaction(createContribution),
+  createContribution: inventoryTransaction(createContribution, 'CONTRIBUTION'),
   getAllContributions,
   getContributionById,
-  updateContributionStatus: inventoryTransaction(updateContributionStatus),
+  updateContributionStatus: inventoryTransaction(updateContributionStatus, 'CONTRIBUTION'),
   addContributionImages,
 };

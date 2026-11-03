@@ -38,7 +38,7 @@ module.exports = {
     patch: {
       tags: ['Organizations'],
       summary: 'Cập nhật thông tin tổ chức (ADMIN, ORG_MANAGER)',
-      description: 'Người tạo tổ chức (USER/ORG_MANAGER/STATION_MANAGER) hoặc ADMIN được sửa. Chọn logo: POST /uploads/organizations/image trả logoUrl, chưa sửa hồ sơ. Khi bấm Lưu, gửi logoUrl cùng thông tin vào PATCH này. Bỏ logoUrl giữ ảnh cũ, null để xóa. Cập nhật bởi người không phải ADMIN sẽ bỏ xác minh và tạm ngừng các trạm thuộc tổ chức theo quy tắc hiện tại.',
+      description: 'Người tạo tổ chức (USER/ORG_MANAGER/STATION_MANAGER) hoặc ADMIN được sửa. Cập nhật bởi người không phải ADMIN sẽ bỏ xác minh và tạm ngừng các trạm thuộc tổ chức theo quy tắc hiện tại.',
       parameters: [
         { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
       ],

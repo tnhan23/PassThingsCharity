@@ -299,8 +299,8 @@ async function updateTransferStatus(req, res, next) {
 
 const { inventoryTransaction } = require('../services/inventory');
 module.exports = {
-  createTransfer: inventoryTransaction(createTransfer),
+  createTransfer: inventoryTransaction(createTransfer, 'TRANSFER'),
   getAllTransfers,
   getTransferById,
-  updateTransferStatus: inventoryTransaction(updateTransferStatus),
+  updateTransferStatus: inventoryTransaction(updateTransferStatus, 'TRANSFER'),
 };
