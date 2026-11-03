@@ -56,7 +56,7 @@ export function LedgerScreen({ mode }: { mode: "content" | "loading" | "error" |
     <Screen tab="give">
       <Eyebrow>Hội Chữ thập đỏ TP.HCM</Eyebrow>
       <Title>Sổ Áo ấm Hà Giang</Title>
-      <Body>Chiến dịch thuộc tổ chức. Ba trạm cùng tham gia. Điều phối chỉ đổi cột đang giữ.</Body>
+      <Body>Ba cột dưới là bản vẽ. Máy chủ lưu một cột currentQuantity. Phần đã giao chỉ là phép tính từ các đợt relief, không ghi thành cột.</Body>
       <Card>
         <Eyebrow>Áo ấm · đơn vị khóa: kg</Eyebrow>
         <View style={{ flexDirection: "row", gap: 8 }}>
@@ -302,7 +302,7 @@ export function InboxScreen({ mode }: { mode: "content" | "empty" | "error" | "l
   if (mode === "loading") {
     return (
       <Screen tab="profile">
-        <Wait title="Đang tải hộp thư" detail="Chưa kết luận hộp thư trống khi danh sách chưa về." />
+        <Wait title="Đang tải hộp thư" detail="Đây là trạng thái bản vẽ. Máy chủ chưa có hộp thư để tải." />
         <Button label="Xem thư đã tải" onPress={() => router.replace("/inbox/content")} />
       </Screen>
     );
@@ -311,7 +311,7 @@ export function InboxScreen({ mode }: { mode: "content" | "empty" | "error" | "l
     return (
       <Screen tab="profile">
         <Title>Không tải được hộp thư</Title>
-        <Body>Biên lai và ca trực không mất. Chỉ danh sách thông báo chưa hiện.</Body>
+        <Body>Đây là trạng thái bản vẽ. Máy chủ chưa có hộp thư. Biên lai và ca trực vẫn nằm ở tiếp nhận và bảng việc.</Body>
         <Button label="Thử lại" onPress={() => router.replace("/inbox/content")} />
       </Screen>
     );
@@ -320,7 +320,7 @@ export function InboxScreen({ mode }: { mode: "content" | "empty" | "error" | "l
     return (
       <Screen tab="profile">
         <Title>Hộp thư trống</Title>
-        <Body>Khi trạm ký biên lai hoặc duyệt ca, thông báo sẽ hiện ở đây.</Body>
+        <Body>Máy chủ chưa có hộp thư. Màn này chỉ là bản vẽ.</Body>
         <Button label="Về trang chủ" onPress={() => router.push("/")} />
       </Screen>
     );
@@ -328,6 +328,7 @@ export function InboxScreen({ mode }: { mode: "content" | "empty" | "error" | "l
   return (
     <Screen tab="profile">
       <Title>Thông báo</Title>
+      <Body>Các tin dưới là bản vẽ. Máy chủ chưa có hộp thư. Biên lai và ca trực nằm ở tiếp nhận và bảng việc.</Body>
       <Card>
         <Eyebrow>Hôm nay · 10:46</Eyebrow>
         <Text style={{ fontFamily: fonts.semibold, fontSize: 16 }}>Biên lai đã ký</Text>

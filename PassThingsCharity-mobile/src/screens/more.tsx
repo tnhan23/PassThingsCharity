@@ -1,14 +1,19 @@
-import { router } from "expo-router";
-import { useEffect, useState } from "react";
-import { ActivityIndicator, Text, TextInput, View } from "react-native";
+import { router, useLocalSearchParams } from "expo-router";
+import { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Platform, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Location from "expo-location";
 import { backend } from "@/api/backend";
 import { ApiError } from "@/api/client";
-import { useSession } from "@/api/session";
+import { isOperator, useSession } from "@/api/session";
 import type { StationRow } from "@/api/types";
 import { Screen } from "@/components/chrome";
+import { PasswordReset } from "@/components/form";
 import { Body, Button, Card, Eyebrow, Icon, Pill, Tap, Title } from "@/components/ui";
 import { colors, fonts } from "@/theme";
+
+const AppleMaps = Platform.OS === "ios" ? (require("expo-maps") as typeof import("expo-maps")).AppleMaps : null;
+const LiveQr = Platform.OS === "web" ? null : (require("./qr-camera") as typeof import("./qr-camera")).LiveQr;
 
 const stations = [
   { name: "Trạm Đa Kao", address: "45 Mạc Đĩnh Chi, Quận 1", hours: "08:00–18:30", km: "1,2 km", load: "Đang nhận" },
@@ -16,10 +21,46 @@ const stations = [
   { name: "Trạm Bình Thạnh", address: "125 Bạch Đằng, Bình Thạnh", hours: "08:30–20:00", km: "2,4 km", load: "Gần đầy" },
 ];
 
-function StationCards() {
+function distanceKm(here: PlaceFix, latitude: number, longitude: number) {
+  const earth = 6371;
+  const lat = ((latitude - here.latitude) * Math.PI) / 180;
+  const lng = ((longitude - here.longitude) * Math.PI) / 180;
+  const a = Math.sin(lat / 2) ** 2
+    + Math.cos((here.latitude * Math.PI) / 180) * Math.cos((latitude * Math.PI) / 180) * Math.sin(lng / 2) ** 2;
+  return earth * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function stationDistance(here: PlaceFix | null, station: StationRow) {
+  const latitude = Number(station.latitude);
+  const longitude = Number(station.longitude);
+  if (!here || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  return distanceKm(here, latitude, longitude);
+}
+
+function StationPeek({ station }: { station: StationRow }) {
+  const latitude = Number(station.latitude);
+  const longitude = Number(station.longitude);
+  if (!AppleMaps || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return <Body muted>Bản đồ Apple mở trên iPhone.</Body>;
+  }
+  return (
+    <View style={{ height: 168, borderRadius: 14, overflow: "hidden" }}>
+      <AppleMaps.View
+        style={{ flex: 1, width: "100%" }}
+        cameraPosition={{ coordinates: { latitude, longitude }, zoom: 16 }}
+        markers={[{ id: station._id, title: station.name, coordinates: { latitude, longitude }, tintColor: colors.primary }]}
+        uiSettings={{ myLocationButtonEnabled: false, compassEnabled: false, scaleBarEnabled: false }}
+        colorScheme={AppleMaps.MapColorScheme.LIGHT}
+      />
+    </View>
+  );
+}
+
+function StationCards({ here }: { here: PlaceFix | null }) {
   const { token } = useSession();
   const [rows, setRows] = useState<StationRow[] | null>(null);
   const [problem, setProblem] = useState("");
+  const [openId, setOpenId] = useState("");
 
   useEffect(() => {
     if (!token) {
@@ -86,13 +127,333 @@ function StationCards() {
 
   return (
     <View style={{ gap: 14 }}>
-      {rows.map((station) => (
-        <Card key={station._id}>
-          <Eyebrow>{station.isActive ? "Đang mở" : "Chưa kích hoạt"}</Eyebrow>
-          <Text style={{ fontFamily: fonts.bold, fontSize: 17 }}>{station.name}</Text>
-          <Body muted>{station.address}</Body>
-        </Card>
+      {rows.map((station) => {
+        const km = stationDistance(here, station);
+        const latitude = Number(station.latitude);
+        const longitude = Number(station.longitude);
+        const canMap = Number.isFinite(latitude) && Number.isFinite(longitude);
+        const open = openId === station._id;
+        return (
+          <Card key={station._id}>
+            <Tap
+              onPress={() => {
+                if (!canMap) return;
+                setOpenId(open ? "" : station._id);
+              }}
+              accessibilityLabel={`Xem ${station.name} trên bản đồ`}
+            >
+              <View style={{ gap: 4 }}>
+                <Eyebrow>{station.isActive ? "Đang mở" : "Chưa kích hoạt"}</Eyebrow>
+                <Text style={{ fontFamily: fonts.bold, fontSize: 17 }}>{station.name}</Text>
+                <Body muted>{station.address}</Body>
+                {station.openingTime || station.closingTime ? <Body muted>{`${station.openingTime || "?"} đến ${station.closingTime || "?"}`}</Body> : null}
+                {km !== null ? <Body muted>{`Cách bạn ${km.toFixed(1)} km.`}</Body> : <Body muted>Chưa có vị trí đang đứng nên chưa tính khoảng cách.</Body>}
+                <Body muted>{canMap ? (open ? "Bấm lại để thu bản đồ." : "Bấm để mở bản đồ của trạm này.") : "Trạm chưa có tọa độ nên chưa mở được bản đồ."}</Body>
+              </View>
+            </Tap>
+            <Button label="Xem chi tiết" tone="ghost" onPress={() => router.push(`/station/${station._id}`)} />
+            {open && canMap ? <StationPeek station={station} /> : null}
+          </Card>
+        );
+      })}
+    </View>
+  );
+}
+
+type PlaceFix = { latitude: number; longitude: number };
+
+function usePlaceAccess(active: boolean) {
+  const [text, setText] = useState("Đang mở bản đồ các trạm.");
+  const [here, setHere] = useState<PlaceFix | null>(null);
+  useEffect(() => {
+    if (!active) return;
+    let cancelled = false;
+    setText("Điện thoại đang hỏi quyền vị trí. Hãy bấm Cho phép.");
+    Location.requestForegroundPermissionsAsync()
+      .then(async ({ status }) => {
+        if (cancelled) return;
+        if (status !== "granted") {
+          setHere(null);
+          setText("Chưa cho phép vị trí. Vào Cài đặt iPhone, chọn Pass Things Charity, rồi bật Vị trí khi dùng app.");
+          return;
+        }
+        const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        if (cancelled) return;
+        setHere({ latitude: position.coords.latitude, longitude: position.coords.longitude });
+        setText("Chấm xanh là bạn. Chấm đậm là trạm nhận đồ. Mũi tên sát mép chỉ trạm ngoài khung và số km.");
+      })
+      .catch(() => {
+        if (!cancelled) setText("Điện thoại không mở được quyền vị trí.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [active]);
+  return { text, here };
+}
+
+function mercatorY(latitude: number) {
+  const sine = Math.sin((latitude * Math.PI) / 180);
+  return 0.5 - Math.log((1 + sine) / (1 - sine)) / (4 * Math.PI);
+}
+
+const rimChipWide = 92;
+const rimChipTall = 30;
+
+function spreadAlong(values: number[], min: number, max: number, gap: number) {
+  const next = values.map((value) => Math.min(Math.max(value, min), max));
+  for (let index = 1; index < next.length; index += 1) {
+    if (next[index] < next[index - 1] + gap) next[index] = next[index - 1] + gap;
+  }
+  const overflow = next[next.length - 1] - max;
+  if (overflow > 0) {
+    for (let index = 0; index < next.length; index += 1) next[index] -= overflow;
+  }
+  for (let index = next.length - 2; index >= 0; index -= 1) {
+    if (next[index] > next[index + 1] - gap) next[index] = next[index + 1] - gap;
+  }
+  return next.map((value) => Math.min(Math.max(value, min), max));
+}
+
+function edgePoints(
+  rows: StationRow[] | null,
+  here: PlaceFix | null,
+  camera: { latitude: number; longitude: number; zoom: number },
+  size: { width: number; height: number },
+  bottomInset: number,
+) {
+  if (!size.width || !size.height) return [];
+  const world = 256 * 2 ** camera.zoom;
+  const centerX = size.width / 2;
+  const centerY = size.height / 2;
+  const inset = 8;
+  type Hit = { id: string; name: string; km: number | null; turn: number; edge: "left" | "right" | "top" | "bottom"; along: number };
+  const hits: Hit[] = [];
+  for (const station of rows ?? []) {
+    const latitude = Number(station.latitude);
+    const longitude = Number(station.longitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) continue;
+    const dx = ((longitude - camera.longitude) / 360) * world;
+    const dy = (mercatorY(latitude) - mercatorY(camera.latitude)) * world;
+    if (dx === 0 && dy === 0) continue;
+    const screenX = centerX + dx;
+    const screenY = centerY + dy;
+    if (
+      screenX >= inset && screenX <= size.width - inset
+      && screenY >= inset && screenY <= size.height - bottomInset
+    ) continue;
+    let scale = 1;
+    if (dx > 0) scale = Math.min(scale, (size.width - inset - centerX) / dx);
+    if (dx < 0) scale = Math.min(scale, (inset - centerX) / dx);
+    if (dy > 0) scale = Math.min(scale, (size.height - bottomInset - inset - centerY) / dy);
+    if (dy < 0) scale = Math.min(scale, (inset - centerY) / dy);
+    if (scale >= 1) continue;
+    const x = centerX + dx * scale;
+    const y = centerY + dy * scale;
+    const edge = x <= inset + 24 ? "left" : x >= size.width - inset - 24 ? "right" : y <= inset + 24 ? "top" : "bottom";
+    const vertical = edge === "left" || edge === "right";
+    hits.push({
+      id: station._id,
+      name: station.name,
+      km: stationDistance(here, station),
+      turn: (Math.atan2(dx, -dy) * 180) / Math.PI,
+      edge,
+      along: vertical ? y - rimChipTall / 2 : x - rimChipWide / 2,
+    });
+  }
+  const placed: { id: string; name: string; km: number | null; turn: number; left: number; top: number }[] = [];
+  for (const edge of ["left", "right", "top", "bottom"] as const) {
+    const group = hits.filter((hit) => hit.edge === edge).sort((a, b) => a.along - b.along);
+    if (!group.length) continue;
+    const vertical = edge === "left" || edge === "right";
+    const min = edge === "right" ? 72 : 12;
+    const max = vertical
+      ? size.height - bottomInset - rimChipTall - 12
+      : size.width - rimChipWide - (edge === "top" ? 64 : 12);
+    if (max <= min) continue;
+    const along = spreadAlong(group.map((hit) => hit.along), min, max, vertical ? rimChipTall + 8 : rimChipWide + 8);
+    group.forEach((hit, index) => {
+      const spot = along[index];
+      if (edge === "left") placed.push({ ...hit, left: inset, top: spot });
+      if (edge === "right") placed.push({ ...hit, left: size.width - inset - rimChipWide, top: spot });
+      if (edge === "top") placed.push({ ...hit, left: spot, top: inset });
+      if (edge === "bottom") placed.push({ ...hit, left: spot, top: size.height - bottomInset - inset - rimChipTall });
+    });
+  }
+  return placed;
+}
+
+function stationFixes(rows: StationRow[] | null) {
+  return (rows ?? []).flatMap((station) => {
+    const latitude = Number(station.latitude);
+    const longitude = Number(station.longitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return [];
+    return [{ id: station._id, title: station.name, coordinates: { latitude, longitude }, tintColor: colors.primary }];
+  });
+}
+
+function StationFacts({ station, here }: { station: StationRow; here: PlaceFix | null }) {
+  const km = stationDistance(here, station);
+  const hours = station.openingTime || station.closingTime
+    ? `${station.openingTime || "?"} đến ${station.closingTime || "?"}`
+    : "Chưa có giờ mở cửa.";
+  return (
+    <Card>
+      <Eyebrow>{station.isActive ? "Đang mở" : "Chưa kích hoạt"}</Eyebrow>
+      <Title>{station.name}</Title>
+      <Body>{station.address}</Body>
+      <Body muted>{hours}</Body>
+      <Body muted>{km !== null ? `Cách bạn ${km.toFixed(1)} km.` : "Chưa có vị trí đang đứng nên chưa tính khoảng cách."}</Body>
+      <Button label="Xem chi tiết" tone="ghost" onPress={() => router.push(`/station/${station._id}`)} />
+    </Card>
+  );
+}
+
+function PlaceMap({ here, focusId }: { here: PlaceFix | null; focusId: string }) {
+  const { token } = useSession();
+  const mapRef = useRef<{ setCameraPosition: (config?: { coordinates?: { latitude?: number; longitude?: number }; zoom?: number }) => Promise<void> } | null>(null);
+  const glideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const moved = useRef(false);
+  const anchor = useRef({ latitude: here?.latitude ?? 10.7769, longitude: here?.longitude ?? 106.7009, zoom: here ? 14 : 12 });
+  if (!moved.current && here) anchor.current = { latitude: here.latitude, longitude: here.longitude, zoom: 14 };
+  const [rows, setRows] = useState<StationRow[] | null>(null);
+  const [infoId, setInfoId] = useState(focusId);
+  const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
+  const [liveCamera, setLiveCamera] = useState<{ latitude: number; longitude: number; zoom: number } | null>(null);
+  useEffect(() => () => {
+    if (glideTimer.current) clearTimeout(glideTimer.current);
+  }, []);
+  useEffect(() => {
+    setInfoId(focusId);
+  }, [focusId]);
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    backend.listStations(token)
+      .then((data) => {
+        if (!cancelled) setRows(data.data);
+      })
+      .catch(() => {
+        if (!cancelled) setRows([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+  function glide(latitude: number, longitude: number) {
+    moved.current = true;
+    const from = liveCamera ?? anchor.current;
+    if (glideTimer.current) clearTimeout(glideTimer.current);
+    const km = distanceKm(from, latitude, longitude);
+    const map = mapRef.current;
+    if (!map || km < 1.2) {
+      void map?.setCameraPosition({ coordinates: { latitude, longitude }, zoom: 16 });
+      return;
+    }
+    void map.setCameraPosition({
+      coordinates: {
+        latitude: (from.latitude + latitude) / 2,
+        longitude: (from.longitude + longitude) / 2,
+      },
+      zoom: Math.max(10, Math.min(12.5, 15.2 - Math.log2(km))),
+    });
+    glideTimer.current = setTimeout(() => {
+      void mapRef.current?.setCameraPosition({ coordinates: { latitude, longitude }, zoom: 16 });
+    }, 980);
+  }
+  useEffect(() => {
+    if (!focusId || !rows) return;
+    const station = rows.find((row) => row._id === focusId);
+    const latitude = Number(station?.latitude);
+    const longitude = Number(station?.longitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+    glide(latitude, longitude);
+  }, [focusId, rows]);
+  const markers = stationFixes(rows);
+  const infoStation = rows?.find((row) => row._id === infoId) ?? null;
+  const camera = liveCamera ?? anchor.current;
+  const outside = edgePoints(rows, here, camera, mapSize, infoStation ? 150 : 36);
+  if (Platform.OS !== "ios" || !AppleMaps) {
+    return infoStation ? <StationFacts station={infoStation} here={here} /> : <Body>Bản đồ Apple mở trên iPhone. Trên máy này chỉ xem được danh sách trạm.</Body>;
+  }
+  return (
+    <View
+      style={{ flex: 1, borderRadius: 18, overflow: "hidden" }}
+      onLayout={(event) => {
+        const { width, height } = event.nativeEvent.layout;
+        setMapSize({ width, height });
+      }}
+    >
+      <AppleMaps.View
+        ref={mapRef}
+        style={{ flex: 1, width: "100%" }}
+        cameraPosition={{
+          coordinates: { latitude: anchor.current.latitude, longitude: anchor.current.longitude },
+          zoom: anchor.current.zoom,
+        }}
+        markers={markers}
+        properties={{ isMyLocationEnabled: Boolean(here) }}
+        uiSettings={{ myLocationButtonEnabled: true, compassEnabled: true, scaleBarEnabled: true }}
+        colorScheme={AppleMaps.MapColorScheme.LIGHT}
+        onCameraMove={(event) => {
+          if (!event.coordinates.latitude || !event.coordinates.longitude) return;
+          setLiveCamera({
+            latitude: event.coordinates.latitude,
+            longitude: event.coordinates.longitude,
+            zoom: event.zoom,
+          });
+        }}
+        onMarkerClick={(marker) => {
+          const id = marker.id || "";
+          setInfoId(id);
+          const latitude = marker.coordinates?.latitude;
+          const longitude = marker.coordinates?.longitude;
+          if (latitude == null || longitude == null) return;
+          glide(latitude, longitude);
+        }}
+        onMapClick={() => setInfoId("")}
+      />
+      {outside.map((point) => (
+        <Tap
+          key={point.id}
+          accessibilityLabel={`${point.name}, ${point.km === null ? "chưa có khoảng cách" : `cách ${point.km.toFixed(1)} km`}`}
+          onPress={() => {
+            setInfoId(point.id);
+            const station = rows?.find((row) => row._id === point.id);
+            const latitude = Number(station?.latitude);
+            const longitude = Number(station?.longitude);
+            if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+            glide(latitude, longitude);
+          }}
+          style={{
+            position: "absolute",
+            left: point.left,
+            top: point.top,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 4,
+            backgroundColor: colors.primary,
+            borderRadius: 999,
+            paddingLeft: 6,
+            paddingRight: 8,
+            paddingVertical: 4,
+            borderWidth: 2,
+            borderColor: "#ffffff",
+          }}
+        >
+          <View style={{ transform: [{ rotate: `${point.turn}deg` }] }}>
+            <Icon name="arrow-upward" size={14} color={colors.onPrimary} />
+          </View>
+          <Text style={{ fontFamily: fonts.semibold, fontSize: 11, color: colors.onPrimary }}>
+            {point.km === null ? "…" : `${point.km.toFixed(1)} km`}
+          </Text>
+        </Tap>
       ))}
+      {infoStation ? (
+        <View style={{ position: "absolute", left: 12, right: 12, bottom: 12 }}>
+          <StationFacts station={infoStation} here={here} />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -102,6 +463,10 @@ export function StationsScreen({
 }: {
   state: "list" | "map" | "overload" | "closed" | "loading" | "error" | "denied";
 }) {
+  const place = usePlaceAccess(state === "map" || state === "list");
+  const { user } = useSession();
+  const params = useLocalSearchParams<{ station?: string }>();
+  const focusId = typeof params.station === "string" ? params.station : "";
   if (state === "denied") {
     return (
       <Screen tab="stations">
@@ -142,30 +507,29 @@ export function StationsScreen({
       </Screen>
     );
   }
+  if (state === "map") {
+    return (
+      <Screen tab="stations" scroll={false}>
+        <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 12, gap: 10 }}>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <Pill label="Danh sách" active={false} onPress={() => router.push("/stations/list")} />
+            <Pill label="Bản đồ" active onPress={() => router.push("/stations/map")} />
+          </View>
+          <PlaceMap here={place.here} focusId={focusId} />
+          <Body>{`${place.text} Bấm vùng trống trên bản đồ để đóng thẻ trạm.`}</Body>
+        </View>
+      </Screen>
+    );
+  }
   return (
     <Screen tab="stations">
       <View style={{ flexDirection: "row", gap: 8 }}>
-        <Pill label="Danh sách" active={state === "list"} onPress={() => router.push("/stations/list")} />
-        <Pill label="Bản đồ" active={state !== "list"} onPress={() => router.push("/stations/map")} />
+        <Pill label="Danh sách" active onPress={() => router.push("/stations/list")} />
+        <Pill label="Bản đồ" active={false} onPress={() => router.push("/stations/map")} />
       </View>
-      {state !== "list" ? (
-        <Card style={{ height: 220, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" }}>
-          <Icon name="map" size={36} color={colors.primary} />
-          <Body>Ba trạm trong thành phố. Đa Kao đang nhận áo ấm.</Body>
-          {state === "overload" ? <Body>Đa Kao gần đầy. Ưu tiên mang mì gói sang Phú Mỹ Hưng.</Body> : null}
-        </Card>
-      ) : null}
-      {state === "overload" ? (
-        <Card style={{ backgroundColor: colors.warningSoft }}>
-          <Title>Trạm Đa Kao gần đầy</Title>
-          <Body>Áo ấm đã gần mục tiêu tập kết. Bạn vẫn mang được mì gói và thuốc, hoặc tới Phú Mỹ Hưng.</Body>
-        </Card>
-      ) : null}
-      <StationCards />
-      <Button label="Vào quầy kiểm định" onPress={() => router.push("/intake/review")} />
-      <Button label="Trạm đã đóng cửa" tone="ghost" onPress={() => router.push("/stations/closed")} />
-      <Button label="Ca trực hôm nay" tone="ghost" onPress={() => router.push("/staff/roster")} />
-      <Button label="Không có quyền vị trí" tone="ghost" onPress={() => router.push("/stations/denied")} />
+      <StationCards here={place.here} />
+      {isOperator(user?.role) ? <Button label="Vào quầy kiểm định" onPress={() => router.push("/intake/review")} /> : null}
+      {user?.role === "STATION_MANAGER" || user?.role === "ORG_MANAGER" || user?.role === "STAFF" ? <Button label="Ca trực hôm nay" tone="ghost" onPress={() => router.push("/shifts")} /> : null}
     </Screen>
   );
 }
@@ -232,7 +596,7 @@ export function OtpScreen({ state }: { state: "enter" | "resend" | "error" | "lo
     return (
       <Screen tab="profile">
         <Title>Tạm khóa nhập mã</Title>
-        <Body>Ba lần sai. Đợi 15 phút hoặc mang đồ tới quầy với tư cách khách. Khách vẫn được ghi nhận, không có điểm.</Body>
+        <Body>Máy chủ không khóa sau ba lần sai. Mã hết hạn sau 10 phút. Gửi email mới để lấy mã khác.</Body>
         <Button label="Mang đồ như khách" onPress={() => router.push("/intake/guest")} />
         <Button label="Nhập lại sau" tone="ghost" onPress={() => router.push("/otp/enter")} />
       </Screen>
@@ -240,30 +604,9 @@ export function OtpScreen({ state }: { state: "enter" | "resend" | "error" | "lo
   }
   return (
     <Screen tab="profile">
-      <Title>Nhập mã 6 số</Title>
-      <Body muted>Mã gửi tới 0908 ••• 412. Khách mang đồ tại quầy không bắt buộc bước này.</Body>
-      <TextInput
-        keyboardType="number-pad"
-        maxLength={6}
-        placeholder="••••••"
-        placeholderTextColor={colors.outline}
-        style={{
-          fontFamily: fonts.bold,
-          fontSize: 32,
-          letterSpacing: 8,
-          textAlign: "center",
-          color: colors.ink,
-          backgroundColor: colors.card,
-          borderRadius: 14,
-          borderWidth: 1,
-          borderColor: state === "error" ? colors.error : colors.hairline,
-          minHeight: 64,
-        }}
-      />
-      {state === "error" ? <Text style={{ color: colors.error, fontFamily: fonts.medium }}>Mã không đúng. Còn 2 lần.</Text> : null}
-      {state === "resend" ? <Body muted>Gửi lại sau 42 giây.</Body> : <Button label="Gửi lại mã" tone="ghost" onPress={() => router.push("/otp/resend")} />}
-      <Button label="Xác nhận" onPress={() => router.replace("/profile/full")} />
-      <Button label="Xem mã sai" tone="ghost" onPress={() => router.push("/otp/error")} />
+      <PasswordReset />
+      {state === "error" ? <Body>Mã sai hoặc đã hết hạn. Gửi lại email để lấy mã mới.</Body> : null}
+      {state === "resend" ? <Body muted>Bấm Gửi mã ở form trên. Máy chủ không đếm 42 giây.</Body> : null}
       <Button label="Mã bị khóa" tone="ghost" onPress={() => router.push("/otp/locked")} />
     </Screen>
   );
@@ -312,14 +655,7 @@ export function QrScreen({ state }: { state: "scan" | "error" | "success" | "exp
   }
   return (
     <Screen tab="stations">
-      <Card style={{ height: 240, alignItems: "center", justifyContent: "center", backgroundColor: colors.primary }}>
-        <Text style={{ fontFamily: fonts.semibold, color: colors.onPrimary }}>Đưa mã quầy vào khung</Text>
-      </Card>
-      <Body muted>Bản xem thử chưa mở camera. Chọn một kết quả quét.</Body>
-      <Button label="Quét thành công" onPress={() => router.push("/qr/success")} />
-      <Button label="Mã ngoài phạm vi" tone="ghost" onPress={() => router.push("/qr/error")} />
-      <Button label="Mã hết hạn" tone="ghost" onPress={() => router.push("/qr/expired")} />
-      <Button label="Đang kiểm tra vị trí" tone="ghost" onPress={() => router.push("/qr/checking")} />
+      {LiveQr ? <LiveQr /> : <Body>Camera quét mã mở trên điện thoại. Máy chủ chưa nhận mã này.</Body>}
     </Screen>
   );
 }
@@ -333,7 +669,7 @@ export function ReceiveScreen({ state }: { state: "form" | "error" | "success" |
         <Eyebrow>Hồ sơ #RCV-2025-0891</Eyebrow>
         <Title>Đã gửi phiếu nhận</Title>
         <Body>Trạm Đa Kao sẽ soạn đồ ấm và sách lớp 3. Bạn nhận mã PIN qua SMS. Danh tính không đăng công khai.</Body>
-        <Body muted>Phiếu này là nhu cầu cá nhân tại trạm, tách khỏi đợt bàn giao cho đại diện vùng lũ.</Body>
+        <Body muted>Máy chủ chưa có phiếu xin nhận của người dân. Giao hàng cứu trợ nằm ở màn phân phối.</Body>
         <Button label="Về trang chủ" onPress={() => router.push("/")} />
       </Screen>
     );
@@ -512,15 +848,16 @@ export function SettingsScreen({ mode = "ready" }: { mode?: "ready" | "off" | "s
 
 export function MenuScreen() {
   const insets = useSafeAreaInsets();
+  const { user } = useSession();
   return (
     <View style={{ flex: 1, backgroundColor: "rgba(7,36,26,0.45)", justifyContent: "flex-end", alignItems: "center" }}>
       <View style={{ width: "100%", maxWidth: 430, backgroundColor: colors.card, padding: 20, paddingBottom: insets.bottom + 20, gap: 10, borderTopLeftRadius: 20, borderTopRightRadius: 20 }}>
         <Title>Bạn muốn làm gì?</Title>
         <Button label="Mang đồ tới trạm" onPress={() => router.replace("/stations/map")} />
         <Button label="Đăng ký tình nguyện" tone="ghost" onPress={() => router.replace("/volunteer/form")} />
-        <Button label="Vận hành máy chủ" tone="ghost" onPress={() => router.replace("/desk")} />
+        {isOperator(user?.role) ? <Button label="Vận hành" tone="ghost" onPress={() => router.replace("/desk")} /> : null}
         <Button label="Xin nhận hỗ trợ" tone="ghost" onPress={() => router.replace("/receive/form")} />
-        <Button label="Check-in ca" tone="ghost" onPress={() => router.replace("/qr/scan")} />
+        <Button label="Quét mã QR" tone="ghost" onPress={() => router.replace("/qr/scan")} />
         <Button label="Đóng" tone="ghost" onPress={() => router.back()} />
       </View>
     </View>
