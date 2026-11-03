@@ -97,8 +97,9 @@ const startServer = (port) => {
 
 mongoose
   .connect(process.env.MONGODB_URI)
-  .then(() => {
+  .then(async () => {
     console.log('Đã kết nối MongoDB');
+    await require('./services/inventory').initializeInventory();
     startServer(DEFAULT_PORT);
   })
   .catch((error) => {

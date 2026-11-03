@@ -3,7 +3,7 @@ module.exports = {
     patch: {
       tags: ['Gamification'],
       summary: 'Lưu thông tin và ảnh huy hiệu từ form chỉnh sửa',
-      description: 'ADMIN hoặc người tạo có role ORG_MANAGER/STATION_MANAGER được sửa. Upload ảnh trước qua POST /uploads/achievements/image để lấy badgeIconUrl; gửi URL cùng thông tin vào PATCH này khi bấm Lưu. Bỏ trường ảnh để giữ ảnh cũ, null để xóa ảnh. Không nhận createdBy từ FE.',
+      description: 'ADMIN hoặc người tạo có role ORG_MANAGER/STATION_MANAGER được sửa. Không nhận createdBy từ FE.',
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
       requestBody: { required: true, content: { 'application/json': { schema: {
         type: 'object', minProperties: 1,

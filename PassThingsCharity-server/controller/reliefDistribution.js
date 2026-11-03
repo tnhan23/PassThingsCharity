@@ -362,9 +362,9 @@ async function getCampaignReliefSummary(req, res, next) {
 
 const { inventoryTransaction } = require('../services/inventory');
 module.exports = {
-  createDistribution: inventoryTransaction(createDistribution),
+  createDistribution: inventoryTransaction(createDistribution, 'DISTRIBUTION'),
   getAllDistributions,
   getDistributionById,
-  updateDistributionStatus: inventoryTransaction(updateDistributionStatus),
+  updateDistributionStatus: inventoryTransaction(updateDistributionStatus, 'DISTRIBUTION'),
   getCampaignReliefSummary,
 };

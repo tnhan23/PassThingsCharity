@@ -72,7 +72,7 @@ module.exports = {
     properties: {
       name: { type: 'string' }, code: { type: 'string' }, address: { type: 'string' },
       phone: { type: 'string' }, email: { type: 'string', format: 'email' },
-      logoUrl: { type: 'string', format: 'uri', nullable: true, description: 'URL từ POST /uploads/organizations/image; bỏ qua giữ ảnh cũ, null để xóa. Chỉ lưu khi bấm Lưu và gửi PATCH.' },
+      logoUrl: { type: 'string', format: 'uri', nullable: true },
     },
   },
   CreateStationManagerRequest: {
@@ -112,7 +112,7 @@ module.exports = {
     type: 'object',
     minProperties: 1,
     properties: {
-      imageUrl: { type: 'string', format: 'uri', nullable: true, description: 'URL từ POST /uploads/stations/image. Chỉ lưu khi gửi PATCH; bỏ qua giữ ảnh cũ, null để xóa ảnh.' },
+      imageUrl: { type: 'string', format: 'uri', nullable: true },
       name: { type: 'string', example: 'Trạm Tiếp Nhận Quận 1' },
       address: { type: 'string', example: 'Số 1 Đinh Tiên Hoàng, Q1, TP.HCM' },
       latitude: { type: 'string', example: '10.776889', description: 'Vĩ độ (Latitude)' },
@@ -136,7 +136,7 @@ module.exports = {
     type: 'object',
     minProperties: 1,
     properties: {
-      imageUrl: { type: 'string', format: 'uri', nullable: true, description: 'URL từ POST /uploads/item-categories/image. Chỉ người tạo hoặc ADMIN được đổi ảnh; null để xóa ảnh.' },
+      imageUrl: { type: 'string', format: 'uri', nullable: true },
       name: { type: 'string', example: 'Thực phẩm' },
       description: { type: 'string', example: 'Các loại thực phẩm, đồ khô, đồ hộp cứu trợ' },
       isActive: { type: 'boolean', example: true },
@@ -157,7 +157,7 @@ module.exports = {
     type: 'object',
     minProperties: 1,
     properties: {
-      imageUrl: { type: 'string', format: 'uri', nullable: true, description: 'URL từ POST /uploads/item-types/image. Chỉ người tạo hoặc ADMIN được đổi ảnh; null để xóa ảnh.' },
+      imageUrl: { type: 'string', format: 'uri', nullable: true },
       categoryId: { type: 'string', example: '6523456789abcdef00000101' },
       name: { type: 'string', example: 'Mì gói' },
       unit: { type: 'string', enum: ['KG', 'PAIR', 'BOX', 'PACK'], example: 'BOX' },
@@ -183,7 +183,7 @@ module.exports = {
     description: 'If either date is changed, the resulting campaign duration must be between 120 and 168 hours.',
     minProperties: 1,
     properties: {
-      imageUrl: { type: 'string', format: 'uri', nullable: true, description: 'URL từ POST /uploads/campaigns/image. Chỉ người tạo hoặc ADMIN được đổi ảnh; null để xóa ảnh.' },
+      imageUrl: { type: 'string', format: 'uri', nullable: true },
       title: { type: 'string', example: 'Cứu trợ lũ lụt Miền Trung 2026' },
       description: { type: 'string', example: 'Chiến dịch quyên góp vật phẩm cứu trợ bà con vùng lũ' },
       startDate: { type: 'string', format: 'date-time', example: '2026-10-15T00:00:00.000Z' },

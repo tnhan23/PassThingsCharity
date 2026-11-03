@@ -3,7 +3,7 @@ module.exports = {
     get: {
       tags: ['Campaigns'],
       summary: 'Lấy danh sách các Campaign cứu trợ (Public / Filter)',
-      description: 'Mỗi chiến dịch có items và progress. Mỗi vật phẩm có targetQuantity, currentQuantity/collectedQuantity, stockQuantity, inTransitQuantity, distributedQuantity, remainingQuantity, progressPercent, isFulfilled. Tiến độ tính từ các phiếu kho, cùng loại hàng và đơn vị chuẩn; chuyển trạm không cộng trùng, hàng đã trao vẫn tính hoàn thành mục tiêu.',
+      description: 'Mỗi chiến dịch có items và progress: targetQuantity, currentQuantity/collectedQuantity, inTransitQuantity, distributedQuantity, remainingQuantity, progressPercent, isFulfilled. Tổng đã tiếp nhận và số thiếu tính theo phiếu quyên góp của chiến dịch, không lấy kho chung để cộng cho nhiều chiến dịch. Không còn stockQuantity vì hàng trong kho trạm chưa được phân bổ riêng theo chiến dịch. Chuyển trạm và trao cứu trợ không làm tăng/giảm số đã quyên góp.',
       security: [],
       parameters: [
         { name: 'status', in: 'query', schema: { type: 'string', enum: ['PUBLISHED', 'ACTIVE', 'COMPLETED', 'CANCELLED'] }, description: 'Lọc trạng thái công khai của chiến dịch' },
@@ -38,7 +38,7 @@ module.exports = {
     get: {
       tags: ['Campaigns'],
       summary: 'Xem chi tiết 1 Campaign (Kèm nhu cầu vật phẩm & các Trạm tiếp nhận)',
-      description: 'items trả mục tiêu và tiến độ từ kho: stockQuantity (tồn tại các trạm), inTransitQuantity (đang vận chuyển), distributedQuantity (đã trao), collectedQuantity/currentQuantity (tổng ba số), remainingQuantity (còn cần quyên góp), progressPercent (0–100), isFulfilled. progress tổng hợp số loại hàng đã đủ, không cộng các đơn vị khác nhau. MongoDB cần hỗ trợ transaction để đọc số liệu cùng một thời điểm.',
+      description: 'items trả targetQuantity, collectedQuantity/currentQuantity (quyên góp đã được tiếp nhận cho chiến dịch), inTransitQuantity (đang chuyển theo phiếu chiến dịch), distributedQuantity (đã trao), remainingQuantity (mục tiêu trừ đã tiếp nhận, tối thiểu 0), progressPercent (0–100), isFulfilled. Không trả stockQuantity vì kho dùng chung theo trạm. Muốn xem hàng thực có dùng GET /inventory theo quyền trạm. progress tổng hợp số loại hàng đã đủ, không cộng các đơn vị khác nhau. MongoDB cần hỗ trợ transaction.',
       security: [],
       parameters: [
         { name: 'id', in: 'path', required: true, schema: { type: 'string' } },

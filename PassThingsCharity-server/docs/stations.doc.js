@@ -4,7 +4,26 @@ module.exports = {
       tags: ['Stations'],
       summary: 'Lấy danh sách các trạm tiếp nhận',
       responses: {
-        200: { description: 'Danh sách các trạm' },
+        200: {
+          description: 'Danh sách trạm và tổng số trạm người dùng có quyền xem.',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['total', 'data'],
+                properties: {
+                  total: {
+                    type: 'integer',
+                    minimum: 0,
+                    example: 12,
+                    description: 'Tổng số trạm trong danh sách sau khi lọc theo quyền truy cập.',
+                  },
+                  data: { type: 'array', items: { type: 'object', additionalProperties: true } },
+                },
+              },
+            },
+          },
+        },
       },
     },
     post: {
@@ -37,7 +56,7 @@ module.exports = {
     patch: {
       tags: ['Stations'],
       summary: 'Cập nhật thông tin trạm',
-      description: 'Quản lý trạm được gán, chủ tổ chức có role phù hợp hoặc ADMIN được sửa. Upload qua POST /uploads/stations/image lấy imageUrl rồi gửi cùng thông tin khi bấm Lưu. Bỏ imageUrl giữ ảnh cũ, null để xóa. Người không phải ADMIN cập nhật sẽ đưa trạm về isActive=false để chờ duyệt lại theo quy tắc hiện tại.',
+      description: 'Quản lý trạm được gán, chủ tổ chức có role phù hợp hoặc ADMIN được sửa. Người không phải ADMIN cập nhật sẽ đưa trạm về isActive=false để chờ duyệt lại theo quy tắc hiện tại.',
       parameters: [
         { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
       ],
