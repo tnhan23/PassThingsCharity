@@ -15,6 +15,7 @@ const gamificationDocs = require('../docs/gamification.doc');
 const operationsDocs = require('../docs/operations.doc');
 const uploadDocs = require('../docs/upload.doc');
 const shiftDocs = require('../docs/shift.doc');
+const notificationDocs = require('../docs/notification.doc');
 
 const createSwaggerDocument = (port = process.env.PORT || 8080) => ({
   openapi: '3.0.0',
@@ -58,6 +59,7 @@ const createSwaggerDocument = (port = process.env.PORT || 8080) => ({
     ...operationsDocs,
     ...uploadDocs,
     ...shiftDocs,
+    ...notificationDocs,
   },
 });
 
