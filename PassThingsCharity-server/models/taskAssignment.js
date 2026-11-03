@@ -23,7 +23,7 @@ const taskAssignmentSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'],
+      enum: ['ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'ABSENT', 'CANCELLED'],
       default: 'ASSIGNED',
     },
     hoursSpent: {

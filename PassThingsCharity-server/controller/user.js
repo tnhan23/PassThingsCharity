@@ -3,22 +3,46 @@ const Role=require('../models/role');
 const mongoose  = require('mongoose');
 const bcrypt = require('bcryptjs');
 const resourceImageFields = require('../utils/resourceImageFields');
-function getMyProfile(req, res) {
+const PointTransaction = require('../models/pointTransaction');
+const UserAchievement = require('../models/userAchievement');
+const Certificate = require('../models/certificate');
+async function getMyProfile(req, res, next) {
   // checkBearerToken has already loaded this account and populated its role.
   // Explicitly list public profile fields instead of serializing the account.
-  const user = req.user;
-  return res.status(200).json({
-    user: {
-      id: user._id,
-      email: user.email,
-      username: user.username,
-      fullName: user.fullName,
-      phone: user.phone || null,
-      avatarUrl: user.avatarUrl || null,
-      role: user.role?.name,
-      status: user.status || null,
-    },
-  });
+  try {
+    const user = req.user;
+    const [transactions, achievements, certificates] = await Promise.all([
+      PointTransaction.find({ userId: user._id }).sort({ createdAt: -1 }),
+      UserAchievement.find({ userId: user._id }).populate('achievementId').sort({ unlockedAt: -1 }),
+      Certificate.find({ userId: user._id }).populate('campaignId', 'title').sort({ issueDate: -1 }),
+    ]);
+
+    return res.status(200).json({
+      user: {
+        id: user._id,
+        email: user.email,
+        username: user.username,
+        fullName: user.fullName,
+        phone: user.phone || null,
+        avatarUrl: user.avatarUrl || null,
+        role: user.role?.name,
+        status: user.status || null,
+      },
+      gamification: {
+        totalPoints: transactions.reduce((total, transaction) => total + transaction.points, 0),
+        pointTransactions: transactions,
+        unlockedAchievements: achievements,
+        certificates: certificates.map((certificate) => ({
+          ...certificate.toObject(),
+          ...(certificate.certificateType === 'MILESTONE'
+            ? { pdfDownloadUrl: `/gamification/certificates/${certificate._id}/pdf` }
+            : {}),
+        })),
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
 }
 
 async function updateMyProfile(req, res, next) {

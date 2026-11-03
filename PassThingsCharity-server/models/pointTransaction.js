@@ -23,6 +23,10 @@ const pointTransactionSchema = new mongoose.Schema(
     sourceId: {
       type: mongoose.Schema.Types.ObjectId,
     },
+    idempotencyKey: {
+      type: String,
+      trim: true,
+    },
     description: {
       type: String,
       trim: true,
@@ -30,5 +34,7 @@ const pointTransactionSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+pointTransactionSchema.index({ idempotencyKey: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('PointTransaction', pointTransactionSchema);

@@ -4,7 +4,46 @@ const UserAchievement = require('../models/userAchievement');
 const Certificate = require('../models/certificate');
 const User = require('../models/user');
 const Campaign = require('../models/campaign');
+const Contribution = require('../models/contribution');
+const ContributionItem = require('../models/contributionItem');
+const TaskAssignment = require('../models/taskAssignment');
+const { getReachedPointMilestones } = require('../services/gamificationPolicy');
+const { createCertificatePdf } = require('../utils/certificatePdf');
 const mongoose = require('mongoose');
+
+async function createReachedMilestoneCertificates(userId, totalPoints) {
+  const user = await User.findById(userId).select('fullName');
+  if (!user) return [];
+
+  const certificates = [];
+  for (const milestonePoints of getReachedPointMilestones(totalPoints)) {
+    const title = `Giấy chứng nhận ghi nhận đóng góp - ${milestonePoints} điểm`;
+    let certificate;
+    try {
+      certificate = await Certificate.findOneAndUpdate(
+        { userId, milestonePoints },
+        {
+          $setOnInsert: {
+            userId,
+            certificateType: 'MILESTONE',
+            milestonePoints,
+            title,
+            content: `Ghi nhận tổng điểm đóng góp đã đạt mốc ${milestonePoints} điểm.`,
+            issueDate: new Date(),
+          },
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+    } catch (error) {
+      if (error.code !== 11000) throw error;
+      certificate = await Certificate.findOne({ userId, milestonePoints });
+      if (!certificate) throw error;
+    }
+    certificates.push(certificate);
+  }
+
+  return certificates;
+}
 
 /**
  * Helper function to check and auto-unlock eligible achievements for a user
@@ -28,6 +67,19 @@ async function checkAndUnlockAchievements(userId) {
     userId,
     type: 'VOLUNTEER_TASK',
   });
+  const completedContributions = await Contribution.find({ userId, status: { $in: ['ACCEPTED', 'COMPLETED'] } }).select('_id');
+  const donationWeight = completedContributions.length
+    ? await ContributionItem.aggregate([
+      { $match: { contributionId: { $in: completedContributions.map((item) => item._id) }, unit: 'KG' } },
+      { $group: { _id: null, total: { $sum: '$quantity' } } },
+    ])
+    : [];
+  const completedTaskHours = await TaskAssignment.aggregate([
+    { $match: { assigneeId: new mongoose.Types.ObjectId(userId), status: 'COMPLETED' } },
+    { $group: { _id: null, total: { $sum: '$hoursSpent' } } },
+  ]);
+  const totalDonationWeightKg = donationWeight[0]?.total || 0;
+  const totalVolunteerHours = completedTaskHours[0]?.total || 0;
 
   // Get all active achievements
   const achievements = await Achievement.find({ isActive: true });
@@ -46,7 +98,9 @@ async function checkAndUnlockAchievements(userId) {
       qualifies = true;
     } else if (ach.criteriaType === 'DONATION_COUNT' && donationCount >= ach.criteriaValue) {
       qualifies = true;
-    } else if (ach.criteriaType === 'VOLUNTEER_HOURS' && volunteerTaskCount >= ach.criteriaValue) {
+    } else if (ach.criteriaType === 'VOLUNTEER_HOURS' && totalVolunteerHours >= ach.criteriaValue) {
+      qualifies = true;
+    } else if (ach.criteriaType === 'DONATION_WEIGHT_KG' && totalDonationWeightKg >= ach.criteriaValue) {
       qualifies = true;
     } else if (ach.criteriaType === 'CAMPAIGN_COUNT' && (donationCount + volunteerTaskCount) >= ach.criteriaValue) {
       qualifies = true;
@@ -71,6 +125,12 @@ async function checkAndUnlockAchievements(userId) {
       newlyUnlocked.push(ach);
     }
   }
+
+  const updatedPointAgg = await PointTransaction.aggregate([
+    { $match: { userId: new mongoose.Types.ObjectId(userId) } },
+    { $group: { _id: null, totalPoints: { $sum: '$points' } } },
+  ]);
+  await createReachedMilestoneCertificates(userId, updatedPointAgg[0]?.totalPoints || totalPoints);
 
   return newlyUnlocked;
 }
@@ -308,7 +368,55 @@ async function getUserCertificates(req, res, next) {
       .populate('campaignId', 'title startDate endDate')
       .sort({ issueDate: -1 });
 
-    return res.status(200).json({ certificates });
+    return res.status(200).json({
+      certificates: certificates.map((certificate) => ({
+        ...certificate.toObject(),
+        ...(certificate.certificateType === 'MILESTONE'
+          ? { pdfDownloadUrl: `/gamification/certificates/${certificate._id}/pdf` }
+          : {}),
+      })),
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function downloadCertificatePdf(req, res, next) {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({ error: 'Certificate ID không hợp lệ.' });
+    }
+
+    const certificate = await Certificate.findById(req.params.id).populate('userId', 'fullName');
+    if (!certificate) {
+      return res.status(404).json({ error: 'Không tìm thấy giấy chứng nhận.' });
+    }
+    if (!certificate.userId) {
+      return res.status(404).json({ error: 'Không tìm thấy người nhận giấy chứng nhận.' });
+    }
+
+    const isOwner = String(certificate.userId._id) === String(req.user._id);
+    const role = req.user.role?.name;
+    if (!isOwner && !['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'STAFF'].includes(role)) {
+      return res.status(403).json({ error: 'Bạn không có quyền tải giấy chứng nhận này.' });
+    }
+    if (certificate.certificateType !== 'MILESTONE') {
+      return res.status(404).json({ error: 'PDF tự động chỉ có cho giấy chứng nhận mốc điểm.' });
+    }
+
+    const pdf = createCertificatePdf({
+      recipientName: certificate.userId.fullName,
+      title: certificate.title,
+      content: certificate.content,
+      issueDate: certificate.issueDate,
+      milestonePoints: certificate.milestonePoints,
+    });
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="certificate-${certificate.milestonePoints}-points.pdf"`,
+      'Content-Length': pdf.length,
+    });
+    return res.status(200).send(pdf);
   } catch (error) {
     return next(error);
   }
@@ -367,4 +475,6 @@ module.exports = {
   getUserAchievements,
   issueCertificate,
   getUserCertificates,
+  createReachedMilestoneCertificates,
+  downloadCertificatePdf,
 };

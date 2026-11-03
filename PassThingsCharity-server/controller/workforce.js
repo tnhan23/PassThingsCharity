@@ -11,6 +11,8 @@ const User = require('../models/user');
 const PointTransaction = require('../models/pointTransaction');
 const Certificate = require('../models/certificate');
 const { checkAndUnlockAchievements } = require('./gamification');
+const { calculateTaskPoints } = require('../services/gamificationPolicy');
+const { createOrGetPointTransaction } = require('../services/pointTransactions');
 
 // ==========================================
 // 1. VOLUNTEER REGISTRATION & APPROVAL (CAMPAIGN LEVEL)
@@ -184,6 +186,12 @@ async function createTask(req, res, next) {
     if (typeof title !== 'string' || !title.trim()) {
       return res.status(400).json({ error: 'Tiêu đề nhiệm vụ (title) là bắt buộc.' });
     }
+    if (rewardPoints !== undefined) {
+      const points = Number(rewardPoints);
+      if (rewardPoints === null || typeof rewardPoints === 'boolean' || rewardPoints === '' || !Number.isInteger(points) || points < 0) {
+        return res.status(400).json({ error: 'Điểm thưởng phải là số nguyên không âm.' });
+      }
+    }
 
     let start = null;
     let end = null;
@@ -239,7 +247,7 @@ async function createTask(req, res, next) {
       recruitmentStatus: finalRecruitmentStatus,
       requiredVolunteers: Number(requiredVolunteers) > 0 ? Number(requiredVolunteers) : 0,
       volunteerDeadline: volunteerDeadline ? new Date(volunteerDeadline) : null,
-      rewardPoints: Number(rewardPoints) > 0 ? Number(rewardPoints) : 0,
+      rewardPoints: rewardPoints === undefined ? 0 : Number(rewardPoints),
       createdBy: req.user._id,
     });
 
@@ -423,8 +431,12 @@ async function updateTask(req, res, next) {
     if (volunteerDeadline !== undefined) {
       task.volunteerDeadline = volunteerDeadline ? new Date(volunteerDeadline) : null;
     }
-    if (rewardPoints !== undefined && Number(rewardPoints) >= 0) {
-      task.rewardPoints = Number(rewardPoints);
+    if (rewardPoints !== undefined) {
+      const points = Number(rewardPoints);
+      if (rewardPoints === null || typeof rewardPoints === 'boolean' || rewardPoints === '' || !Number.isInteger(points) || points < 0) {
+        return res.status(400).json({ error: 'Điểm thưởng phải là số nguyên không âm.' });
+      }
+      task.rewardPoints = points;
     }
 
     await task.save();
@@ -737,6 +749,9 @@ async function checkInTask(req, res, next) {
     if (String(assignment.assigneeId) !== String(userId) && !['ADMIN', 'STATION_MANAGER', 'STAFF'].includes(userRole)) {
       return sendAccessError(res, 403, 'FORBIDDEN', 'Bạn không có quyền điểm danh cho người này.');
     }
+    if (assignment.status !== 'ASSIGNED') {
+      return res.status(409).json({ error: `Không thể check-in khi nhiệm vụ đang ở trạng thái ${assignment.status}.` });
+    }
 
     assignment.checkInTime = new Date();
     assignment.status = 'IN_PROGRESS';
@@ -760,7 +775,7 @@ async function checkInTask(req, res, next) {
  */
 async function checkOutTask(req, res, next) {
   try {
-    const { assignmentId, hoursSpent, completionNote } = req.body || {};
+    const { assignmentId, completionNote } = req.body || {};
     const userId = req.user._id;
 
     if (!mongoose.isValidObjectId(assignmentId)) {
@@ -777,17 +792,55 @@ async function checkOutTask(req, res, next) {
       return sendAccessError(res, 403, 'FORBIDDEN', 'Bạn không có quyền điểm danh kết thúc ca cho người này.');
     }
 
-    const checkOut = new Date();
-    let calculatedHours = 0;
-
-    if (hoursSpent !== undefined && Number(hoursSpent) > 0) {
-      calculatedHours = parseFloat(Number(hoursSpent).toFixed(2));
-    } else if (assignment.checkInTime) {
-      const diffMs = checkOut.getTime() - new Date(assignment.checkInTime).getTime();
-      calculatedHours = parseFloat(Math.max(0.5, diffMs / (1000 * 60 * 60)).toFixed(2));
-    } else {
-      calculatedHours = 1; // Default minimum 1 hour
+    if (assignment.status === 'COMPLETED') {
+      let existingTransaction = await PointTransaction.findOne({
+        type: 'VOLUNTEER_TASK',
+        sourceId: assignment._id,
+      });
+      let newlyUnlockedAchievements = [];
+      if (!existingTransaction && assignment.assigneeType === 'VOLUNTEER') {
+        const task = await Task.findById(assignment.taskId);
+        const pointsAwarded = calculateTaskPoints(task?.rewardPoints, assignment.hoursSpent);
+        existingTransaction = await createOrGetPointTransaction(`task-assignment:${assignment._id}`, {
+          userId: assignment.assigneeId,
+          points: pointsAwarded,
+          type: 'VOLUNTEER_TASK',
+          sourceId: assignment._id,
+          description: `Cộng ${pointsAwarded} điểm thưởng hoàn thành nhiệm vụ "${task ? task.title : 'Công việc cộng đồng'}" (${assignment.hoursSpent} giờ làm việc).`,
+        });
+      }
+      if (assignment.assigneeType === 'VOLUNTEER') {
+        newlyUnlockedAchievements = await checkAndUnlockAchievements(assignment.assigneeId);
+      }
+      return res.status(200).json({
+        message: existingTransaction
+          ? 'Nhiệm vụ này đã được hoàn thành và cộng điểm trước đó.'
+          : 'Nhiệm vụ này đã được hoàn thành trước đó; loại phân công này không nhận điểm.',
+        assignment,
+        hoursSpent: assignment.hoursSpent,
+        gamification: {
+          pointsAwarded: existingTransaction?.points || 0,
+          transaction: existingTransaction,
+          newlyUnlockedAchievements,
+        },
+      });
     }
+    if (assignment.status !== 'IN_PROGRESS' || !assignment.checkInTime) {
+      return res.status(409).json({ error: 'Cần check-in trước khi hoàn thành nhiệm vụ.' });
+    }
+    if (assignment.assigneeType === 'VOLUNTEER' && await PointTransaction.exists({
+      type: 'VOLUNTEER_TASK',
+      sourceId: assignment._id,
+    })) {
+      return res.status(409).json({ error: 'Nhiệm vụ này đã được cộng điểm; vui lòng liên hệ quản trị viên để kiểm tra trạng thái.' });
+    }
+
+    const checkOut = new Date();
+    const diffMs = checkOut.getTime() - new Date(assignment.checkInTime).getTime();
+    if (diffMs < 0) {
+      return res.status(409).json({ error: 'Thời gian check-out không thể trước thời gian check-in.' });
+    }
+    const calculatedHours = parseFloat(Math.max(0, diffMs / (1000 * 60 * 60)).toFixed(2));
 
     assignment.checkOutTime = checkOut;
     assignment.completedAt = checkOut;
@@ -799,7 +852,7 @@ async function checkOutTask(req, res, next) {
     // Check if all assignees of the task have completed
     const pendingAssignments = await TaskAssignment.countDocuments({
       taskId: assignment.taskId,
-      status: { $ne: 'COMPLETED' },
+      status: { $in: ['ASSIGNED', 'IN_PROGRESS'] },
     });
     if (pendingAssignments === 0) {
       await Task.findByIdAndUpdate(assignment.taskId, { status: 'COMPLETED' });
@@ -808,24 +861,20 @@ async function checkOutTask(req, res, next) {
     // Task & points reward calculation
     const task = await Task.findById(assignment.taskId);
     let pointsAwarded = 0;
-    if (task && task.rewardPoints > 0) {
-      pointsAwarded = task.rewardPoints;
-    } else {
-      pointsAwarded = Math.max(25, Math.round(calculatedHours * 25));
+    let pointTx = null;
+    let newBadges = [];
+    if (assignment.assigneeType === 'VOLUNTEER') {
+      pointsAwarded = calculateTaskPoints(task?.rewardPoints, calculatedHours);
+      pointTx = await createOrGetPointTransaction(`task-assignment:${assignment._id}`, {
+        userId: assignment.assigneeId,
+        points: pointsAwarded,
+        type: 'VOLUNTEER_TASK',
+        sourceId: assignment._id,
+        description: `Cộng ${pointsAwarded} điểm thưởng hoàn thành nhiệm vụ "${task ? task.title : 'Công việc cộng đồng'}" (${calculatedHours} giờ làm việc).`,
+      });
+      pointsAwarded = pointTx.points;
+      newBadges = await checkAndUnlockAchievements(assignment.assigneeId);
     }
-
-    const targetUserId = assignment.assigneeId;
-
-    const pointTx = await PointTransaction.create({
-      userId: targetUserId,
-      points: pointsAwarded,
-      type: 'VOLUNTEER_TASK',
-      sourceId: assignment._id,
-      description: `Cộng ${pointsAwarded} điểm thưởng hoàn thành nhiệm vụ "${task ? task.title : 'Tình nguyện'}" (${calculatedHours} giờ làm việc).`,
-    });
-
-    // Check & unlock achievements
-    const newBadges = await checkAndUnlockAchievements(targetUserId);
 
     return res.status(200).json({
       message: 'Điểm danh kết thúc ca thành công và đã ghi nhận điểm thưởng.',
@@ -836,6 +885,59 @@ async function checkOutTask(req, res, next) {
         transaction: pointTx,
         newlyUnlockedAchievements: newBadges,
       },
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function markAssignmentAbsent(req, res, next) {
+  try {
+    const { assignmentId } = req.params;
+    const { reason } = req.body || {};
+    if (!mongoose.isValidObjectId(assignmentId)) {
+      return res.status(400).json({ error: 'ID phân công nhiệm vụ không hợp lệ.' });
+    }
+
+    const assignment = await TaskAssignment.findById(assignmentId);
+    if (!assignment) {
+      return res.status(404).json({ error: 'Không tìm thấy phân công nhiệm vụ.' });
+    }
+    if (assignment.status !== 'ASSIGNED') {
+      return res.status(409).json({ error: 'Chỉ có thể xác nhận vắng mặt cho nhiệm vụ đã phân công nhưng chưa check-in.' });
+    }
+
+    const task = await Task.findById(assignment.taskId);
+    if (!task) {
+      return res.status(404).json({ error: 'Không tìm thấy công việc của phân công này.' });
+    }
+    if (task.endTime && new Date() < new Date(task.endTime)) {
+      return res.status(409).json({ error: 'Chỉ có thể xác nhận vắng mặt sau thời gian kết thúc công việc.' });
+    }
+
+    assignment.status = 'ABSENT';
+    assignment.completionNote = typeof reason === 'string' && reason.trim()
+      ? `Vắng mặt: ${reason.trim()}`
+      : 'Vắng mặt do quản lý xác nhận.';
+    await assignment.save();
+
+    const activeAssignmentCount = await TaskAssignment.countDocuments({
+      taskId: task._id,
+      status: { $in: ['ASSIGNED', 'IN_PROGRESS', 'COMPLETED'] },
+    });
+    if (task.status !== 'CANCELLED'
+      && (task.requiredVolunteers === 0 || activeAssignmentCount < task.requiredVolunteers)) {
+      task.recruitmentStatus = 'OPEN';
+    }
+    if (task.status === 'ASSIGNED' && activeAssignmentCount === 0) {
+      task.status = 'PENDING';
+    }
+    await task.save();
+
+    return res.status(200).json({
+      message: 'Đã ghi nhận vắng mặt; không trừ điểm đã tích lũy và đã mở lại chỉ tiêu tuyển người.',
+      assignment,
+      task,
     });
   } catch (error) {
     return next(error);
@@ -882,5 +984,6 @@ module.exports = {
   assignTask,
   checkInTask,
   checkOutTask,
+  markAssignmentAbsent,
   getMyAssignedTasks,
 };

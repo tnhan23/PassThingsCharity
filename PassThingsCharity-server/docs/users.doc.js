@@ -2,7 +2,7 @@ module.exports = {
   '/users/me/profile': {
     get: {
       tags: ['Users'],
-      summary: 'Lấy hồ sơ tài khoản đang đăng nhập',
+      summary: 'Lấy hồ sơ tài khoản, điểm thưởng và chứng nhận của người đang đăng nhập',
       description: 'Yêu cầu Bearer token. Không cần ID hoặc body; backend xác định tài khoản qua token. Chỉ trả thông tin hồ sơ, không trả password, resetPasswordToken hoặc resetPasswordExpires. FE dùng user để điền form PATCH cùng đường dẫn. Áp dụng cho mọi role đã đăng nhập; tài khoản Admin riêng có thể không có avatar/status (trả null).',
       responses: {
         200: {
@@ -21,7 +21,18 @@ module.exports = {
                 role: { type: 'string' },
                 status: { type: 'string', nullable: true },
               },
-            } },
+            },
+            gamification: {
+              type: 'object',
+              description: 'Thông tin điểm, giao dịch, thành tích đã mở khóa và chứng nhận của chính tài khoản.',
+              properties: {
+                totalPoints: { type: 'integer', example: 520 },
+                pointTransactions: { type: 'array', items: { type: 'object' } },
+                unlockedAchievements: { type: 'array', items: { type: 'object' } },
+                certificates: { type: 'array', items: { type: 'object' } },
+              },
+            },
+            },
           } } },
         },
         401: { description: 'Thiếu token, token không hợp lệ/hết hạn hoặc tài khoản không hoạt động/không tồn tại' },
