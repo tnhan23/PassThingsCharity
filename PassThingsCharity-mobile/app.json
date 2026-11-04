@@ -52,7 +52,12 @@
         }
       ],
       "expo-secure-store",
-      "expo-maps",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Pass Things Charity dùng vị trí của bạn khi đang mở app để hiện trạm gần và khoảng cách tới điểm nhận đồ."
+        }
+      ],
       [
         "expo-image-picker",
         {

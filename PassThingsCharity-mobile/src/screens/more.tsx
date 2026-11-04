@@ -1,7 +1,8 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Platform, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { WebView } from "react-native-webview";
 import * as Location from "expo-location";
 import { backend } from "@/api/backend";
 import { ApiError } from "@/api/client";
@@ -12,7 +13,6 @@ import { PasswordReset } from "@/components/form";
 import { Body, Button, Card, Eyebrow, Icon, Pill, Tap, Title } from "@/components/ui";
 import { colors, fonts } from "@/theme";
 
-const AppleMaps = Platform.OS === "ios" ? (require("expo-maps") as typeof import("expo-maps")).AppleMaps : null;
 const LiveQr = Platform.OS === "web" ? null : (require("./qr-camera") as typeof import("./qr-camera")).LiveQr;
 
 const stations = [
@@ -30,30 +30,21 @@ function distanceKm(here: PlaceFix, latitude: number, longitude: number) {
   return earth * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function stationDistance(here: PlaceFix | null, station: StationRow) {
+function stationCoordinates(station: StationRow): PlaceFix | null {
+  if (station.latitude == null || station.longitude == null) return null;
   const latitude = Number(station.latitude);
   const longitude = Number(station.longitude);
-  if (!here || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
-  return distanceKm(here, latitude, longitude);
+  if (
+    !Number.isFinite(latitude) || latitude < -90 || latitude > 90
+    || !Number.isFinite(longitude) || longitude < -180 || longitude > 180
+  ) return null;
+  return { latitude, longitude };
 }
 
-function StationPeek({ station }: { station: StationRow }) {
-  const latitude = Number(station.latitude);
-  const longitude = Number(station.longitude);
-  if (!AppleMaps || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-    return <Body muted>Bản đồ Apple mở trên iPhone.</Body>;
-  }
-  return (
-    <View style={{ height: 168, borderRadius: 14, overflow: "hidden" }}>
-      <AppleMaps.View
-        style={{ flex: 1, width: "100%" }}
-        cameraPosition={{ coordinates: { latitude, longitude }, zoom: 16 }}
-        markers={[{ id: station._id, title: station.name, coordinates: { latitude, longitude }, tintColor: colors.primary }]}
-        uiSettings={{ myLocationButtonEnabled: false, compassEnabled: false, scaleBarEnabled: false }}
-        colorScheme={AppleMaps.MapColorScheme.LIGHT}
-      />
-    </View>
-  );
+function stationDistance(here: PlaceFix | null, station: StationRow) {
+  const coordinates = stationCoordinates(station);
+  if (!here || !coordinates) return null;
+  return distanceKm(here, coordinates.latitude, coordinates.longitude);
 }
 
 function StationCards({ here }: { here: PlaceFix | null }) {
@@ -152,7 +143,7 @@ function StationCards({ here }: { here: PlaceFix | null }) {
               </View>
             </Tap>
             <Button label="Xem chi tiết" tone="ghost" onPress={() => router.push(`/station/${station._id}`)} />
-            {open && canMap ? <StationPeek station={station} /> : null}
+            {open && canMap ? <Body muted>Chọn Bản đồ để xem vị trí trạm.</Body> : null}
           </Card>
         );
       })}
@@ -168,129 +159,180 @@ function usePlaceAccess(active: boolean) {
   useEffect(() => {
     if (!active) return;
     let cancelled = false;
+    let subscription: Location.LocationSubscription | null = null;
     setText("Điện thoại đang hỏi quyền vị trí. Hãy bấm Cho phép.");
-    Location.requestForegroundPermissionsAsync()
-      .then(async ({ status }) => {
+    async function locate() {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
         if (cancelled) return;
         if (status !== "granted") {
           setHere(null);
-          setText("Chưa cho phép vị trí. Vào Cài đặt iPhone, chọn Pass Things Charity, rồi bật Vị trí khi dùng app.");
+          setText("Chưa cho phép vị trí. Bật quyền Vị trí khi dùng app trong cài đặt của điện thoại.");
           return;
         }
         const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
         if (cancelled) return;
         setHere({ latitude: position.coords.latitude, longitude: position.coords.longitude });
         setText("Chấm xanh là bạn. Chấm đậm là trạm nhận đồ. Mũi tên sát mép chỉ trạm ngoài khung và số km.");
-      })
-      .catch(() => {
-        if (!cancelled) setText("Điện thoại không mở được quyền vị trí.");
-      });
+        const watch = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.Balanced,
+            distanceInterval: 10,
+            timeInterval: 5000,
+          },
+          (update) => {
+            if (cancelled) return;
+            setHere({ latitude: update.coords.latitude, longitude: update.coords.longitude });
+          },
+        );
+        if (cancelled) watch.remove();
+        else subscription = watch;
+      } catch {
+        if (!cancelled) setText("Không lấy được vị trí hiện tại. Kiểm tra quyền vị trí và thử lại.");
+      }
+    }
+    void locate();
     return () => {
       cancelled = true;
+      subscription?.remove();
     };
   }, [active]);
   return { text, here };
 }
 
-function mercatorY(latitude: number) {
-  const sine = Math.sin((latitude * Math.PI) / 180);
-  return 0.5 - Math.log((1 + sine) / (1 - sine)) / (4 * Math.PI);
-}
+const leafletMapHtml = `<!doctype html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <style>
+      html, body, #map { width: 100%; height: 100%; margin: 0; background: #e8eee9; }
+      .leaflet-control-attribution { max-width: 70%; font-size: 10px; text-align: right; white-space: normal; }
+    </style>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" onerror="window.ReactNativeWebView.postMessage('leaflet-error')"></script>
+  </head>
+  <body>
+    <div id="map"></div>
+    <script>
+      if (!window.L) {
+        window.ReactNativeWebView.postMessage('leaflet-error');
+      } else {
+      const map = L.map('map', { zoomControl: true }).setView([10.7769, 106.7009], 12);
+      map.attributionControl.setPosition('bottomright');
+      const tiles = L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
+        subdomains: 'abc',
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors · <a href="https://www.openstreetmap.fr/">OpenStreetMap France HOT</a>',
+      });
+      let tileErrorSent = false;
+      tiles.on('tileerror', (event) => {
+        if (tileErrorSent) return;
+        tileErrorSent = true;
+        window.ReactNativeWebView.postMessage('tiles-error:' + event.tile.src);
+      });
+      tiles.addTo(map);
+      const stationMarkers = new Map();
+      let userMarker = null;
+      let hasCentered = false;
+      let hasFramedStations = false;
+      let lastFocusId = '';
 
-const rimChipWide = 92;
-const rimChipTall = 30;
+      function receiveMapData(event) {
+        let data;
+        try {
+          data = JSON.parse(event.data);
+        } catch {
+          return;
+        }
+        if (data?.action === 'center-user') {
+          if (userMarker) map.setView(userMarker.getLatLng(), 14);
+          return;
+        }
+        if (!data || !Array.isArray(data.stations)) return;
 
-function spreadAlong(values: number[], min: number, max: number, gap: number) {
-  const next = values.map((value) => Math.min(Math.max(value, min), max));
-  for (let index = 1; index < next.length; index += 1) {
-    if (next[index] < next[index - 1] + gap) next[index] = next[index - 1] + gap;
-  }
-  const overflow = next[next.length - 1] - max;
-  if (overflow > 0) {
-    for (let index = 0; index < next.length; index += 1) next[index] -= overflow;
-  }
-  for (let index = next.length - 2; index >= 0; index -= 1) {
-    if (next[index] > next[index + 1] - gap) next[index] = next[index + 1] - gap;
-  }
-  return next.map((value) => Math.min(Math.max(value, min), max));
-}
+        const incomingIds = new Set();
+        data.stations.forEach((station) => {
+          incomingIds.add(station.id);
+          const point = [station.latitude, station.longitude];
+          let marker = stationMarkers.get(station.id);
+          if (!marker) {
+            marker = L.circleMarker(point, {
+              radius: 8,
+              color: '#ffffff',
+              weight: 2,
+              fillColor: '#087f5b',
+              fillOpacity: 1,
+              bubblingMouseEvents: false,
+            }).addTo(map);
+            marker.on('click', () => window.ReactNativeWebView.postMessage('station:' + station.id));
+            marker.bindTooltip(station.name || 'Trạm', {
+              permanent: true,
+              direction: 'top',
+              offset: [0, -10],
+              opacity: 0.95,
+            });
+            stationMarkers.set(station.id, marker);
+          } else {
+            marker.setLatLng(point);
+            marker.setTooltipContent(station.name || 'Trạm');
+          }
+        });
+        stationMarkers.forEach((marker, id) => {
+          if (!incomingIds.has(id)) {
+            map.removeLayer(marker);
+            stationMarkers.delete(id);
+          }
+        });
 
-function edgePoints(
-  rows: StationRow[] | null,
-  here: PlaceFix | null,
-  camera: { latitude: number; longitude: number; zoom: number },
-  size: { width: number; height: number },
-  bottomInset: number,
-) {
-  if (!size.width || !size.height) return [];
-  const world = 256 * 2 ** camera.zoom;
-  const centerX = size.width / 2;
-  const centerY = size.height / 2;
-  const inset = 8;
-  type Hit = { id: string; name: string; km: number | null; turn: number; edge: "left" | "right" | "top" | "bottom"; along: number };
-  const hits: Hit[] = [];
-  for (const station of rows ?? []) {
-    const latitude = Number(station.latitude);
-    const longitude = Number(station.longitude);
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) continue;
-    const dx = ((longitude - camera.longitude) / 360) * world;
-    const dy = (mercatorY(latitude) - mercatorY(camera.latitude)) * world;
-    if (dx === 0 && dy === 0) continue;
-    const screenX = centerX + dx;
-    const screenY = centerY + dy;
-    if (
-      screenX >= inset && screenX <= size.width - inset
-      && screenY >= inset && screenY <= size.height - bottomInset
-    ) continue;
-    let scale = 1;
-    if (dx > 0) scale = Math.min(scale, (size.width - inset - centerX) / dx);
-    if (dx < 0) scale = Math.min(scale, (inset - centerX) / dx);
-    if (dy > 0) scale = Math.min(scale, (size.height - bottomInset - inset - centerY) / dy);
-    if (dy < 0) scale = Math.min(scale, (inset - centerY) / dy);
-    if (scale >= 1) continue;
-    const x = centerX + dx * scale;
-    const y = centerY + dy * scale;
-    const edge = x <= inset + 24 ? "left" : x >= size.width - inset - 24 ? "right" : y <= inset + 24 ? "top" : "bottom";
-    const vertical = edge === "left" || edge === "right";
-    hits.push({
-      id: station._id,
-      name: station.name,
-      km: stationDistance(here, station),
-      turn: (Math.atan2(dx, -dy) * 180) / Math.PI,
-      edge,
-      along: vertical ? y - rimChipTall / 2 : x - rimChipWide / 2,
-    });
-  }
-  const placed: { id: string; name: string; km: number | null; turn: number; left: number; top: number }[] = [];
-  for (const edge of ["left", "right", "top", "bottom"] as const) {
-    const group = hits.filter((hit) => hit.edge === edge).sort((a, b) => a.along - b.along);
-    if (!group.length) continue;
-    const vertical = edge === "left" || edge === "right";
-    const min = edge === "right" ? 72 : 12;
-    const max = vertical
-      ? size.height - bottomInset - rimChipTall - 12
-      : size.width - rimChipWide - (edge === "top" ? 64 : 12);
-    if (max <= min) continue;
-    const along = spreadAlong(group.map((hit) => hit.along), min, max, vertical ? rimChipTall + 8 : rimChipWide + 8);
-    group.forEach((hit, index) => {
-      const spot = along[index];
-      if (edge === "left") placed.push({ ...hit, left: inset, top: spot });
-      if (edge === "right") placed.push({ ...hit, left: size.width - inset - rimChipWide, top: spot });
-      if (edge === "top") placed.push({ ...hit, left: spot, top: inset });
-      if (edge === "bottom") placed.push({ ...hit, left: spot, top: size.height - bottomInset - inset - rimChipTall });
-    });
-  }
-  return placed;
-}
+        if (data.here) {
+          const point = [data.here.latitude, data.here.longitude];
+          if (userMarker) userMarker.setLatLng(point);
+          else {
+            userMarker = L.circleMarker(point, {
+              radius: 8,
+              color: '#ffffff',
+              weight: 3,
+              fillColor: '#1976d2',
+              fillOpacity: 1,
+            }).addTo(map);
+          }
+          if (!hasCentered && !data.focusId) {
+            map.setView(point, 14);
+            hasCentered = true;
+          }
+        }
 
-function stationFixes(rows: StationRow[] | null) {
-  return (rows ?? []).flatMap((station) => {
-    const latitude = Number(station.latitude);
-    const longitude = Number(station.longitude);
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return [];
-    return [{ id: station._id, title: station.name, coordinates: { latitude, longitude }, tintColor: colors.primary }];
-  });
-}
+        if (data.stations.length > 0 && !hasFramedStations && !data.focusId) {
+          const points = data.stations.map((station) => [station.latitude, station.longitude]);
+          if (data.here) points.push([data.here.latitude, data.here.longitude]);
+          map.fitBounds(points, { padding: [48, 48], maxZoom: 14 });
+          hasFramedStations = true;
+          hasCentered = true;
+        }
+
+        if (!data.focusId) {
+          lastFocusId = '';
+        } else if (data.focusId !== lastFocusId) {
+          const station = data.stations.find((item) => item.id === data.focusId);
+          if (station) {
+            map.setView([station.latitude, station.longitude], 16);
+            hasCentered = true;
+            lastFocusId = data.focusId;
+          } else if (data.here && !hasCentered) {
+            map.setView([data.here.latitude, data.here.longitude], 14);
+            hasCentered = true;
+          }
+        }
+      }
+
+      map.on('click', () => window.ReactNativeWebView.postMessage('map'));
+      window.addEventListener('message', receiveMapData);
+      document.addEventListener('message', receiveMapData);
+      window.ReactNativeWebView.postMessage('ready');
+      }
+    </script>
+  </body>
+</html>`;
 
 function StationFacts({ station, here }: { station: StationRow; here: PlaceFix | null }) {
   const km = stationDistance(here, station);
@@ -311,18 +353,12 @@ function StationFacts({ station, here }: { station: StationRow; here: PlaceFix |
 
 function PlaceMap({ here, focusId }: { here: PlaceFix | null; focusId: string }) {
   const { token } = useSession();
-  const mapRef = useRef<{ setCameraPosition: (config?: { coordinates?: { latitude?: number; longitude?: number }; zoom?: number }) => Promise<void> } | null>(null);
-  const glideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const moved = useRef(false);
-  const anchor = useRef({ latitude: here?.latitude ?? 10.7769, longitude: here?.longitude ?? 106.7009, zoom: here ? 14 : 12 });
-  if (!moved.current && here) anchor.current = { latitude: here.latitude, longitude: here.longitude, zoom: 14 };
+  const mapRef = useRef<WebView<object> | null>(null);
+  const [mapReady, setMapReady] = useState(false);
+  const [mapError, setMapError] = useState("");
+  const [mapGeneration, setMapGeneration] = useState(0);
   const [rows, setRows] = useState<StationRow[] | null>(null);
   const [infoId, setInfoId] = useState(focusId);
-  const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
-  const [liveCamera, setLiveCamera] = useState<{ latitude: number; longitude: number; zoom: number } | null>(null);
-  useEffect(() => () => {
-    if (glideTimer.current) clearTimeout(glideTimer.current);
-  }, []);
   useEffect(() => {
     setInfoId(focusId);
   }, [focusId]);
@@ -340,117 +376,72 @@ function PlaceMap({ here, focusId }: { here: PlaceFix | null; focusId: string })
       cancelled = true;
     };
   }, [token]);
-  function glide(latitude: number, longitude: number) {
-    moved.current = true;
-    const from = liveCamera ?? anchor.current;
-    if (glideTimer.current) clearTimeout(glideTimer.current);
-    const km = distanceKm(from, latitude, longitude);
-    const map = mapRef.current;
-    if (!map || km < 1.2) {
-      void map?.setCameraPosition({ coordinates: { latitude, longitude }, zoom: 16 });
-      return;
-    }
-    void map.setCameraPosition({
-      coordinates: {
-        latitude: (from.latitude + latitude) / 2,
-        longitude: (from.longitude + longitude) / 2,
-      },
-      zoom: Math.max(10, Math.min(12.5, 15.2 - Math.log2(km))),
-    });
-    glideTimer.current = setTimeout(() => {
-      void mapRef.current?.setCameraPosition({ coordinates: { latitude, longitude }, zoom: 16 });
-    }, 980);
-  }
+  const markers = useMemo(
+    () => (rows ?? []).flatMap((station) => {
+      const coordinates = stationCoordinates(station);
+      if (!coordinates) return [];
+      return [{ id: station._id, name: station.name, ...coordinates }];
+    }),
+    [rows],
+  );
+  const mapData = JSON.stringify({ here, stations: markers, focusId });
   useEffect(() => {
-    if (!focusId || !rows) return;
-    const station = rows.find((row) => row._id === focusId);
-    const latitude = Number(station?.latitude);
-    const longitude = Number(station?.longitude);
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
-    glide(latitude, longitude);
-  }, [focusId, rows]);
-  const markers = stationFixes(rows);
+    if (mapReady) mapRef.current?.postMessage(mapData);
+  }, [mapData, mapReady]);
+
   const infoStation = rows?.find((row) => row._id === infoId) ?? null;
-  const camera = liveCamera ?? anchor.current;
-  const outside = edgePoints(rows, here, camera, mapSize, infoStation ? 150 : 36);
-  if (Platform.OS !== "ios" || !AppleMaps) {
-    return infoStation ? <StationFacts station={infoStation} here={here} /> : <Body>Bản đồ Apple mở trên iPhone. Trên máy này chỉ xem được danh sách trạm.</Body>;
+  if (Platform.OS !== "android") {
+    return infoStation ? <StationFacts station={infoStation} here={here} /> : <Body>Bản đồ Leaflet chỉ được bật trong ứng dụng Android.</Body>;
   }
   return (
-    <View
-      style={{ flex: 1, borderRadius: 18, overflow: "hidden" }}
-      onLayout={(event) => {
-        const { width, height } = event.nativeEvent.layout;
-        setMapSize({ width, height });
-      }}
-    >
-      <AppleMaps.View
+    <View style={{ flex: 1, borderRadius: 18, overflow: "hidden" }}>
+      <WebView<object>
+        key={mapGeneration}
         ref={mapRef}
-        style={{ flex: 1, width: "100%" }}
-        cameraPosition={{
-          coordinates: { latitude: anchor.current.latitude, longitude: anchor.current.longitude },
-          zoom: anchor.current.zoom,
+        source={{ html: leafletMapHtml }}
+        originWhitelist={["*"]}
+        javaScriptEnabled
+        applicationNameForUserAgent="PassThingsCharity/1.0"
+        onMessage={(event) => {
+          const message = event.nativeEvent.data;
+          if (message === "ready") setMapReady(true);
+          else if (message === "map") setInfoId("");
+          else if (message.startsWith("station:")) setInfoId(message.slice("station:".length));
+          else if (message === "leaflet-error") setMapError("Không tải được thư viện bản đồ từ unpkg.com.");
+          else if (message.startsWith("tiles-error:")) {
+            setMapError("Không tải được ô bản đồ từ OpenStreetMap France HOT. Internet vẫn có thể hoạt động; DNS, VPN hoặc mạng hiện tại có thể chặn máy chủ bản đồ.");
+          }
         }}
-        markers={markers}
-        properties={{ isMyLocationEnabled: Boolean(here) }}
-        uiSettings={{ myLocationButtonEnabled: true, compassEnabled: true, scaleBarEnabled: true }}
-        colorScheme={AppleMaps.MapColorScheme.LIGHT}
-        onCameraMove={(event) => {
-          if (!event.coordinates.latitude || !event.coordinates.longitude) return;
-          setLiveCamera({
-            latitude: event.coordinates.latitude,
-            longitude: event.coordinates.longitude,
-            zoom: event.zoom,
-          });
-        }}
-        onMarkerClick={(marker) => {
-          const id = marker.id || "";
-          setInfoId(id);
-          const latitude = marker.coordinates?.latitude;
-          const longitude = marker.coordinates?.longitude;
-          if (latitude == null || longitude == null) return;
-          glide(latitude, longitude);
-        }}
-        onMapClick={() => setInfoId("")}
+        onError={(event) => setMapError(`WebView không tải được bản đồ: ${event.nativeEvent.description}`)}
+        accessibilityLabel="Map showing stations and your current location"
+        style={{ flex: 1, backgroundColor: "#e8eee9" }}
       />
-      {outside.map((point) => (
-        <Tap
-          key={point.id}
-          accessibilityLabel={`${point.name}, ${point.km === null ? "chưa có khoảng cách" : `cách ${point.km.toFixed(1)} km`}`}
-          onPress={() => {
-            setInfoId(point.id);
-            const station = rows?.find((row) => row._id === point.id);
-            const latitude = Number(station?.latitude);
-            const longitude = Number(station?.longitude);
-            if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
-            glide(latitude, longitude);
-          }}
-          style={{
-            position: "absolute",
-            left: point.left,
-            top: point.top,
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 4,
-            backgroundColor: colors.primary,
-            borderRadius: 999,
-            paddingLeft: 6,
-            paddingRight: 8,
-            paddingVertical: 4,
-            borderWidth: 2,
-            borderColor: "#ffffff",
-          }}
-        >
-          <View style={{ transform: [{ rotate: `${point.turn}deg` }] }}>
-            <Icon name="arrow-upward" size={14} color={colors.onPrimary} />
-          </View>
-          <Text style={{ fontFamily: fonts.semibold, fontSize: 11, color: colors.onPrimary }}>
-            {point.km === null ? "…" : `${point.km.toFixed(1)} km`}
-          </Text>
-        </Tap>
-      ))}
+      <View style={{ position: "absolute", top: 12, right: 12 }}>
+        <Button
+          label="Vị trí của tôi"
+          tone="ghost"
+          disabled={!here || !mapReady}
+          onPress={() => mapRef.current?.postMessage(JSON.stringify({ action: "center-user" }))}
+        />
+      </View>
+      {mapError ? (
+        <View style={{ position: "absolute", top: 10, left: 10, right: 10 }}>
+          <Card>
+            <Body>{mapError}</Body>
+            <Button
+              label="Thử tải lại"
+              tone="ghost"
+              onPress={() => {
+                setMapError("");
+                setMapReady(false);
+                setMapGeneration((generation) => generation + 1);
+              }}
+            />
+          </Card>
+        </View>
+      ) : null}
       {infoStation ? (
-        <View style={{ position: "absolute", left: 12, right: 12, bottom: 12 }}>
+        <View style={{ position: "absolute", left: 12, right: 12, bottom: 40 }}>
           <StationFacts station={infoStation} here={here} />
         </View>
       ) : null}
