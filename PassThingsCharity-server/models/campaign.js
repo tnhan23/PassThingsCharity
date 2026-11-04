@@ -6,6 +6,8 @@ const mongoose = require('mongoose');
  */
 const campaignSchema = new mongoose.Schema(
   {
+    imageUrl: { type: String, trim: true, default: null },
+    imagePublicId: { type: String, default: null },
     title: {
       type: String,
       required: true,

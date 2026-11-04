@@ -3,6 +3,8 @@ const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const User = require('../models/user');
 const Role = require('../models/role');
+const Station = require('../models/station');
+const StationStaff = require('../models/stationstaff');
 const Admin=require('../models/admin');
 const crypto = require('crypto');
 const { sendMail } = require('../utils/mailer');
@@ -37,10 +39,18 @@ async function login(req, res, next) {
       return res.status(401).json({ error: 'Mật khẩu không chính xác.' });
     }
 
-    if (!isAdmin && account.role) {
-      await account.populate('role');
+    const role = isAdmin ? 'ADMIN' : (account.role || 'USER');
+    const roleDocument = !isAdmin && account.role
+      ? await Role.findById(account.role).select('name') : null;
+    const roleName = isAdmin ? 'ADMIN' : (roleDocument?.name || 'USER');
+    let stations = [];
+    const stationFields = '_id name address organizationId managerId imageUrl latitude longitude openingTime closingTime isActive';
+    if (roleName === 'STATION_MANAGER') {
+      stations = await Station.find({ managerId: account._id }).select(stationFields).sort({ _id: 1 }).lean();
+    } else if (roleName === 'STAFF') {
+      const stationIds = await StationStaff.distinct('stationId', { userId: account._id });
+      stations = await Station.find({ _id: { $in: stationIds } }).select(stationFields).sort({ _id: 1 }).lean();
     }
-    const role = isAdmin ? 'ADMIN' : (account.role && account.role.name) || 'USER';
 
     // 4. Tạo token (nên đính kèm role vào payload để phân quyền ở các middleware sau)
     const token = jwt.sign(
@@ -57,11 +67,10 @@ async function login(req, res, next) {
       user: {
         id: account._id,
         username: account.username,
-        phone: account.phone || null, // Phòng trường hợp model Admin không có sđt
-        email: account.email || null,
-        fullName: account.fullName || null,
         avatarUrl: account.avatarUrl || null,
+        phone: account.phone || null, // Phòng trường hợp model Admin không có sđt
         role: role,
+        stations,
       },
     });
   } catch (error) {
@@ -89,6 +98,7 @@ async function register(req, res, next) {
       });
     }
     const user = await User.create({
+      avatarUrl: null,
       email: email.trim().toLowerCase(),
       username: username.trim(),
       password: await bcrypt.hash(password, 12),
@@ -100,6 +110,7 @@ async function register(req, res, next) {
       message: 'Đăng ký thành công.',
       user: {
         id: user._id,
+        avatarUrl: user.avatarUrl,
         email: user.email,
         username: user.username,
         fullname: user.fullname,

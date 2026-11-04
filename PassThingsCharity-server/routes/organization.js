@@ -34,7 +34,7 @@ router.post(
 
 router.patch(
   '/:id',
-  checkRole(['ADMIN', 'STATION_MANAGER']),
+  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'USER']),
   updateOrganization
 );
 

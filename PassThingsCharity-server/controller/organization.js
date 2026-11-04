@@ -65,6 +65,7 @@ async function getOrganization(req, res, next) {
 async function createOrganization(req, res, next) {
   try {
     const body = req.body || {};
+    const imageFields = require('../utils/resourceImageFields')(body, 'logoUrl');
 
     if (!validateOrganization(body)) {
       return res.status(400).json({
@@ -83,6 +84,7 @@ async function createOrganization(req, res, next) {
     }
     const isAdmin = req.user.role.name === 'ADMIN';
     const organization = await Organization.create({
+      ...imageFields,
       name: body.name.trim(),
       code: body.code.trim().toUpperCase(),
       address: body.address.trim(),
@@ -149,6 +151,7 @@ async function updateOrganization(req, res, next) {
       });
     }
 
+    await require('../utils/resourceImageAccess').applyImageFromForm(organization, body, 'organizations', req.user);
     if (typeof body.name === 'string') {
       organization.name = body.name.trim();
     }
@@ -163,9 +166,6 @@ async function updateOrganization(req, res, next) {
     }
     if (typeof body.email === 'string') {
       organization.email = body.email.trim();
-    }
-    if (typeof body.logoUrl === 'string') {
-      organization.logoUrl = body.logoUrl.trim();
     }
 
     if (!isAdmin) {

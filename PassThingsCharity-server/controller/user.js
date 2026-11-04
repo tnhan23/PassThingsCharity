@@ -2,116 +2,42 @@ const User=require('../models/user');
 const Role=require('../models/role');
 const mongoose  = require('mongoose');
 const bcrypt = require('bcryptjs');
-
-async function getUser(req,res,next){
-    try{
-    const filter={};
-    if(req.query.role){
-        const roleName=String(req.query.role).toUpperCase();
-        const role=await Role.findOne({name:roleName});
-        if(!role){
-            return res.status(400).json({ error: 'Role không hợp lệ.' });
-
-        }
-          filter.role = role._id;
-    }
-    const users=await User.find(filter).populate('role','name');
-    return res.status(200).json({data:users});
-
-}catch(error){
-    next(error);
-}
-};
-async function createUser(req,res,next) {
-    try{
-          const {email,username,password,fullName,phone}=req.body || {};
-               if(
-                 !mongoose.isValidObjectId(stationId) ||
-               typeof email !== 'string' || !email.trim() ||
-               typeof username !== 'string' || !username.trim() ||
-               typeof password !== 'string' || !password ||
-               typeof fullName !== 'string' || !fullName.trim() ||
-               typeof phone !== 'string' || !/^\d{10}$/.test(phone.trim())
-               )
-               {
-                 return res.status(400).json({
-                 error: 'Thông tin không hợp lệ; phone phải gồm đúng 10 chữ số.',
-                 })
-             }
-             const userRole = await Role.findOne({ name: 'USER' });
-
-             if (!userRole) {
-               return res.status(500).json({
-            error: 'Chưa cấu hình role USER trong hệ thống.',
-            });
-               }
-               const user=await User.create({
-                    email: email.trim().toLowerCase(),
-                    username: username.trim(),
-                    password: await bcrypt.hash(password, 12),
-                    fullName: fullName.trim(),
-                    phone: phone.trim(),
-                    role: userRole._id,
-                  });
-                 return res.status(201).json({
-                message: 'Đã tạo tài khoản USER.',
-      user: {
-        id: user._id,
-        username: staff.username,
-        fullName: staff.fullName,
-        role: 'USER',
-        status:user.status,
-      },
-    });  
-
-
-
-    }catch(error){
-       if (error.code === 11000) {
-      return res.status(409).json({
-        error: 'Email hoặc username đã được sử dụng.',
-      });
-    }
-    return next(error);     
-    }
-    
-}
-async function setUserStatus(req, res, next) {
+const resourceImageFields = require('../utils/resourceImageFields');
+const PointTransaction = require('../models/pointTransaction');
+const UserAchievement = require('../models/userAchievement');
+const Certificate = require('../models/certificate');
+async function getMyProfile(req, res, next) {
+  // checkBearerToken has already loaded this account and populated its role.
+  // Explicitly list public profile fields instead of serializing the account.
   try {
-    const { id } = req.params;
-    const { status = 'inactive' } = req.body || {};
-
-    if (!mongoose.isValidObjectId(id)) {
-      return res.status(400).json({ error: 'User ID không hợp lệ.' });
-    }
-
-    if (!['active', 'inactive', 'banned'].includes(status)) {
-      return res.status(400).json({
-        error: 'Status phải là active, inactive hoặc banned.',
-      });
-    }
-
-    const user = await User.findByIdAndUpdate(
-      id,
-      { $set: { status } },
-      { new: true, runValidators: true }
-    ).populate('role', 'name');
-
-    if (!user) {
-      return res.status(404).json({ error: 'Không tìm thấy user.' });
-    }
+    const user = req.user;
+    const [transactions, achievements, certificates] = await Promise.all([
+      PointTransaction.find({ userId: user._id }).sort({ createdAt: -1 }),
+      UserAchievement.find({ userId: user._id }).populate('achievementId').sort({ unlockedAt: -1 }),
+      Certificate.find({ userId: user._id }).populate('campaignId', 'title').sort({ issueDate: -1 }),
+    ]);
 
     return res.status(200).json({
-      message: status === 'active'
-        ? 'Đã kích hoạt tài khoản.'
-        : status === 'banned'
-          ? 'Đã khóa tài khoản.'
-          : 'Đã vô hiệu hóa tài khoản.',
       user: {
         id: user._id,
+        email: user.email,
         username: user.username,
+        fullName: user.fullName,
+        phone: user.phone || null,
+        avatarUrl: user.avatarUrl || null,
         role: user.role?.name,
-        status: user.status,
+        status: user.status || null,
+      },
+      gamification: {
+        totalPoints: transactions.reduce((total, transaction) => total + transaction.points, 0),
+        pointTransactions: transactions,
+        unlockedAchievements: achievements,
+        certificates: certificates.map((certificate) => ({
+          ...certificate.toObject(),
+          ...(certificate.certificateType === 'MILESTONE'
+            ? { pdfDownloadUrl: `/gamification/certificates/${certificate._id}/pdf` }
+            : {}),
+        })),
       },
     });
   } catch (error) {
@@ -122,6 +48,7 @@ async function setUserStatus(req, res, next) {
 async function updateMyProfile(req, res, next) {
   try {
     const { email, username, fullName, phone, avatarUrl } = req.body || {};
+    const imageFields = resourceImageFields(req.body || {}, 'avatarUrl');
 
     if (
       email === undefined &&
@@ -157,11 +84,6 @@ async function updateMyProfile(req, res, next) {
       });
     }
 
-    if (avatarUrl !== undefined &&
-        (typeof avatarUrl !== 'string' || !/^https:\/\/.+/i.test(avatarUrl.trim()))) {
-      return res.status(400).json({ error: 'Ảnh hồ sơ phải là một đường dẫn https.' });
-    }
-
     const user = await User.findById(req.user._id);
 
     if (!user) {
@@ -181,7 +103,9 @@ async function updateMyProfile(req, res, next) {
       user.phone = phone.trim();
     }
     if (avatarUrl !== undefined) {
-      user.avatarUrl = avatarUrl.trim();
+      user.avatarUrl = imageFields.avatarUrl;
+      // A URL supplied with the form has no verified Cloudinary public ID.
+      if (user.isModified('avatarUrl')) user.imagePublicId = null;
     }
 
     await user.save();
@@ -195,7 +119,7 @@ async function updateMyProfile(req, res, next) {
         username: user.username,
         fullName: user.fullName,
         phone: user.phone,
-        avatarUrl: user.avatarUrl || '',
+        avatarUrl: user.avatarUrl,
         role: user.role?.name,
         status: user.status,
       },
@@ -252,9 +176,7 @@ async function deleteMyAccount(req, res, next) {
   }
 }
 module.exports={
-  getUser,
-  createUser,
-  setUserStatus,
+  getMyProfile,
   updateMyProfile,
   deleteMyAccount,
 };

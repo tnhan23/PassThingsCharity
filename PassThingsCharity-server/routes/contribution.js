@@ -15,7 +15,7 @@ const { uploadContributionImages } = require('../utils/contributionUpload');
 router.post('/upload-images', checkBearerToken, checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF']), uploadContributionImages);
 
 // Tra cứu donor (Staff / Station Manager / Admin)
-router.get('/lookup', checkBearerToken, checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'STAFF']), lookupDonor);
+router.get('/lookup', checkBearerToken, checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF']), lookupDonor);
 
 // Tạo phiếu tiếp nhận quyên góp (Inbound)
 router.post('/', checkBearerToken, checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF']), createContribution);

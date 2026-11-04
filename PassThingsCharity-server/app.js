@@ -1,6 +1,5 @@
 require('dotenv').config();
 const express = require('express');
-const cors = require('cors');
 const passport = require('passport');
 require('./config/passport');
 
@@ -20,10 +19,13 @@ const contributionsRouter = require('./routes/contribution');
 const transfersRouter = require('./routes/campaignTransfer');
 const reliefRouter = require('./routes/reliefDistribution');
 const workforceRouter = require('./routes/workforce');
-
+const shiftRouter = require('./routes/shift');
+const notificationRouter = require('./routes/notification');
 const rateLimit = require('express-rate-limit');
 const swaggerUi = require('swagger-ui-express');
 const createSwaggerDocument = require('./config/swagger');
+const cors = require('cors');
+const { requireAppSignature } = require('./middleware/requireAppSignature');
 const app = express();
 app.disable('x-powered-by');
 const mongoose = require('mongoose');
@@ -40,6 +42,7 @@ const captureRawBody = (req, res, buf) => {
 app.use(express.json({ verify: captureRawBody }));
 app.use(express.urlencoded({ extended: false, verify: captureRawBody }));
 app.use(passport.initialize());
+app.use(requireAppSignature);
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -48,11 +51,6 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Bạn thử quá nhiều lần. Đợi một lát rồi thử lại.' },
 });
-const { requireAppAttest } = require('./middleware/requireAppAttest');
-const { requireAppSignature } = require('./middleware/requireAppSignature');
-app.use(requireAppSignature);
-app.use(requireAppAttest);
-
 app.use('/auth/login', authLimiter);
 app.use('/auth/register', authLimiter);
 app.use('/auth/forgot-password', authLimiter);
@@ -67,13 +65,13 @@ app.get('/', (req, res) => {
 });
 
 // Existing Route Middlewares
-app.use('/app-attest', require('./routes/appAttest'));
 app.use('/auth', authRouter);
 app.use('/users', usersRouter);
 app.use('/uploads', require('./routes/upload'));
 app.use('/stationmanager', stationManagerRouter);
 app.use('/organizations', organizationsRouter);
 app.use('/stations', stationsRouter);
+app.use('/shiftstations', shiftRouter);
 app.use('/admin', adminApprovalRouter);
 
 // BE2 Route Middlewares
@@ -84,8 +82,10 @@ app.use('/gamification', gamificationRouter);
 // BE3 Route Middlewares
 app.use('/contributions', contributionsRouter);
 app.use('/transfers', transfersRouter);
+app.use('/inventory', require('./routes/inventory'));
 app.use('/relief', reliefRouter);
 app.use('/workforce', workforceRouter);
+app.use('/notifications', notificationRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Không tìm thấy đường dẫn.' });
@@ -99,11 +99,11 @@ app.use((err, req, res, next) => {
 });
 
 const startServer = (port) => {
-  const server = app.listen(port, "0.0.0.0", () => {
+  const server = app.listen(port, '0.0.0.0', () => {
     process.env.PORT = String(port);
     swaggerDocument.servers[0].url = `http://localhost:${port}`;
-    console.log(`Server running at: http://localhost:${port}`);
-    if (swaggerEnabled) console.log(`Swagger API Docs: http://localhost:${port}/swagger`);
+    console.log(`🚀 Server running at: http://localhost:${port}`);
+    if (swaggerEnabled) console.log(`📚 Swagger API Docs:  http://localhost:${port}/swagger`);
   });
 
   server.on('error', (error) => {
@@ -121,8 +121,9 @@ const startServer = (port) => {
 
 mongoose
   .connect(process.env.MONGODB_URI)
-  .then(() => {
+  .then(async () => {
     console.log('Đã kết nối MongoDB');
+    await require('./services/inventory').initializeInventory();
     startServer(DEFAULT_PORT);
   })
   .catch((error) => {

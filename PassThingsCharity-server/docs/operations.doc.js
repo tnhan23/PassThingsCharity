@@ -388,7 +388,7 @@ const paths = {
   '/workforce/tasks/{taskId}/apply': {
     post: {
       tags: ['BE3 - Task Recruitment & Applications'],
-      summary: 'Tình nguyện viên nộp đơn ứng tuyển vào một nhiệm vụ đang mở tuyển (OPEN)',
+      summary: 'User nộp đơn ứng tuyển vào job đang mở tuyển; không yêu cầu role VOLUNTEER',
       parameters: [
         { name: 'taskId', in: 'path', required: true, schema: { type: 'string' } },
       ],
@@ -552,7 +552,7 @@ const paths = {
   '/workforce/tasks/check-out': {
     post: {
       tags: ['BE3 - Workforce & Attendance'],
-      summary: 'Điểm danh ra ca (Check-out) - Tính giờ làm & tự động thưởng điểm Gamification',
+      summary: 'User check-out công việc; server tự tính giờ và cộng điểm thưởng một lần',
       requestBody: {
         required: true,
         content: {
@@ -563,6 +563,24 @@ const paths = {
       },
       responses: {
         200: { description: 'Check-out thành công và đã nhận điểm thưởng' },
+        409: { description: 'Chưa check-in hoặc công việc đã ở trạng thái không thể check-out' },
+      },
+    },
+  },
+  '/workforce/tasks/assignments/{assignmentId}/absent': {
+    patch: {
+      tags: ['BE3 - Workforce & Attendance'],
+      summary: 'Quản lý xác nhận người được phân công vắng mặt và mở lại slot tuyển',
+      parameters: [{ name: 'assignmentId', in: 'path', required: true, schema: { type: 'string' } }],
+      requestBody: {
+        content: { 'application/json': { schema: { $ref: '#/components/schemas/TaskAbsenceRequest' } } },
+      },
+      responses: {
+        200: { description: 'Lần đầu cảnh cáo; từ lần vắng mặt thứ hai trừ tối đa 10 điểm theo số dư hiện có; mở lại slot nếu còn thiếu người' },
+        400: { description: 'ID phân công không hợp lệ' },
+        403: { description: 'Chỉ quản lý, nhân viên hoặc admin được xác nhận' },
+        404: { description: 'Không tìm thấy phân công/công việc' },
+        409: { description: 'Chưa hết thời gian công việc hoặc đã check-in/hoàn thành' },
       },
     },
   },
@@ -604,6 +622,7 @@ const permissions = {
   'POST /workforce/tasks/assign': operators,
   'POST /workforce/tasks/check-in': null,
   'POST /workforce/tasks/check-out': null,
+  'PATCH /workforce/tasks/assignments/{assignmentId}/absent': operators,
 };
 
 const personalScopes = {
@@ -614,6 +633,7 @@ const personalScopes = {
   'GET /workforce/tasks/me': 'Chỉ trả nhiệm vụ được phân công cho tài khoản trong token.',
   'POST /workforce/tasks/check-in': 'Người được phân công tự check-in; ADMIN, STATION_MANAGER hoặc STAFF được check-in thay người khác. Tài khoản khác nhận 403.',
   'POST /workforce/tasks/check-out': 'Người được phân công tự check-out; ADMIN, STATION_MANAGER hoặc STAFF được check-out thay người khác. Tài khoản khác nhận 403.',
+  'PATCH /workforce/tasks/assignments/{assignmentId}/absent': 'Chỉ ADMIN, STATION_MANAGER hoặc STAFF xác nhận vắng mặt; lần đầu cảnh cáo, từ lần thứ hai trừ tối đa 10 điểm mỗi lần, không để số dư âm; mở lại slot tuyển khi phù hợp.',
 };
 
 for (const [url, path] of Object.entries(paths)) {

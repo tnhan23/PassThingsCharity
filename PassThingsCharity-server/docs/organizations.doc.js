@@ -38,13 +38,14 @@ module.exports = {
     patch: {
       tags: ['Organizations'],
       summary: 'Cập nhật thông tin tổ chức (ADMIN, ORG_MANAGER)',
+      description: 'Người tạo tổ chức (USER/ORG_MANAGER/STATION_MANAGER) hoặc ADMIN được sửa. Cập nhật bởi người không phải ADMIN sẽ bỏ xác minh và tạm ngừng các trạm thuộc tổ chức theo quy tắc hiện tại.',
       parameters: [
         { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
       ],
       requestBody: {
         content: {
           'application/json': {
-            schema: { $ref: '#/components/schemas/OrganizationRequest' },
+            schema: { $ref: '#/components/schemas/OrganizationUpdateRequest' },
           },
         },
       },

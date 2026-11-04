@@ -4,6 +4,7 @@ const router = express.Router();
 const {
   listStations,
   getStation,
+  getNearbyStations,
   updateStation,
   deleteStation,
   assignStaffToStation,
@@ -13,7 +14,11 @@ const {
   removeStationManager, 
 } = require('../controller/station');
 const checkBearerToken = require('../middleware/checkBearerToken');
+const optionalBearerToken = require('../middleware/optionalBearerToken');
 const checkRole = require('../middleware/checkRole');
+
+// Public / Optional authentication route (Must be defined before checkBearerToken middleware)
+router.get('/nearby', optionalBearerToken, getNearbyStations);
 
 router.use(checkBearerToken);
 
@@ -31,7 +36,7 @@ router.get(
 
 router.patch(
   '/:id',
-  checkRole(['ADMIN', 'ORG_MANAGER']),
+  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER']),
   updateStation
 );
 

@@ -1,10 +1,113 @@
 module.exports = {
+  '/stations/nearby': {
+    get: {
+      tags: ['Stations'],
+      summary: 'Đề xuất các trạm gần nhất theo tọa độ GPS (Đăng nhập vs Chưa đăng nhập)',
+      description: 'API đề xuất các trạm tiếp nhận theo vị trí địa lý GPS.\n' +
+        '- **Chưa đăng nhập (Guest):** Trả về danh sách trạm với tên, địa chỉ, giờ mở cửa nhưng **KHÔNG** hiển thị chi tiết khoảng cách (`distanceKm`).\n' +
+        '- **Đã đăng nhập (Logged in):** Tự động tính toán khoảng cách (`distanceKm`, `distanceMeters`, `formattedDistance`) và **sắp xếp trạm gần nhất đẩy lên đầu** (từ nhỏ đến lớn).\n' +
+        '- Tham số vị trí hỗ trợ linh hoạt: `latitude`/`longitude` hoặc `lat`/`lng` hoặc `userLat`/`userLng`.',
+      parameters: [
+        {
+          name: 'latitude',
+          in: 'query',
+          required: false,
+          schema: { type: 'number', example: 10.776889 },
+          description: 'Vĩ độ vị trí hiện tại của người dùng (GPS Latitude)',
+        },
+        {
+          name: 'longitude',
+          in: 'query',
+          required: false,
+          schema: { type: 'number', example: 106.700806 },
+          description: 'Kinh độ vị trí hiện tại của người dùng (GPS Longitude)',
+        },
+        {
+          name: 'radius',
+          in: 'query',
+          required: false,
+          schema: { type: 'number', example: 15 },
+          description: 'Bán kính tìm kiếm tối đa (đơn vị: km)',
+        },
+        {
+          name: 'limit',
+          in: 'query',
+          required: false,
+          schema: { type: 'integer', example: 10 },
+          description: 'Giới hạn số lượng trạm đề xuất trả về',
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Danh sách các trạm đề xuất.',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  isLoggedIn: { type: 'boolean', example: true },
+                  total: { type: 'integer', example: 5 },
+                  userCoordinates: {
+                    type: 'object',
+                    nullable: true,
+                    properties: {
+                      latitude: { type: 'number', example: 10.776889 },
+                      longitude: { type: 'number', example: 106.700806 },
+                    },
+                  },
+                  message: { type: 'string', example: 'Danh sách trạm tiếp nhận đã được sắp xếp theo khoảng cách gần nhất.' },
+                  data: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        _id: { type: 'string', example: '671000000000000000000011' },
+                        name: { type: 'string', example: 'Trạm Tiếp Nhận Thiện Nguyện Quận 1' },
+                        address: { type: 'string', example: '123 Nguyễn Huệ, P. Bến Nghé, Quận 1, TP.HCM' },
+                        latitude: { type: 'string', example: '10.776889' },
+                        longitude: { type: 'string', example: '106.700806' },
+                        openingTime: { type: 'string', example: '08:00' },
+                        closingTime: { type: 'string', example: '17:00' },
+                        isActive: { type: 'boolean', example: true },
+                        distanceKm: { type: 'number', example: 1.25, description: 'Chỉ xuất hiện khi ĐÃ ĐĂNG NHẬP' },
+                        distanceMeters: { type: 'integer', example: 1250, description: 'Chỉ xuất hiện khi ĐÃ ĐĂNG NHẬP' },
+                        formattedDistance: { type: 'string', example: '1.25 km', description: 'Chỉ xuất hiện khi ĐÃ ĐĂNG NHẬP' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
   '/stations': {
     get: {
       tags: ['Stations'],
       summary: 'Lấy danh sách các trạm tiếp nhận',
       responses: {
-        200: { description: 'Danh sách các trạm' },
+        200: {
+          description: 'Danh sách trạm và tổng số trạm người dùng có quyền xem.',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['total', 'data'],
+                properties: {
+                  total: {
+                    type: 'integer',
+                    minimum: 0,
+                    example: 12,
+                    description: 'Tổng số trạm trong danh sách sau khi lọc theo quyền truy cập.',
+                  },
+                  data: { type: 'array', items: { type: 'object', additionalProperties: true } },
+                },
+              },
+            },
+          },
+        },
       },
     },
     post: {
@@ -37,6 +140,7 @@ module.exports = {
     patch: {
       tags: ['Stations'],
       summary: 'Cập nhật thông tin trạm',
+      description: 'Quản lý trạm được gán, chủ tổ chức có role phù hợp hoặc ADMIN được sửa. Người không phải ADMIN cập nhật sẽ đưa trạm về isActive=false để chờ duyệt lại theo quy tắc hiện tại.',
       parameters: [
         { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
       ],

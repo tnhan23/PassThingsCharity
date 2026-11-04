@@ -3,16 +3,20 @@ const router = express.Router();
 const {
   awardPoints,
   getUserPoints,
+  getPointPolicy,
   createAchievement,
+  updateAchievement,
   getAllAchievements,
   getUserAchievements,
   issueCertificate,
   getUserCertificates,
+  downloadCertificatePdf,
 } = require('../controller/gamification');
 const checkBearerToken = require('../middleware/checkBearerToken');
 const checkRole = require('../middleware/checkRole');
 
 // Points
+router.get('/points/policy', getPointPolicy);
 router.get('/points/me', checkBearerToken, getUserPoints);
 router.get(
   '/points/user/:userId',
@@ -28,6 +32,7 @@ router.post(
 );
 
 // Achievements
+router.patch('/achievements/:id', checkBearerToken, checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER']), updateAchievement);
 router.get('/achievements', getAllAchievements);
 router.post(
   '/achievements',
@@ -45,6 +50,7 @@ router.get(
 
 // Certificates
 router.get('/certificates/me', checkBearerToken, getUserCertificates);
+router.get('/certificates/:id/pdf', checkBearerToken, downloadCertificatePdf);
 router.get(
   '/certificates/user/:userId',
   checkBearerToken,
