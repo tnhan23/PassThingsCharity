@@ -175,8 +175,61 @@ async function deleteMyAccount(req, res, next) {
     return next(error);
   }
 }
+async function listUsers(req, res, next) {
+  try {
+    const users = await User.find()
+      .populate('role', 'name')
+      .sort({ createdAt: -1 });
+    return res.status(200).json({
+      data: users.map((user) => ({
+        _id: user._id,
+        username: user.username,
+        fullName: user.fullName,
+        phone: user.phone,
+        email: user.email,
+        status: user.status,
+        role: user.role && user.role.name ? user.role.name : '',
+      })),
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function setUserStatus(req, res, next) {
+  try {
+    const { id } = req.params;
+    const status = typeof req.body?.status === 'string' ? req.body.status.trim() : '';
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ error: 'User ID không hợp lệ.' });
+    }
+    if (status !== 'active' && status !== 'banned') {
+      return res.status(400).json({ error: 'Trạng thái chỉ được là active hoặc banned.' });
+    }
+    if (String(id) === String(req.user._id)) {
+      return res.status(400).json({ error: 'Không khóa tài khoản đang đăng nhập.' });
+    }
+    const user = await User.findById(id).populate('role', 'name');
+    if (!user) {
+      return res.status(404).json({ error: 'Không tìm thấy tài khoản.' });
+    }
+    if (user.role && user.role.name === 'ADMIN') {
+      return res.status(400).json({ error: 'Không khóa tài khoản quản trị.' });
+    }
+    user.status = status;
+    await user.save();
+    return res.status(200).json({
+      message: status === 'banned' ? 'Đã khóa tài khoản.' : 'Đã mở lại tài khoản.',
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
 module.exports={
   getMyProfile,
   updateMyProfile,
   deleteMyAccount,
+  listUsers,
+  setUserStatus,
 };
