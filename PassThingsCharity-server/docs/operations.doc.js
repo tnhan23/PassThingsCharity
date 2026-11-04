@@ -388,7 +388,8 @@ const paths = {
   '/workforce/tasks/{taskId}/apply': {
     post: {
       tags: ['BE3 - Task Recruitment & Applications'],
-      summary: 'User nộp đơn ứng tuyển vào job đang mở tuyển; không yêu cầu role VOLUNTEER',
+      summary: 'User nộp đơn ứng tuyển vào job đang mở tuyển',
+      description: 'USER applies for a future open schedule; approval is required. Duplicate, full, expired and overlapping assigned schedules are rejected.',
       parameters: [
         { name: 'taskId', in: 'path', required: true, schema: { type: 'string' } },
       ],
@@ -423,6 +424,7 @@ const paths = {
     patch: {
       tags: ['BE3 - Task Recruitment & Applications'],
       summary: 'Duyệt hoặc từ chối đơn ứng tuyển (Nếu duyệt sẽ tự động phân công TaskAssignment)',
+      description: 'Station operators approve pending applications. Capacity and overlapping assignments are checked in a MongoDB transaction. Approval creates an assignment; the last place closes recruitment.',
       parameters: [
         { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
       ],
@@ -447,6 +449,7 @@ const paths = {
     post: {
       tags: ['BE3 - Workforce & Tasks'],
       summary: 'Tạo nhiệm vụ (Task) vận hành tại trạm (Có thể liên kết Transfer & mở tuyển TNV)',
+      description: 'Create a station work schedule. campaignId is optional. startTime/endTime and a positive requiredVolunteers capacity are required. Recruitment defaults to OPEN. Use timestamps with timezone, e.g. +07:00.',
       requestBody: {
         required: true,
         content: {
@@ -499,6 +502,7 @@ const paths = {
     patch: {
       tags: ['BE3 - Workforce & Tasks'],
       summary: 'Cập nhật thông tin, trạng thái vận hành hoặc trạng thái tuyển TNV',
+      description: 'Changing times or capacity after participants are assigned is rejected.',
       parameters: [
         { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
       ],
@@ -587,9 +591,22 @@ const paths = {
 };
 
 // Mirror checkRole in routes; null means any successfully authenticated account.
+Object.assign(paths, require('./transferHandover.doc'));
+paths['/transfers'].post.description = 'STAFF or source station manager creates the transfer. responsibleUserId defaults to its creator; receivedBy starts null. STAFF needs a current shift when creating or being assigned responsibility. After approval, station B manager is notified and sets receivedBy using /responsibilities. Dispatch requires an assigned receiver. Uploading or creating a transfer does not change physical stock.';
+paths['/transfers/{id}/status'].patch.description = 'Phi?u m?i ch? d?ng endpoint n?y ?? CANCELLED tr??c khi xu?t ho?c COMPLETED sau khi nh?n ??. Kh?ng ???c ??i th?ng PREPARING/IN_TRANSIT/RECEIVED; d?ng API duy?t v? b?n giao t?ng ng??i.';
+
 const operators = ['ADMIN', 'STATION_MANAGER', 'STAFF'];
 const managers = ['ADMIN', 'STATION_MANAGER'];
 const permissions = {
+  'GET /transfers/shipments/me': null,
+  'PATCH /transfers/{id}/approval': managers,
+  'PATCH /transfers/{id}/responsibilities': managers,
+  'POST /transfers/{id}/shipments': operators,
+  'DELETE /transfers/{id}/shipments/{shipmentId}': operators,
+  'POST /transfers/{id}/shipments/{shipmentId}/evidence/{stage}': ['ADMIN', 'STATION_MANAGER', 'STAFF', 'USER'],
+  'POST /transfers/{id}/shipments/{shipmentId}/dispatch': operators,
+  'POST /transfers/{id}/shipments/{shipmentId}/report': ['USER', 'STAFF', 'STATION_MANAGER', 'ADMIN'],
+  'POST /transfers/{id}/shipments/{shipmentId}/receive': operators,
   'POST /contributions/upload-images': operators,
   'GET /contributions/lookup': operators,
   'POST /contributions': operators,
@@ -597,9 +614,9 @@ const permissions = {
   'GET /contributions/{id}': null,
   'PATCH /contributions/{id}/status': managers,
   'POST /contributions/{id}/images': operators,
-  'POST /transfers': operators,
+  'POST /transfers': ['STATION_MANAGER', 'STAFF'],
   'GET /transfers': operators,
-  'GET /transfers/{id}': operators,
+  'GET /transfers/{id}': ['ADMIN', 'STATION_MANAGER', 'STAFF', 'USER'],
   'PATCH /transfers/{id}/status': operators,
   'POST /relief': operators,
   'GET /relief': null,
@@ -626,6 +643,19 @@ const permissions = {
 };
 
 const personalScopes = {
+  'PATCH /transfers/{id}/responsibilities': 'Station A manager assigns responsibleUserId; station B manager assigns receivedBy; ADMIN may assign either. STAFF duty is checked at assignment, not on every later handover.',
+  'POST /transfers': 'STAFF ho?c tr??ng tr?m ngu?n t?o phi?u ch? duy?t; ADMIN ch? duy?t, kh?ng t?o.',
+  'GET /transfers': 'Ch? xem phi?u li?n quan tr?m ???c qu?n l?/ph?n c?ng; ADMIN xem t?t c?.',
+  'GET /transfers/{id}': 'Nh?n s? tr?m ngu?n/??ch ho?c ADMIN xem phi?u. USER ch? xem khi c? ph?n ch? trong phi?u v? ch? nh?n ph?n ch? c?a m?nh.',
+  'PATCH /transfers/{id}/approval': 'Ch? tr??ng tr?m ngu?n ???c g?n ho?c ADMIN duy?t; ch?a xu?t kho.',
+  'PATCH /transfers/{id}/status': 'Phi?u m?i d?ng API duy?t, xu?t v? nh?n t?ng ng??i. API n?y ch? h?y khi ch?a xu?t ho?c ho?n t?t khi ?? nh?n ??. Kh?ng ???c nh?y th?ng IN_TRANSIT/RECEIVED.',
+  'DELETE /transfers/{id}/shipments/{shipmentId}': 'Only source station staff/manager or ADMIN; remove an allocation before any dispatch.',
+  'POST /transfers/{id}/shipments': 'Nh?n s? tr?m ngu?n ho?c ADMIN ph?n h?ng cho ng??i c? nhi?m v? ???c duy?t.',
+  'GET /transfers/shipments/me': 'Ch? ph?n h?ng t?i kho?n trong token ???c giao ch?.',
+  'POST /transfers/{id}/shipments/{shipmentId}/evidence/{stage}': 'DISPATCH thu?c nh?n s? tr?m A; REPORT ch? ng??i ch?; RECEIVE thu?c nh?n s? tr?m B. ADMIN ???c x?c nh?n xu?t/nh?n.',
+  'POST /transfers/{id}/shipments/{shipmentId}/dispatch': 'Nh?n s? tr?m A ho?c ADMIN, sau duy?t v? ph?n ?? h?ng.',
+  'POST /transfers/{id}/shipments/{shipmentId}/report': 'Ch? ng??i ???c giao ch?, kh?ng x?c nh?n thay b?ng quy?n qu?n l?.',
+  'POST /transfers/{id}/shipments/{shipmentId}/receive': 'Nh?n s? tr?m B ho?c ADMIN x?c nh?n th?c nh?n.',
   'POST /workforce/volunteers/register': 'Đăng ký cho chính tài khoản trong token; userId do BE lấy từ token.',
   'GET /workforce/volunteers/me': 'Chỉ trả đơn đăng ký của tài khoản trong token.',
   'GET /workforce/tasks/applications/me': 'Chỉ trả đơn ứng tuyển của tài khoản trong token.',
@@ -655,4 +685,29 @@ for (const [url, path] of Object.entries(paths)) {
   }
 }
 
+// Slot totals are computed from assignments and applications, never maintained by FE.
+const scheduleWithSlots = {
+  type: 'object', additionalProperties: true,
+  properties: { _id: { type: 'string' }, recruitmentStatus: { type: 'string' }, slots: { $ref: '#/components/schemas/TaskSlots' } },
+};
+for (const [url, method, code, shape] of [
+  ['/workforce/tasks', 'post', 201, 'single'],
+  ['/workforce/tasks', 'get', 200, 'list'],
+  ['/workforce/tasks/{id}', 'get', 200, 'single'],
+  ['/workforce/tasks/{id}', 'patch', 200, 'single'],
+  ['/workforce/tasks/{taskId}/apply', 'post', 201, 'single'],
+  ['/workforce/tasks/{taskId}/applications', 'get', 200, 'single'],
+  ['/workforce/tasks/applications/{id}/review', 'patch', 200, 'single'],
+  ['/workforce/tasks/assign', 'post', 201, 'single'],
+  ['/workforce/tasks/me', 'get', 200, 'assignments'],
+]) {
+  const op = paths[url][method];
+  op.description += '\n\nResponse includes task.slots (total, approved, pending, remaining, isFull). List responses include slots on each task; /tasks/me includes them in data[].taskId.slots. Pending applications do not use a place. FE should refresh the list/detail after apply or review; no realtime push is provided.';
+  const properties = shape === 'list'
+    ? { data: { type: 'array', items: scheduleWithSlots } }
+    : shape === 'assignments'
+      ? { data: { type: 'array', items: { type: 'object', properties: { taskId: scheduleWithSlots } } } }
+      : { task: scheduleWithSlots };
+  op.responses[code] = { ...op.responses[code], content: { 'application/json': { schema: { type: 'object', additionalProperties: true, properties } } } };
+}
 module.exports = paths;

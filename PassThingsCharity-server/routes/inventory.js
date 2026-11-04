@@ -23,7 +23,7 @@ router.use(async (req, res, next) => {
       }
     }
     if (req.path === '/history' && req.query.type !== undefined) {
-      if (!['OPENING', 'DONATION_IN', 'DONATION_REVERSAL', 'TRANSFER_OUT', 'TRANSFER_IN', 'RELIEF_OUT'].includes(req.query.type)) {
+      if (!InventoryTransaction.schema.path('type').enumValues.includes(req.query.type)) {
         return res.status(400).json({ error: 'Loại giao dịch kho không hợp lệ.' });
       }
       filter.type = req.query.type;
@@ -58,7 +58,8 @@ function listInventory(Model, history = false) {
         .skip((page - 1) * limit).limit(limit);
       if (history) query = query.populate('performedBy', 'fullName username')
         .populate('campaignId', 'title status').populate('counterpartyStationId', 'name address');
-      const data = await query.lean();
+      const rows = await query.lean();
+      const data = history ? rows : await require('../services/inventory').withReservations(rows);
       return res.json({ total, page, totalPages: Math.ceil(total / limit), data });
     } catch (error) { return next(error); }
   };
@@ -66,4 +67,7 @@ function listInventory(Model, history = false) {
 
 router.get('/history', listInventory(InventoryTransaction, true));
 router.get('/', listInventory(Inventory));
+router.post('/', require('../controller/inventory').createInventory);
+router.patch('/:id', require('../controller/inventory').updateInventory);
+router.delete('/:id', require('../controller/inventory').deleteInventory);
 module.exports = router;

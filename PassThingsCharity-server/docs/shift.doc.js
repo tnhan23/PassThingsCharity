@@ -173,3 +173,43 @@ module.exports = {
   },
 };
 
+const schedulesPath = '/shiftstations/{stationId}/schedules';
+module.exports[schedulesPath].post.description = 'Tạo một lịch, chỉ STATION_MANAGER/ORG_MANAGER có quyền quản lý trạm. Ngày phải tồn tại, thời điểm bắt đầu phải trong tương lai theo UTC+7. Chặn nhân viên trùng giờ kể cả khác ca mẫu/trạm; cho phép hai ca nối tiếp. Cần MongoDB replica set hoặc Atlas cho transaction.';
+module.exports[schedulesPath].get.parameters.push(
+  { name: 'fromDate', in: 'query', schema: { type: 'string', format: 'date' }, description: 'Ngày đầu khoảng (bao gồm). Phải gửi cùng toDate, không dùng cùng date.' },
+  { name: 'toDate', in: 'query', schema: { type: 'string', format: 'date' }, description: 'Ngày cuối khoảng (bao gồm).' }
+);
+module.exports['/shiftstations/{stationId}/schedules/batch'] = {
+  post: {
+    tags: ['Shift Management (Phân ca làm việc)'],
+    summary: 'Tạo nhiều lịch, ví dụ lịch cả tuần, trong một transaction',
+    description: 'Quyền và kiểm tra như tạo lịch đơn. Tối đa 100 lịch/request. Nếu bất kỳ lịch nào sai hoặc trùng giờ thì không lưu lịch nào trong request. Mỗi phần tử là một ngày, một ca mẫu, một nhân viên; staffId có thể bỏ trống cho ca chưa phân người.',
+    parameters: module.exports[schedulesPath].post.parameters,
+    requestBody: { required: true, content: { 'application/json': { schema: {
+      type: 'object', required: ['schedules'], properties: { schedules: {
+        type: 'array', minItems: 1, maxItems: 100,
+        items: module.exports[schedulesPath].post.requestBody.content['application/json'].schema,
+      } },
+    } } } },
+    responses: { ...module.exports[schedulesPath].post.responses, 403: { description: 'Không được quản lý trạm.' } },
+  },
+};
+module.exports['/shiftstations/schedules/{id}/check-in'].post.description = 'Chỉ nhân viên được phân công, còn thuộc trạm và lịch SCHEDULED được check-in. Mặc định bỏ kiểm tra giờ để test ngay. Khi SHIFT_ENFORCE_CHECKIN_TIME=true, chỉ cho check-in từ 15 phút trước giờ bắt đầu đến trước giờ kết thúc ca theo UTC+7; ngoài khoảng trả 409. Check-out sau check-in không bị giới hạn giờ. Tạo lịch quá khứ vẫn bị chặn.';
+
+module.exports['/shiftstations/shift-templates'] = { get: {
+  tags: ['Shift Management (Phân ca làm việc)'], summary: 'Danh mục ca chung: 1 sáng 08:00–14:00, 2 chiều 14:00–20:00',
+  description: 'Cần đăng nhập ADMIN/STATION_MANAGER/ORG_MANAGER/STAFF. Tự khởi tạo khi server chạy; không cần stationId. Response {data:[{_id,code,name,startTime,endTime,description}]}. Giờ UTC+7.',
+  responses: { 200: { description: 'Danh mục ca dùng chung' }, 401: { description: 'Chưa đăng nhập' }, 403: { description: 'Không có quyền' } },
+} };
+const scheduleSchema = module.exports[schedulesPath].post.requestBody.content['application/json'].schema;
+scheduleSchema.required = ['date'];
+Object.assign(scheduleSchema.properties, {
+  shiftCode: { type: 'integer', enum: [1, 2], description: 'Dùng shiftCode hoặc templateId, không gửi cả hai.' },
+  staffIds: { type: 'array', minItems: 1, uniqueItems: true, items: { type: 'string' }, description: 'Dùng staffIds hoặc staffId. Mỗi người tạo một lịch; data là mảng khi gửi staffIds.' },
+  requiredStaff: { type: 'integer', minimum: 1, description: 'Nhu cầu nhân sự của lần phân lịch, ít nhất bằng số staffIds. Không phải bộ đếm chỗ trống toàn ca.' },
+  description: { type: 'string', description: 'Ghi chú, lưu vào note. assignedBy tự lấy từ token.' },
+});
+module.exports[schedulesPath].post.description += ' Nhận shiftCode 1/2 để chọn mẫu chung; hoặc templateId tương thích cũ. Nhận staffIds để phân nhiều người (data mảng) hoặc staffId cho một người (data object). Tối đa 100 phân công sau khi tách danh sách. Không gửi đồng thời hai kiểu chọn mẫu/người.';
+module.exports['/shiftstations/{stationId}/shift-templates'].get.description = 'Trả mẫu chung và mẫu riêng cũ của trạm. Nên dùng GET /shiftstations/shift-templates khi chỉ cần danh mục chung.';
+module.exports[schedulesPath].get.description = 'Response danh sách phẳng {data:[{_id,date,stationId,templateId,staffId,status,checkInTime,checkOutTime,requiredStaff,note,assignedBy,createdAt,updatedAt}]}. Mỗi dòng là một phân công của một nhân viên; templateId và staffId được populate. Dùng _id của dòng để check-in/check-out. Sắp theo ngày, ID ca và ID nhân viên. FE hiển thị bảng ngày/ca/nhân viên/trạng thái/giờ vào/giờ ra. Không gom nhóm hoặc thêm groupKey. POST giữ response như trước.';
+
