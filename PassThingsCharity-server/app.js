@@ -101,6 +101,7 @@ mongoose
   .connect(process.env.MONGODB_URI)
   .then(async () => {
     console.log('Đã kết nối MongoDB');
+    await require('./services/shiftTemplates').initializeShiftTemplates();
     await require('./services/inventory').initializeInventory();
     startServer(DEFAULT_PORT);
   })

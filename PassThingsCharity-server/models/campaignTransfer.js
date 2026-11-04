@@ -6,6 +6,13 @@ const mongoose = require('mongoose');
  */
 const campaignTransferSchema = new mongoose.Schema(
   {
+    workflowVersion: { type: Number, default: 1 },
+    approvalStatus: { type: String, enum: ['PENDING', 'APPROVED', 'REJECTED'], default: 'PENDING' },
+    approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    approvedAt: Date,
+    approvalNote: String,
+    sourceAssignedAt: Date,
+    destinationAssignedAt: Date,
     code: {
       type: String,
       required: true,
@@ -36,10 +43,12 @@ const campaignTransferSchema = new mongoose.Schema(
     responsibleUserId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
+      default: null,
     },
     receivedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
+      default: null,
     },
     status: {
       type: String,
@@ -55,7 +64,11 @@ const campaignTransferSchema = new mongoose.Schema(
       trim: true,
     },
   },
-  { timestamps: true }
+  { timestamps: true, toJSON: { transform(doc, ret) {
+    delete ret.workflowVersion;
+    delete ret.createdShiftScheduleId;
+    return ret;
+  } } }
 );
 
 module.exports = mongoose.model('CampaignTransfer', campaignTransferSchema);

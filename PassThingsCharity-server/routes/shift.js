@@ -4,9 +4,11 @@ const checkBearerToken = require('../middleware/checkBearerToken');
 const checkRole = require('../middleware/checkRole');
 
 // Require đúng tên file shiftTemplate
-const { createShiftTemplate, getShiftTemplatesByStation } = require('../controller/shiftTemplate');
+const { createShiftTemplate, getShiftTemplatesByStation, getSharedShiftTemplates } = require('../controller/shiftTemplate');
+router.get('/shift-templates', checkBearerToken, checkRole(['ADMIN', 'STATION_MANAGER', 'ORG_MANAGER', 'STAFF']), getSharedShiftTemplates);
 const {
   createSchedule,
+  createScheduleBatch,
   getStationSchedules,
   checkInShift,
   checkOutShift,
@@ -28,6 +30,7 @@ router.get(
 );
 // Trưởng trạm phân ca
 router.post('/:stationId/schedules', checkBearerToken, checkRole(['STATION_MANAGER', 'ORG_MANAGER']), createSchedule);
+router.post('/:stationId/schedules/batch', checkBearerToken, checkRole(['STATION_MANAGER', 'ORG_MANAGER']), createScheduleBatch);
 // Xem lịch phân ca của trạm
 router.get('/:stationId/schedules', checkBearerToken, checkRole(['STATION_MANAGER', 'ORG_MANAGER', 'STAFF']), getStationSchedules);
 // Staff điểm danh vào ca & tan ca

@@ -1,15 +1,17 @@
-const { models } = require('mongoose');
+const { requireStation } = require('../services/shiftSchedule');
 const ShiftTemplate = require('../models/shiftTemplate')
 const Station = require('../models/station')
 async function createShiftTemplate(req, res, next) {
   try {
     const { stationId } = req.params;
+    await requireStation(stationId, req.user, true);
     const { name, startTime, endTime, requiredStaff, description } = req.body || {};
     const station = await Station.findById(stationId);
     if (!station) {
       return res.status(404).json({ error: 'Không tìm thấy trạm tiếp nhận.' });
     }
-    if (startTime >= endTime) {
+    const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
+    if (typeof name !== 'string' || !name.trim() || !timePattern.test(startTime) || !timePattern.test(endTime) || startTime >= endTime) {
       return res.status(400).json({ error: 'Giờ bắt đầu phải trước giờ kết thúc ca.' });
     }
     const template = await ShiftTemplate.create({
@@ -35,9 +37,10 @@ async function createShiftTemplate(req, res, next) {
 async function getShiftTemplatesByStation(req, res, next) {
   try {
     const { stationId } = req.params;
+    await requireStation(stationId, req.user);
 
     const templates = await ShiftTemplate.find({
-      stationId,
+      $or: [{ stationId }, { stationId: null, code: { $in: [1, 2] } }],
       isActive: true,
     }).sort({ startTime: 1 }); // Sắp xếp theo giờ bắt đầu sớm nhất trước
 
@@ -48,4 +51,11 @@ async function getShiftTemplatesByStation(req, res, next) {
     return next(error);
   }
 }
-module.exports = { createShiftTemplate, getShiftTemplatesByStation }
+async function getSharedShiftTemplates(req, res, next) {
+  try {
+    const data = await ShiftTemplate.find({ stationId: null, code: { $in: [1, 2] }, isActive: true })
+      .select('code name startTime endTime description').sort({ code: 1 });
+    return res.json({ data });
+  } catch (error) { return next(error); }
+}
+module.exports = { createShiftTemplate, getShiftTemplatesByStation, getSharedShiftTemplates }

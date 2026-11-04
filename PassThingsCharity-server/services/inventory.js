@@ -28,6 +28,13 @@ function calculateInventory(contributions, transfers, distributions) {
     for (const item of doc.items) add(doc, doc.stationId, item, 1, 'receivedQuantity');
   }
   for (const doc of transfers) {
+    if (doc.workflowVersion === 2) {
+      for (const item of doc.items) {
+        if (item.dispatchedQuantity > 0) add(doc, doc.fromStationId, { ...item, quantity: item.dispatchedQuantity }, -1, 'transferredOutQuantity');
+        if (item.receivedQuantity > 0) add(doc, doc.toStationId, { ...item, quantity: item.receivedQuantity }, 1, 'transferredInQuantity');
+      }
+      continue;
+    }
     if (!['IN_TRANSIT', 'RECEIVED', 'COMPLETED'].includes(doc.status)) continue;
     for (const item of doc.items) {
       add(doc, doc.fromStationId, item, -1, 'transferredOutQuantity');
@@ -65,9 +72,42 @@ async function calculateHistoricalInventory(filter = {}) {
 
 async function getInventory(filter = {}) {
   const rows = await Inventory.find(filter).lean();
-  return rows.map(row => ({ ...row,
-    stationId: String(row.stationId), itemTypeId: String(row.itemTypeId),
-  }));
+  const decorated = await withReservations(rows);
+  return decorated.map(row => ({ ...row, stationId: String(row.stationId), itemTypeId: String(row.itemTypeId) }));
+}
+
+async function withReservations(rows) {
+  const reservations = await reservedStock();
+  return rows.map(row => {
+    const key = [row.stationId?._id || row.stationId, row.itemTypeId?._id || row.itemTypeId, row.unit].join(':');
+    const reservedQuantity = reservations.get(key) || 0;
+    return { ...row, reservedQuantity, availableQuantity: round(row.quantity - reservedQuantity) };
+  });
+}
+
+async function reservedStock() {
+  const transfers = await Transfer.find({ workflowVersion: 2, approvalStatus: 'APPROVED', status: { $ne: 'CANCELLED' } }).lean();
+  const byId = new Map(transfers.map(t => [String(t._id), t]));
+  const items = await TransferItem.find({ transferId: { $in: transfers.map(t => t._id) } }).lean();
+  const reserved = new Map();
+  for (const item of items) {
+    const transfer = byId.get(String(item.transferId));
+    const key = [transfer.fromStationId, item.itemTypeId, item.unit].join(':');
+    reserved.set(key, Number(((reserved.get(key) || 0) + Math.max(0, item.quantity - (item.dispatchedQuantity || 0))).toFixed(8)));
+  }
+  return reserved;
+}
+
+async function assertReservations() {
+  const reservations = await reservedStock();
+  if (!reservations.size) return;
+  const balances = await Inventory.find({}).lean();
+  const quantities = new Map(balances.map(row => [[row.stationId, row.itemTypeId, row.unit].join(':'), row.quantity]));
+  for (const [key, quantity] of reservations) {
+    if (quantity > 0 && quantity > (quantities.get(key) || 0) + 1e-8) {
+      throw Object.assign(new Error('Insufficient available stock: goods are reserved for approved transfers.'), { status: 409 });
+    }
+  }
 }
 
 mongoose.set('transactionAsyncLocalStorage', true);
@@ -243,7 +283,10 @@ function inventoryTransaction(handler, sourceType) {
           sourceType, sourceId: document._id, sourceCode: document.code,
           previousStatus: previous[0]?.status, status: document.status, performedBy: req.user._id,
           campaignId: document.campaignId, fromStationId: document.fromStationId, toStationId: document.toStationId,
+          shipmentId: response.body.shipment?._id,
+          carrierId: response.body.shipment?.carrierId,
         });
+        await assertReservations();
       });
       return res.status(response.code).json(response.body);
     } catch (error) {
@@ -256,4 +299,18 @@ function inventoryTransaction(handler, sourceType) {
   };
 }
 
-module.exports = { calculateInventory, getInventory, inventoryTransaction, initializeInventory, inventoryDeltas, mergeStockBalances, transactionDetails, calculateHistoricalInventory };
+// Use the same lock as voucher operations so manual edits cannot bypass reservations.
+async function mutateInventory(operation) {
+  return mongoose.connection.transaction(async () => {
+    const lock = await InventoryLock.findOneAndUpdate(
+      { _id: 'inventory', initialized: true, stockVersion: 2 },
+      { $inc: { revision: 1 } }, { new: true }
+    );
+    if (!lock) throw Object.assign(new Error('Kho chưa được khởi tạo.'), { status: 503 });
+    const result = await operation();
+    await assertReservations();
+    return result;
+  });
+}
+
+module.exports = { mutateInventory, withReservations, calculateInventory, getInventory, inventoryTransaction, initializeInventory, inventoryDeltas, mergeStockBalances, transactionDetails, calculateHistoricalInventory };

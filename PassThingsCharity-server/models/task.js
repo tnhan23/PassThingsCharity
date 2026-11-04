@@ -9,7 +9,7 @@ const taskSchema = new mongoose.Schema(
     campaignId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Campaign',
-      required: true,
+      default: null,
     },
     stationId: {
       type: mongoose.Schema.Types.ObjectId,
