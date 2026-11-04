@@ -21,6 +21,31 @@ const stations = [
   { name: "Trạm Bình Thạnh", address: "125 Bạch Đằng, Bình Thạnh", hours: "08:30–20:00", km: "2,4 km", load: "Gần đầy" },
 ];
 
+const sampleMapStations: (StationRow & { organizationId: string })[] = [
+  {
+    _id: "sample-dinh-tien-hoang",
+    name: "Trạm Tiếp Nhận Quận 1",
+    address: "Số 1 Đinh Tiên Hoàng, Q1, TP.HCM",
+    isActive: false,
+    organizationId: "671000000000000000000001",
+    latitude: "10.776889",
+    longitude: "106.700806",
+    openingTime: "08:00",
+    closingTime: "17:00",
+  },
+  {
+    _id: "sample-cong-vien-le-van-tam",
+    name: "Trạm Tiếp Nhận Cong Vien Le Van Tam",
+    address: "Hai Ba Trung, TP.HCM",
+    isActive: false,
+    organizationId: "671000000000000000000002",
+    latitude: "10.78861",
+    longitude: "106.69372",
+    openingTime: "08:00",
+    closingTime: "17:00",
+  },
+];
+
 function distanceKm(here: PlaceFix, latitude: number, longitude: number) {
   const earth = 6371;
   const lat = ((latitude - here.latitude) * Math.PI) / 180;
@@ -45,6 +70,41 @@ function stationDistance(here: PlaceFix | null, station: StationRow) {
   const coordinates = stationCoordinates(station);
   if (!here || !coordinates) return null;
   return distanceKm(here, coordinates.latitude, coordinates.longitude);
+}
+
+function closestSampleStation(here: PlaceFix | null) {
+  if (!here) return null;
+  return sampleMapStations.reduce<{ station: StationRow; distance: number } | null>((closest, station) => {
+    const distance = stationDistance(here, station);
+    if (distance === null || (closest && distance >= closest.distance)) return closest;
+    return { station, distance };
+  }, null);
+}
+
+function NearestSampleStation({ here, showMapButton = false }: { here: PlaceFix | null; showMapButton?: boolean }) {
+  const nearest = closestSampleStation(here);
+  return (
+    <Card>
+      <Eyebrow>Trạm mẫu gần bạn nhất</Eyebrow>
+      {nearest ? (
+        <>
+          <Title>{nearest.station.name}</Title>
+          <Body>{nearest.station.address}</Body>
+          <Body muted>{`Cách bạn khoảng ${nearest.distance.toFixed(1)} km theo đường thẳng.`}</Body>
+          {showMapButton ? (
+            <Button
+              label="Xem trên bản đồ"
+              tone="ghost"
+              onPress={() => router.push(`/stations/map?station=${nearest.station._id}`)}
+            />
+          ) : null}
+        </>
+      ) : (
+        <Body>Cho phép truy cập vị trí để tìm trạm mẫu gần bạn nhất.</Body>
+      )}
+      <Body muted>Chỉ so sánh hai trạm mẫu; khoảng cách không phải lộ trình đi đường.</Body>
+    </Card>
+  );
 }
 
 function StationCards({ here }: { here: PlaceFix | null }) {
@@ -254,13 +314,14 @@ const leafletMapHtml = `<!doctype html>
         data.stations.forEach((station) => {
           incomingIds.add(station.id);
           const point = [station.latitude, station.longitude];
+          const isNearest = station.id === data.nearestId;
           let marker = stationMarkers.get(station.id);
           if (!marker) {
             marker = L.circleMarker(point, {
-              radius: 8,
+              radius: isNearest ? 10 : 8,
               color: '#ffffff',
               weight: 2,
-              fillColor: '#087f5b',
+              fillColor: isNearest ? '#d97745' : '#087f5b',
               fillOpacity: 1,
               bubblingMouseEvents: false,
             }).addTo(map);
@@ -275,6 +336,10 @@ const leafletMapHtml = `<!doctype html>
           } else {
             marker.setLatLng(point);
             marker.setTooltipContent(station.name || 'Trạm');
+            marker.setStyle({
+              radius: isNearest ? 10 : 8,
+              fillColor: isNearest ? '#d97745' : '#087f5b',
+            });
           }
         });
         stationMarkers.forEach((marker, id) => {
@@ -336,22 +401,33 @@ const leafletMapHtml = `<!doctype html>
 
 function StationFacts({ station, here }: { station: StationRow; here: PlaceFix | null }) {
   const km = stationDistance(here, station);
+  const isSample = station._id.startsWith("sample-");
   const hours = station.openingTime || station.closingTime
     ? `${station.openingTime || "?"} đến ${station.closingTime || "?"}`
     : "Chưa có giờ mở cửa.";
   return (
     <Card>
-      <Eyebrow>{station.isActive ? "Đang mở" : "Chưa kích hoạt"}</Eyebrow>
+      <Eyebrow>{isSample ? "Điểm minh họa · vị trí xấp xỉ" : station.isActive ? "Đang mở" : "Chưa kích hoạt"}</Eyebrow>
       <Title>{station.name}</Title>
       <Body>{station.address}</Body>
       <Body muted>{hours}</Body>
       <Body muted>{km !== null ? `Cách bạn ${km.toFixed(1)} km.` : "Chưa có vị trí đang đứng nên chưa tính khoảng cách."}</Body>
-      <Button label="Xem chi tiết" tone="ghost" onPress={() => router.push(`/station/${station._id}`)} />
+      {isSample ? (
+        <Body muted>Đây chỉ là điểm mẫu trên bản đồ, không phải trạm đã đăng ký trên máy chủ.</Body>
+      ) : (
+        <Button label="Xem chi tiết" tone="ghost" onPress={() => router.push(`/station/${station._id}`)} />
+      )}
     </Card>
   );
 }
 
-function PlaceMap({ here, focusId }: { here: PlaceFix | null; focusId: string }) {
+function PlaceMap({
+  here,
+  focusId,
+}: {
+  here: PlaceFix | null;
+  focusId: string;
+}) {
   const { token } = useSession();
   const mapRef = useRef<WebView<object> | null>(null);
   const [mapReady, setMapReady] = useState(false);
@@ -376,75 +452,77 @@ function PlaceMap({ here, focusId }: { here: PlaceFix | null; focusId: string })
       cancelled = true;
     };
   }, [token]);
+  const mapStations = useMemo(() => [...(rows ?? []), ...sampleMapStations], [rows]);
+  const nearest = closestSampleStation(here);
   const markers = useMemo(
-    () => (rows ?? []).flatMap((station) => {
+    () => mapStations.flatMap((station) => {
       const coordinates = stationCoordinates(station);
       if (!coordinates) return [];
-      return [{ id: station._id, name: station.name, ...coordinates }];
+      const name = station._id.startsWith("sample-") ? `${station.name} · mẫu` : station.name;
+      return [{ id: station._id, name, ...coordinates }];
     }),
-    [rows],
+    [mapStations],
   );
-  const mapData = JSON.stringify({ here, stations: markers, focusId });
+  const mapData = JSON.stringify({ here, stations: markers, focusId, nearestId: nearest?.station._id });
   useEffect(() => {
     if (mapReady) mapRef.current?.postMessage(mapData);
   }, [mapData, mapReady]);
 
-  const infoStation = rows?.find((row) => row._id === infoId) ?? null;
+  const infoStation = mapStations.find((row) => row._id === infoId) ?? null;
   if (Platform.OS !== "android") {
     return infoStation ? <StationFacts station={infoStation} here={here} /> : <Body>Bản đồ Leaflet chỉ được bật trong ứng dụng Android.</Body>;
   }
   return (
-    <View style={{ flex: 1, borderRadius: 18, overflow: "hidden" }}>
-      <WebView<object>
-        key={mapGeneration}
-        ref={mapRef}
-        source={{ html: leafletMapHtml }}
-        originWhitelist={["*"]}
-        javaScriptEnabled
-        applicationNameForUserAgent="PassThingsCharity/1.0"
-        onMessage={(event) => {
-          const message = event.nativeEvent.data;
-          if (message === "ready") setMapReady(true);
-          else if (message === "map") setInfoId("");
-          else if (message.startsWith("station:")) setInfoId(message.slice("station:".length));
-          else if (message === "leaflet-error") setMapError("Không tải được thư viện bản đồ từ unpkg.com.");
-          else if (message.startsWith("tiles-error:")) {
-            setMapError("Không tải được ô bản đồ từ OpenStreetMap France HOT. Internet vẫn có thể hoạt động; DNS, VPN hoặc mạng hiện tại có thể chặn máy chủ bản đồ.");
-          }
-        }}
-        onError={(event) => setMapError(`WebView không tải được bản đồ: ${event.nativeEvent.description}`)}
-        accessibilityLabel="Map showing stations and your current location"
-        style={{ flex: 1, backgroundColor: "#e8eee9" }}
-      />
-      <View style={{ position: "absolute", top: 12, right: 12 }}>
-        <Button
-          label="Vị trí của tôi"
-          tone="ghost"
-          disabled={!here || !mapReady}
-          onPress={() => mapRef.current?.postMessage(JSON.stringify({ action: "center-user" }))}
+    <View style={{ gap: 10 }}>
+      <View style={{ height: 420, borderRadius: 18, overflow: "hidden" }}>
+        <WebView<object>
+          key={mapGeneration}
+          ref={mapRef}
+          source={{ html: leafletMapHtml }}
+          originWhitelist={["*"]}
+          javaScriptEnabled
+          nestedScrollEnabled
+          applicationNameForUserAgent="PassThingsCharity/1.0"
+          onMessage={(event) => {
+            const message = event.nativeEvent.data;
+            if (message === "ready") setMapReady(true);
+            else if (message === "map") setInfoId("");
+            else if (message.startsWith("station:")) setInfoId(message.slice("station:".length));
+            else if (message === "leaflet-error") setMapError("Không tải được thư viện bản đồ từ unpkg.com.");
+            else if (message.startsWith("tiles-error:")) {
+              setMapError("Không tải được ô bản đồ từ OpenStreetMap France HOT. Internet vẫn có thể hoạt động; DNS, VPN hoặc mạng hiện tại có thể chặn máy chủ bản đồ.");
+            }
+          }}
+          onError={(event) => setMapError(`WebView không tải được bản đồ: ${event.nativeEvent.description}`)}
+          accessibilityLabel="Map showing stations and your current location"
+          style={{ flex: 1, backgroundColor: "#e8eee9" }}
         />
+        <View style={{ position: "absolute", top: 12, right: 12 }}>
+          <Button
+            label="Vị trí của tôi"
+            tone="ghost"
+            disabled={!here || !mapReady}
+            onPress={() => mapRef.current?.postMessage(JSON.stringify({ action: "center-user" }))}
+          />
+        </View>
+        {mapError ? (
+          <View style={{ position: "absolute", top: 10, left: 10, right: 10 }}>
+            <Card>
+              <Body>{mapError}</Body>
+              <Button
+                label="Thử tải lại"
+                tone="ghost"
+                onPress={() => {
+                  setMapError("");
+                  setMapReady(false);
+                  setMapGeneration((generation) => generation + 1);
+                }}
+              />
+            </Card>
+          </View>
+        ) : null}
       </View>
-      {mapError ? (
-        <View style={{ position: "absolute", top: 10, left: 10, right: 10 }}>
-          <Card>
-            <Body>{mapError}</Body>
-            <Button
-              label="Thử tải lại"
-              tone="ghost"
-              onPress={() => {
-                setMapError("");
-                setMapReady(false);
-                setMapGeneration((generation) => generation + 1);
-              }}
-            />
-          </Card>
-        </View>
-      ) : null}
-      {infoStation ? (
-        <View style={{ position: "absolute", left: 12, right: 12, bottom: 40 }}>
-          <StationFacts station={infoStation} here={here} />
-        </View>
-      ) : null}
+      {infoStation ? <StationFacts station={infoStation} here={here} /> : null}
     </View>
   );
 }
@@ -500,13 +578,14 @@ export function StationsScreen({
   }
   if (state === "map") {
     return (
-      <Screen tab="stations" scroll={false}>
-        <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 12, gap: 10 }}>
+      <Screen tab="stations">
+        <View style={{ gap: 10 }}>
           <View style={{ flexDirection: "row", gap: 8 }}>
             <Pill label="Danh sách" active={false} onPress={() => router.push("/stations/list")} />
             <Pill label="Bản đồ" active onPress={() => router.push("/stations/map")} />
           </View>
           <PlaceMap here={place.here} focusId={focusId} />
+          <NearestSampleStation here={place.here} showMapButton />
           <Body>{`${place.text} Bấm vùng trống trên bản đồ để đóng thẻ trạm.`}</Body>
         </View>
       </Screen>
