@@ -3,13 +3,28 @@ import { type ReactNode, useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { isOperator, useSession } from "@/api/session";
-import { Button, Icon, Tap, Title } from "@/components/ui";
+import { useSession } from "@/api/session";
+import { useShell } from "@/api/shell";
+import { Body, Button, Icon, Tap, Title } from "@/components/ui";
 import { colors, fonts } from "@/theme";
 
 export type TabKey = "home" | "give" | "stations" | "profile";
 
-const roots = new Set(["/", "/campaign", "/stations/list", "/profile/full"]);
+const roots = new Set(["/", "/campaign", "/stations/list", "/profile/full", "/desk", "/desk/intake", "/desk/campaigns", "/desk/stations", "/desk/users", "/desk/alerts", "/shifts"]);
+
+function resolvedTab(path: string, role: string | undefined, desk: boolean, fallback: TabKey): TabKey {
+  const work = desk && (role === "ADMIN" || role === "STATION_MANAGER" || role === "ORG_MANAGER" || role === "STAFF");
+  if (path.startsWith("/profile") || path.startsWith("/login") || path.startsWith("/account") || path.startsWith("/organization") || path.startsWith("/settings")) return "profile";
+  if (!work) {
+    if (path.startsWith("/campaign") || path.startsWith("/contribution")) return "give";
+    if (path.startsWith("/stations") || path.startsWith("/station")) return "stations";
+    return path === "/" ? "home" : fallback;
+  }
+  if (path.startsWith("/desk/intake") || path.startsWith("/receive") || path.startsWith("/desk/users")) return "give";
+  if (role === "ORG_MANAGER" && path.startsWith("/desk/campaigns")) return "give";
+  if (path.startsWith("/desk/stations") || path.startsWith("/stations") || path.startsWith("/station")) return "stations";
+  return "home";
+}
 
 export function Screen({
   children,
@@ -21,7 +36,14 @@ export function Screen({
   scroll?: boolean;
 }) {
   const insets = useSafeAreaInsets();
+  const path = usePathname();
+  const { user } = useSession();
+  const { desk } = useShell();
+  const active = resolvedTab(path, user?.role, desk, tab);
   const [sheet, setSheet] = useState(false);
+  function onCreate() {
+    setSheet((open) => !open);
+  }
   return (
     <View style={styles.frame}>
       <View style={styles.root}>
@@ -33,7 +55,7 @@ export function Screen({
           contentContainerStyle={{
             paddingHorizontal: 16,
             paddingTop: 12,
-            paddingBottom: insets.bottom + 136,
+            paddingBottom: insets.bottom + (desk ? 88 : 136),
             gap: 14,
           }}
         >
@@ -42,19 +64,57 @@ export function Screen({
       ) : (
         <View style={{ flex: 1, paddingBottom: insets.bottom + 88, overflow: "hidden" }}>{children}</View>
       )}
-      <TabBar active={tab} sheet={sheet} onCreate={() => setSheet((open) => !open)} />
-      <CreateSheet open={sheet} onClose={() => setSheet(false)} />
+      <TabBar active={active} desk={desk} sheet={sheet} onCreate={onCreate} />
+      {desk ? null : <CreateSheet open={sheet} onClose={() => setSheet(false)} />}
       </View>
     </View>
   );
 }
 
+const deskTitle: Record<string, string> = {
+  ADMIN: "Quản trị",
+  ORG_MANAGER: "Quản lý tổ chức",
+  STATION_MANAGER: "Trưởng trạm",
+  STAFF: "Nhân viên quầy",
+};
+
 function Header() {
   const insets = useSafeAreaInsets();
   const path = usePathname();
   const { user } = useSession();
+  const { desk, canSwitch, setMode } = useShell();
   const showBack = !roots.has(path);
   const accountHref = user ? "/profile/full" : "/login";
+  const placeHref = "/stations/list";
+  if (desk) {
+    const ink = colors.onPrimary;
+    return (
+      <View style={[styles.deskHeader, { paddingTop: insets.top }]}>
+        <View style={styles.headerRow}>
+          {showBack ? (
+            <Tap onPress={() => router.back()} style={styles.iconBtn} accessibilityLabel="Quay lại">
+              <Icon name="arrow-back" size={22} color={ink} />
+            </Tap>
+          ) : (
+            <View style={{ flex: 1 }}>
+              <Text style={styles.deskKicker}>{deskTitle[user?.role || ""] || "Vận hành"}</Text>
+              <Text style={styles.deskName} numberOfLines={1}>{user?.fullName || user?.username || "Pass Things"}</Text>
+            </View>
+          )}
+          {showBack ? <View style={{ flex: 1 }} /> : null}
+          {canSwitch ? (
+            <Tap onPress={() => setMode("member")} style={styles.deskSwitch} accessibilityLabel="Đóng góp như người dùng">
+              <Icon name="volunteer-activism" size={16} color={colors.primary} />
+              <Text style={styles.deskSwitchText}>Đóng góp</Text>
+            </Tap>
+          ) : null}
+          <Tap onPress={() => router.push("/notifications")} style={styles.iconBtn} accessibilityLabel="Thông báo">
+            <Icon name="notifications-none" size={22} color={ink} />
+          </Tap>
+        </View>
+      </View>
+    );
+  }
   return (
     <View style={[styles.header, { paddingTop: insets.top }]}>
       <View style={styles.headerRow}>
@@ -68,7 +128,7 @@ function Header() {
             <Text style={styles.logoSub}>Charity</Text>
           </View>
         )}
-        <Tap onPress={() => router.push("/stations/list")} style={styles.location}>
+        <Tap onPress={() => router.push(placeHref)} style={styles.location}>
           <Icon name="location-on" size={16} color={colors.secondary} />
           <Text style={styles.locationText} numberOfLines={1}>
             TP.HCM
@@ -76,6 +136,12 @@ function Header() {
           <Icon name="keyboard-arrow-down" size={16} color={colors.muted} />
         </Tap>
         <View style={{ flex: 1 }} />
+        {canSwitch ? (
+          <Tap onPress={() => setMode("desk")} style={styles.trust} accessibilityLabel="Chế độ quản lý">
+            <Icon name="dashboard" size={14} color={colors.primary} />
+            <Text style={styles.trustText}>Quản lý</Text>
+          </Tap>
+        ) : null}
         <Tap onPress={() => router.push(accountHref)} style={styles.trust} accessibilityLabel={user ? user.username : "Đăng nhập"}>
           <Icon name="verified" size={14} color={colors.primary} />
           <Text style={styles.trustText} numberOfLines={1}>{user ? user.username : "Vào"}</Text>
@@ -91,16 +157,76 @@ function Header() {
   );
 }
 
-function TabBar({ active, sheet, onCreate }: { active: TabKey; sheet: boolean; onCreate: () => void }) {
+function tabsFor(role: string | undefined, signedIn: boolean, desk: boolean): { key: TabKey; label: string; icon: "explore" | "dashboard" | "volunteer-activism" | "campaign" | "warehouse" | "account-circle" | "receipt-long" | "group"; href: Href }[] {
+  const profile: Href = signedIn ? "/profile/full" : "/login";
+  if (!desk) {
+    return [
+      { key: "home", label: "Khám phá", icon: "explore", href: "/" },
+      { key: "give", label: "Tặng đồ", icon: "volunteer-activism", href: "/campaign" },
+      { key: "stations", label: "Trạm gom", icon: "warehouse", href: "/stations/list" },
+      { key: "profile", label: "Hồ sơ", icon: "account-circle", href: profile },
+    ];
+  }
+  if (role === "ADMIN") {
+    return [
+      { key: "home", label: "Tổng quan", icon: "dashboard", href: "/" },
+      { key: "give", label: "Người dùng", icon: "group", href: "/desk/users" },
+      { key: "stations", label: "Trạm", icon: "warehouse", href: "/desk/stations" },
+      { key: "profile", label: "Tài khoản", icon: "account-circle", href: profile },
+    ];
+  }
+  if (role === "STATION_MANAGER") {
+    return [
+      { key: "home", label: "Tổng quan", icon: "dashboard", href: "/" },
+      { key: "give", label: "Phiếu", icon: "receipt-long", href: "/desk/intake" },
+      { key: "stations", label: "Trạm", icon: "warehouse", href: "/desk/stations" },
+      { key: "profile", label: "Tài khoản", icon: "account-circle", href: profile },
+    ];
+  }
+  if (role === "ORG_MANAGER") {
+    return [
+      { key: "home", label: "Tổng quan", icon: "dashboard", href: "/" },
+      { key: "give", label: "Chiến dịch", icon: "campaign", href: "/desk/campaigns" },
+      { key: "stations", label: "Trạm", icon: "warehouse", href: "/desk/stations" },
+      { key: "profile", label: "Tài khoản", icon: "account-circle", href: profile },
+    ];
+  }
+  if (role === "STAFF") {
+    return [
+      { key: "home", label: "Quầy", icon: "dashboard", href: "/" },
+      { key: "give", label: "Phiếu", icon: "receipt-long", href: "/desk/intake" },
+      { key: "stations", label: "Trạm", icon: "warehouse", href: "/stations/list" },
+      { key: "profile", label: "Tài khoản", icon: "account-circle", href: profile },
+    ];
+  }
+  return [
+    { key: "home", label: "Tổng quan", icon: "dashboard", href: "/" },
+    { key: "give", label: "Phiếu", icon: "receipt-long", href: "/desk/intake" },
+    { key: "stations", label: "Trạm", icon: "warehouse", href: "/desk/stations" },
+    { key: "profile", label: "Tài khoản", icon: "account-circle", href: profile },
+  ];
+}
+
+function TabBar({ active, desk, sheet, onCreate }: { active: TabKey; desk: boolean; sheet: boolean; onCreate: () => void }) {
   const insets = useSafeAreaInsets();
   const { user } = useSession();
+  const tabs = tabsFor(user?.role, Boolean(user), desk);
+  if (desk) {
+    return (
+      <View style={[styles.deskBar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+        {tabs.map((item) => (
+          <TabItem key={item.key} label={item.label} icon={item.icon} active={active === item.key} href={item.href} desk />
+        ))}
+      </View>
+    );
+  }
   return (
     <View style={[styles.tabBar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
-      <TabItem label="Khám phá" icon="explore" active={active === "home"} href="/" />
-      <TabItem label="Tặng đồ" icon="volunteer-activism" active={active === "give"} href="/campaign" />
+      <TabItem label={tabs[0].label} icon={tabs[0].icon} active={active === "home"} href={tabs[0].href} />
+      <TabItem label={tabs[1].label} icon={tabs[1].icon} active={active === "give"} href={tabs[1].href} />
       <View style={{ width: 64 }} />
-      <TabItem label="Trạm gom" icon="warehouse" active={active === "stations"} href="/stations/list" />
-      <TabItem label="Hồ sơ" icon="account-circle" active={active === "profile"} href={user ? "/profile/full" : "/login"} />
+      <TabItem label={tabs[2].label} icon={tabs[2].icon} active={active === "stations"} href={tabs[2].href} />
+      <TabItem label={tabs[3].label} icon={tabs[3].icon} active={active === "profile"} href={tabs[3].href} />
       <Tap
         onPress={onCreate}
         style={styles.plus}
@@ -117,13 +243,17 @@ function TabItem({
   icon,
   active,
   href,
+  desk,
 }: {
   label: string;
-  icon: "explore" | "volunteer-activism" | "warehouse" | "account-circle";
+  icon: "explore" | "dashboard" | "volunteer-activism" | "campaign" | "warehouse" | "account-circle" | "receipt-long" | "group";
   active: boolean;
-  href: "/" | "/campaign" | "/stations/list" | "/profile/full" | "/login";
+  href: Href;
+  desk?: boolean;
 }) {
   const path = usePathname();
+  const on = desk ? colors.onPrimary : colors.primary;
+  const off = desk ? colors.primarySoft : colors.outline;
   return (
     <Tap
       onPress={() => {
@@ -133,25 +263,52 @@ function TabItem({
       style={styles.tab}
       accessibilityLabel={label}
     >
-      <Icon name={icon} size={22} color={active ? colors.primary : colors.outline} />
-      <Text style={[styles.tabLabel, { color: active ? colors.primary : colors.outline }]}>{label}</Text>
+      <Icon name={icon} size={22} color={active ? on : off} />
+      <Text
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.72}
+        style={[styles.tabLabel, { color: active ? on : off }]}
+      >
+        {label}
+      </Text>
     </Tap>
   );
 }
 
 const actions: { label: string; href: Href; tone?: "ghost"; roles?: string[] }[] = [
+  { label: "Lập phiếu tiếp nhận", href: "/receive/new", roles: ["STAFF", "STATION_MANAGER", "ADMIN"] },
   { label: "Mang đồ tới trạm", href: "/stations/map" },
-  { label: "Đăng ký tình nguyện", href: "/volunteer/form", tone: "ghost" },
+  { label: "Đăng ký tổ chức", href: "/organization", tone: "ghost", roles: ["USER"] },
+  { label: "Việc tình nguyện", href: "/volunteer/tasks", tone: "ghost" },
   { label: "Ca trực", href: "/shifts", tone: "ghost", roles: ["STATION_MANAGER", "ORG_MANAGER", "STAFF"] },
   { label: "Vận hành", href: "/desk", tone: "ghost" },
-  { label: "Xin nhận hỗ trợ", href: "/receive/form", tone: "ghost" },
-  { label: "Quét mã QR", href: "/qr/scan", tone: "ghost" },
 ];
+
+function MemberCard({ onClose }: { onClose: () => void }) {
+  const { user } = useSession();
+  return (
+    <>
+      <Title>Thẻ thành viên quyên góp</Title>
+      <Body>Đọc các dòng này cho nhân viên quầy. App không tạo phiếu quyên góp cho người dùng.</Body>
+      <Text style={{ fontFamily: fonts.bold, fontSize: 28, lineHeight: 34, color: colors.ink }}>{user?.fullName || "Chưa có họ tên"}</Text>
+      <Text style={{ fontFamily: fonts.bold, fontSize: 20, color: colors.primary }}>{user?.username || ""}</Text>
+      <Text style={{ fontFamily: fonts.semibold, fontSize: 22, color: colors.ink }}>{user?.phone || "Chưa có số điện thoại"}</Text>
+      <Text style={{ fontFamily: fonts.medium, fontSize: 16, color: colors.muted }}>{user?.email || "Chưa có email"}</Text>
+      <Button label="Tới trạm gom" onPress={() => { onClose(); router.push("/stations/list"); }} />
+      <Button label="Đóng" tone="ghost" onPress={onClose} />
+    </>
+  );
+}
 
 function CreateSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { user } = useSession();
+  const { canSwitch, setMode } = useShell();
   const visible = actions.filter((action) => {
-    if (action.href === "/desk") return isOperator(user?.role);
+    if (action.href === "/desk") return user?.role === "STAFF";
+    if (action.href === "/stations/map" || action.href === "/volunteer/tasks") {
+      return !user || user.role === "USER" || user.role === "VOLUNTEER";
+    }
     if (action.roles) return Boolean(user?.role && action.roles.includes(user.role));
     return true;
   });
@@ -173,8 +330,18 @@ function CreateSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
         <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityLabel="Đóng" />
       </Animated.View>
       <Animated.View style={[styles.sheet, { paddingBottom: insets.bottom + 20 }, panel]}>
-        <Title>Bạn muốn làm gì?</Title>
-        {visible.map((action) => (
+        {user?.role === "USER" ? <MemberCard onClose={onClose} /> : null}
+        {canSwitch ? (
+          <>
+            <Title>Đóng góp</Title>
+            <Body>Tài khoản quản lý tổ chức vẫn tặng đồ tại trạm như người dùng.</Body>
+            <Button label="Mang đồ tới trạm" onPress={() => { onClose(); router.push("/stations/map"); }} />
+            <Button label="Việc tình nguyện" tone="ghost" onPress={() => { onClose(); router.push("/volunteer/tasks"); }} />
+            <Button label="Chế độ quản lý" tone="ghost" onPress={() => { onClose(); setMode("desk"); }} />
+          </>
+        ) : null}
+        {user?.role === "USER" || canSwitch ? null : <Title>Bạn muốn làm gì?</Title>}
+        {user?.role === "USER" || canSwitch ? null : visible.map((action) => (
           <Button
             key={action.href.toString()}
             label={action.label}
@@ -185,7 +352,7 @@ function CreateSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
             }}
           />
         ))}
-        <Button label="Đóng" tone="ghost" onPress={onClose} />
+        {user?.role === "USER" ? null : <Button label="Đóng" tone="ghost" onPress={onClose} />}
       </Animated.View>
     </View>
   );
@@ -198,6 +365,29 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.hairline,
+  },
+  deskHeader: { backgroundColor: colors.primary },
+  deskKicker: { fontFamily: fonts.medium, fontSize: 13, lineHeight: 16, color: colors.primarySoft },
+  deskName: { fontFamily: fonts.bold, fontSize: 18, lineHeight: 22, color: colors.onPrimary },
+  deskSwitch: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: colors.primarySoft,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  deskSwitchText: { fontFamily: fonts.semibold, fontSize: 13, color: colors.primary },
+  deskBar: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    backgroundColor: colors.primary,
+    paddingTop: 8,
   },
   headerRow: {
     height: 56,
@@ -235,8 +425,8 @@ const styles = StyleSheet.create({
     borderTopColor: colors.hairline,
     paddingTop: 8,
   },
-  tab: { alignItems: "center", gap: 2, minWidth: 64, paddingBottom: 4 },
-  tabLabel: { fontFamily: fonts.medium, fontSize: 11 },
+  tab: { flex: 1, alignItems: "center", gap: 2, minWidth: 0, paddingBottom: 4 },
+  tabLabel: { fontFamily: fonts.medium, fontSize: 11, lineHeight: 14, height: 14, textAlign: "center", width: "100%" },
   plus: {
     position: "absolute",
     top: -22,
