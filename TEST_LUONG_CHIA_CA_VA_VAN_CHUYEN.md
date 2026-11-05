@@ -3,10 +3,12 @@
 Tài liệu ghi nhận nhật ký kiểm thử thực tế từ **Swagger UI** hệ thống Quản trị Thiện nguyện **PassThingsCharity**.
 
 1. Thông tin Người & Ngày kiểm thử:
+   
 ◦ Người thực hiện: Trần Thái Dương
 ◦ Ngày thực hiện: 05/11/2026
 
 2. Bảng Danh sách Tài khoản & Mật khẩu Test chuẩn:
+   
 ◦ ADMIN: admin_system | 123456
 ◦ STATION_MANAGER (Trạm A - Quận 1): manager_quan1 | 123456789
 ◦ STATION_MANAGER (Trạm B - Gò Vấp): manager_govap | 123456789
@@ -14,6 +16,7 @@ Tài liệu ghi nhận nhật ký kiểm thử thực tế từ **Swagger UI** h
 ◦ USER / VOLUNTEER (Lái xe): volunteer_test_01 | 123456
 
 3. Ghi chú nghiệp vụ phân ca tại Bước 7:
+   
 ◦ "TRƯỜNG TRẠM B (manager_govap) KIỂM TRA & PHÂN CÔNG STAFF B (staff1_govap) NHẬN HÀNG (Vì staff Gò Vấp đã phân công ca trực là ngày mai 06/11/2026 nên test trước người nhận hàng là Trưởng trạm)".
 ---
 
