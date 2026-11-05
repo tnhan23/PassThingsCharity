@@ -11,11 +11,17 @@ export function Field({
   value,
   onChangeText,
   secure,
+  multiline,
+  keyboardType,
+  autoCapitalize = "none",
 }: {
   label: string;
   value: string;
   onChangeText: (value: string) => void;
   secure?: boolean;
+  multiline?: boolean;
+  keyboardType?: "default" | "email-address" | "phone-pad" | "number-pad" | "decimal-pad";
+  autoCapitalize?: "none" | "sentences" | "words" | "characters";
 }) {
   const [focused, setFocused] = useState(false);
   return (
@@ -25,12 +31,15 @@ export function Field({
         value={value}
         onChangeText={onChangeText}
         secureTextEntry={secure}
-        autoCapitalize="none"
+        autoCapitalize={autoCapitalize}
         autoCorrect={false}
+        keyboardType={keyboardType}
+        multiline={multiline}
+        textAlignVertical={multiline ? "top" : "center"}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         style={{
-          minHeight: 48,
+          minHeight: multiline ? 96 : 48,
           borderRadius: 12,
           borderWidth: 1,
           borderColor: focused ? colors.primary : colors.hairline,
