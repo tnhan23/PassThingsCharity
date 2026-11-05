@@ -1,3 +1,4 @@
+const scheduleService = require('../services/taskSchedule');
 const mongoose = require('mongoose');
 const { sendAccessError } = require('../utils/accessError');
 const VolunteerRegistration = require('../models/volunteerRegistration');
@@ -172,7 +173,7 @@ async function createTask(req, res, next) {
       rewardPoints,
     } = req.body || {};
 
-    if (!mongoose.isValidObjectId(campaignId)) {
+    if (campaignId != null && !mongoose.isValidObjectId(campaignId)) {
       return res.status(400).json({ error: 'ID chiến dịch (campaignId) không hợp lệ.' });
     }
     if (!mongoose.isValidObjectId(stationId)) {
@@ -193,6 +194,8 @@ async function createTask(req, res, next) {
       }
     }
 
+    const schedule = scheduleService.validateSchedule({ startTime, endTime, requiredVolunteers, volunteerDeadline });
+    await scheduleService.requireStationOperator(stationId, req.user);
     let start = null;
     let end = null;
     if (startTime) {
@@ -212,11 +215,11 @@ async function createTask(req, res, next) {
     }
 
     const [campaign, station] = await Promise.all([
-      Campaign.findById(campaignId),
+      campaignId ? Campaign.findById(campaignId) : null,
       Station.findById(stationId),
     ]);
 
-    if (!campaign) {
+    if (campaignId && !campaign) {
       return res.status(404).json({ error: 'Không tìm thấy chiến dịch.' });
     }
     if (!station) {
@@ -231,29 +234,37 @@ async function createTask(req, res, next) {
     }
 
     const validRecruitmentStatuses = ['NOT_OPEN', 'OPEN', 'FILLED', 'CLOSED'];
+    if (recruitmentStatus !== undefined && !validRecruitmentStatuses.includes(String(recruitmentStatus).toUpperCase())) {
+      return res.status(400).json({ error: 'Invalid recruitmentStatus.' });
+    }
     const finalRecruitmentStatus = recruitmentStatus && validRecruitmentStatuses.includes(String(recruitmentStatus).toUpperCase())
       ? String(recruitmentStatus).toUpperCase()
-      : 'NOT_OPEN';
+      : 'OPEN';
 
     const task = await Task.create({
-      campaignId,
+      campaignId: campaignId || null,
       stationId,
       transferId: transferId || null,
       title: title.trim(),
       description: typeof description === 'string' ? description.trim() : '',
-      startTime: start,
-      endTime: end,
+      startTime: schedule.startTime,
+      endTime: schedule.endTime,
       status: 'PENDING',
       recruitmentStatus: finalRecruitmentStatus,
-      requiredVolunteers: Number(requiredVolunteers) > 0 ? Number(requiredVolunteers) : 0,
+      requiredVolunteers: schedule.requiredVolunteers,
       volunteerDeadline: volunteerDeadline ? new Date(volunteerDeadline) : null,
       rewardPoints: rewardPoints === undefined ? 0 : Number(rewardPoints),
       createdBy: req.user._id,
     });
 
+    await task.populate([
+      { path: 'stationId', select: 'name address imageUrl latitude longitude openingTime closingTime isActive' },
+      { path: 'campaignId', select: 'title status' },
+    ]);
+
     return res.status(201).json({
       message: 'Tạo nhiệm vụ thành công.',
-      task,
+      task: (await scheduleService.withSlots([task]))[0],
     });
   } catch (error) {
     return next(error);
@@ -309,7 +320,7 @@ async function getAllTasks(req, res, next) {
       Task.countDocuments(filter),
       Task.find(filter)
         .populate('campaignId', 'title status')
-        .populate('stationId', 'name address')
+        .populate('stationId', 'name address imageUrl latitude longitude openingTime closingTime isActive')
         .populate('transferId', 'code status transportMethod')
         .populate('createdBy', 'fullName username')
         .sort({ createdAt: -1 })
@@ -321,7 +332,7 @@ async function getAllTasks(req, res, next) {
       total,
       page: pageNum,
       totalPages: Math.ceil(total / limitNum),
-      data: tasks,
+      data: await scheduleService.withSlots(tasks),
     });
   } catch (error) {
     return next(error);
@@ -340,7 +351,7 @@ async function getTaskById(req, res, next) {
 
     const task = await Task.findById(id)
       .populate('campaignId', 'title status startDate endDate')
-      .populate('stationId', 'name address')
+      .populate('stationId', 'name address imageUrl latitude longitude openingTime closingTime isActive')
       .populate('transferId', 'code status fromStationId toStationId')
       .populate('createdBy', 'fullName username');
 
@@ -358,7 +369,7 @@ async function getTaskById(req, res, next) {
     ]);
 
     return res.status(200).json({
-      task,
+      task: (await scheduleService.withSlots([task]))[0],
       assignments,
       applications,
     });
@@ -395,6 +406,21 @@ async function updateTask(req, res, next) {
       return res.status(404).json({ error: 'Không tìm thấy nhiệm vụ.' });
     }
 
+    await scheduleService.requireStationOperator(task.stationId, req.user);
+    if (startTime !== undefined || endTime !== undefined || requiredVolunteers !== undefined || volunteerDeadline !== undefined || recruitmentStatus === 'OPEN') {
+      const schedule = scheduleService.validateSchedule({
+        startTime: startTime === undefined ? task.startTime : startTime,
+        endTime: endTime === undefined ? task.endTime : endTime,
+        requiredVolunteers: requiredVolunteers === undefined ? task.requiredVolunteers : requiredVolunteers,
+        volunteerDeadline: volunteerDeadline === undefined ? task.volunteerDeadline : volunteerDeadline,
+      });
+      const assigned = await TaskAssignment.exists({ taskId: task._id, status: { $in: ['ASSIGNED', 'IN_PROGRESS', 'COMPLETED'] } });
+      if (assigned && (startTime !== undefined || endTime !== undefined || requiredVolunteers !== undefined)) {
+        return res.status(409).json({ error: 'Cannot change times or capacity after participants have been assigned.' });
+      }
+      task.startTime = schedule.startTime;
+      task.endTime = schedule.endTime;
+    }
     if (typeof title === 'string' && title.trim()) task.title = title.trim();
     if (typeof description === 'string') task.description = description.trim();
     if (startTime) task.startTime = new Date(startTime);
@@ -443,7 +469,7 @@ async function updateTask(req, res, next) {
 
     return res.status(200).json({
       message: 'Cập nhật nhiệm vụ thành công.',
-      task,
+      task: (await scheduleService.withSlots([task]))[0],
     });
   } catch (error) {
     return next(error);
@@ -459,7 +485,7 @@ async function updateTask(req, res, next) {
  */
 async function applyForTask(req, res, next) {
   try {
-    const taskId = req.params.taskId || req.body.taskId;
+    const taskId = req.params.taskId || req.body?.taskId;
     const { note } = req.body || {};
     const userId = req.user._id;
 
@@ -472,6 +498,10 @@ async function applyForTask(req, res, next) {
       return res.status(404).json({ error: 'Không tìm thấy nhiệm vụ.' });
     }
 
+    scheduleService.requireOpenSchedule(task);
+    await scheduleService.requireNoOverlap(userId, task);
+    const usedPlaces = await TaskAssignment.countDocuments({ taskId, assigneeType: 'VOLUNTEER', status: { $in: ['ASSIGNED', 'IN_PROGRESS', 'COMPLETED'] } });
+    if (usedPlaces >= task.requiredVolunteers) return res.status(409).json({ error: 'Schedule is full.' });
     if (task.recruitmentStatus !== 'OPEN') {
       return res.status(400).json({
         error: `Nhiệm vụ này hiện không mở tuyển tình nguyện viên (Trạng thái: ${task.recruitmentStatus}).`,
@@ -508,6 +538,7 @@ async function applyForTask(req, res, next) {
     return res.status(201).json({
       message: 'Ứng tuyển nhiệm vụ thành công. Vui lòng chờ quản trị viên trạm xét duyệt.',
       application,
+      task: (await scheduleService.withSlots([task]))[0],
     });
   } catch (error) {
     return next(error);
@@ -525,7 +556,7 @@ async function getMyTaskApplications(req, res, next) {
         path: 'taskId',
         populate: [
           { path: 'campaignId', select: 'title status' },
-          { path: 'stationId', select: 'name address' },
+          { path: 'stationId', select: 'name address imageUrl latitude longitude openingTime closingTime isActive' },
         ],
       })
       .populate('reviewedBy', 'fullName username')
@@ -549,6 +580,9 @@ async function getTaskApplications(req, res, next) {
       return res.status(400).json({ error: 'ID nhiệm vụ không hợp lệ.' });
     }
 
+    const task = await Task.findById(taskId);
+    if (!task) return res.status(404).json({ error: 'Schedule not found.' });
+    await scheduleService.requireStationOperator(task.stationId, req.user);
     const filter = { taskId };
     if (status) {
       filter.status = String(status).toUpperCase();
@@ -559,7 +593,7 @@ async function getTaskApplications(req, res, next) {
       .populate('reviewedBy', 'fullName username')
       .sort({ appliedAt: -1 });
 
-    return res.status(200).json({ data: applications });
+    return res.status(200).json({ data: applications, task: (await scheduleService.withSlots([task]))[0] });
   } catch (error) {
     return next(error);
   }
@@ -586,65 +620,8 @@ async function reviewTaskApplication(req, res, next) {
       return res.status(400).json({ error: `Trạng thái duyệt phải thuộc [${validStatuses.join(', ')}].` });
     }
 
-    const application = await TaskApplication.findById(id);
-    if (!application) {
-      return res.status(404).json({ error: 'Không tìm thấy đơn ứng tuyển nhiệm vụ.' });
-    }
-
-    application.status = newStatus;
-    application.reviewedBy = req.user._id;
-    application.reviewedAt = new Date();
-    if (typeof note === 'string') {
-      application.note = note.trim();
-    }
-    await application.save();
-
-    let createdAssignment = null;
-
-    if (newStatus === 'APPROVED') {
-      // Auto create or update TaskAssignment
-      const existing = await TaskAssignment.findOne({
-        taskId: application.taskId,
-        assigneeId: application.userId,
-      });
-
-      if (!existing) {
-        createdAssignment = await TaskAssignment.create({
-          taskId: application.taskId,
-          assigneeId: application.userId,
-          assigneeType: 'VOLUNTEER',
-          assignedBy: req.user._id,
-          assignedAt: new Date(),
-          status: 'ASSIGNED',
-        });
-      }
-
-      // Check task status & recruitment capacity
-      const task = await Task.findById(application.taskId);
-      if (task) {
-        if (task.status === 'PENDING') {
-          task.status = 'ASSIGNED';
-        }
-
-        // Count approved volunteers
-        const volunteerCount = await TaskAssignment.countDocuments({
-          taskId: task._id,
-          assigneeType: 'VOLUNTEER',
-          status: { $ne: 'CANCELLED' },
-        });
-
-        if (task.requiredVolunteers > 0 && volunteerCount >= task.requiredVolunteers) {
-          task.recruitmentStatus = 'FILLED';
-        }
-        await task.save();
-      }
-    }
-
-    return res.status(200).json({
-      message: `Đã xét duyệt đơn ứng tuyển sang ${newStatus}.`,
-      application,
-      assignment: createdAssignment,
-    });
+    const result = await scheduleService.reviewApplication(id, newStatus, note, req.user);
+    return res.status(200).json({ message: 'Application reviewed.', ...result });
   } catch (error) {
     return next(error);
   }
@@ -689,6 +666,13 @@ async function assignTask(req, res, next) {
       return res.status(409).json({ error: 'Người này đã được phân công nhiệm vụ này rồi.' });
     }
 
+    await scheduleService.requireStationOperator(task.stationId, req.user);
+    if (type === 'VOLUNTEER') {
+      let application = await TaskApplication.findOne({ taskId, userId: assigneeId });
+      if (!application) application = await TaskApplication.create({ taskId, userId: assigneeId, status: 'PENDING' });
+      const result = await scheduleService.reviewApplication(application._id, 'APPROVED', undefined, req.user);
+      return res.status(201).json({ message: 'Participant assigned.', ...result });
+    }
     const assignment = await TaskAssignment.create({
       taskId,
       assigneeId,
@@ -717,6 +701,7 @@ async function assignTask(req, res, next) {
     return res.status(201).json({
       message: 'Phân công nhiệm vụ thành công.',
       assignment,
+      task: (await scheduleService.withSlots([task]))[0],
     });
   } catch (error) {
     return next(error);
@@ -792,6 +777,7 @@ async function checkOutTask(req, res, next) {
       return sendAccessError(res, 403, 'FORBIDDEN', 'Bạn không có quyền điểm danh kết thúc ca cho người này.');
     }
 
+    await require('../services/transferWorkflow').requireDeliveryConfirmed(assignment);
     if (assignment.status === 'COMPLETED') {
       let existingTransaction = await PointTransaction.findOne({
         type: 'VOLUNTEER_TASK',
@@ -907,6 +893,9 @@ async function markAssignmentAbsent(req, res, next) {
       return res.status(409).json({ error: 'Chỉ có thể xác nhận vắng mặt cho nhiệm vụ đã phân công nhưng chưa check-in.' });
     }
 
+    if (await require('../models/transferShipment').exists({ assignmentId: assignment._id, status: { $ne: 'ASSIGNED' } })) {
+      return res.status(409).json({ error: 'Cannot mark absent after goods have been dispatched to this carrier.' });
+    }
     const task = await Task.findById(assignment.taskId);
     if (!task) {
       return res.status(404).json({ error: 'Không tìm thấy công việc của phân công này.' });
@@ -999,14 +988,16 @@ async function getMyAssignedTasks(req, res, next) {
         path: 'taskId',
         populate: [
           { path: 'campaignId', select: 'title status' },
-          { path: 'stationId', select: 'name address' },
+          { path: 'stationId', select: 'name address imageUrl latitude longitude openingTime closingTime isActive' },
           { path: 'transferId', select: 'code status' },
         ],
       })
       .populate('assignedBy', 'fullName username')
       .sort({ createdAt: -1 });
 
-    return res.status(200).json({ data: assignments });
+    const tasks = await scheduleService.withSlots(assignments.map(row => row.taskId).filter(Boolean));
+    const byId = new Map(tasks.map(task => [String(task._id), task]));
+    return res.status(200).json({ data: assignments.map(row => ({ ...row.toObject(), taskId: row.taskId ? byId.get(String(row.taskId._id)) : null })) });
   } catch (error) {
     return next(error);
   }

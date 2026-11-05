@@ -84,7 +84,7 @@ module.exports = {
                 latitude: { type: 'string', example: '10.776889', description: 'Vĩ độ (Latitude)' },
                 longitude: { type: 'string', example: '106.700806', description: 'Kinh độ (Longitude)' },
                 openingTime: { type: 'string', example: '08:00', description: 'Giờ mở cửa' },
-                closingTime: { type: 'string', example: '17:00', description: 'Giờ đóng cửa' },
+                closingTime: { type: 'string', example: '20:00', description: 'Giờ đóng cửa' },
               },
             },
           },

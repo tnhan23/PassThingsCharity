@@ -14,6 +14,9 @@ const {
 } = require('../controller/campaign');
 const checkBearerToken = require('../middleware/checkBearerToken');
 const checkRole = require('../middleware/checkRole');
+const results = require('../controller/campaignResults');
+router.post('/:id/results/images', checkBearerToken, checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER']), results.authorize, results.upload);
+router.patch('/:id/results', checkBearerToken, checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER']), results.authorize, results.update);
 
 // Campaign CRUD
 router.get('/', getAllCampaigns);

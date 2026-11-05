@@ -51,11 +51,6 @@ const organizationSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    rejectionReason: {
-      type: String,
-      trim: true,
-      default: '',
-    },
   },
   { timestamps: true }
 )

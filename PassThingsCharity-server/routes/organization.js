@@ -16,13 +16,13 @@ router.use(checkBearerToken);
 
 router.get(
   '/',
-  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'STAFF', 'VOLUNTEER', 'USER']),
+  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'STAFF', 'USER']),
   listOrganizations
 );
 
 router.get(
   '/:id',
-  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'STAFF', 'VOLUNTEER', 'USER']),
+  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'STAFF', 'USER']),
   getOrganization
 );
 

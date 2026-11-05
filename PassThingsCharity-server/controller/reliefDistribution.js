@@ -5,6 +5,7 @@ const Campaign = require('../models/campaign');
 const CampaignItem = require('../models/campaignItem');
 const Station = require('../models/station');
 const ItemType = require('../models/itemType');
+const completionDate = require('../utils/distributionCompletion');
 
 /**
  * Generate Distribution Code (e.g. DST-261015-3819)
@@ -117,6 +118,7 @@ async function createDistribution(req, res, next) {
       recipientPhone: typeof recipientPhone === 'string' ? recipientPhone.trim() : '',
       recipientAddress: typeof recipientAddress === 'string' ? recipientAddress.trim() : '',
       distributionDate: distributionDate ? new Date(distributionDate) : new Date(),
+      completedAt: completionDate(finalStatus, req.body.completedAt),
       status: finalStatus,
       notes: typeof notes === 'string' ? notes.trim() : '',
     });
@@ -273,6 +275,10 @@ async function updateDistributionStatus(req, res, next) {
     };
     if (newStatus !== distribution.status && !transitions[distribution.status].includes(newStatus)) {
       return res.status(409).json({ error: `Không thể chuyển từ ${distribution.status} sang ${newStatus}.` });
+    }
+    // Do not invent a completion date for legacy receipts already marked completed.
+    if (newStatus !== distribution.status || req.body.completedAt !== undefined) {
+      distribution.completedAt = completionDate(newStatus, req.body.completedAt, distribution.completedAt);
     }
     distribution.status = newStatus;
     if (typeof notes === 'string') {

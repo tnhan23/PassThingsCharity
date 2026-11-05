@@ -1,4 +1,15 @@
 module.exports = {
+  TaskSlots: {
+    type: 'object',
+    required: ['total', 'approved', 'pending', 'remaining', 'isFull'],
+    properties: {
+      total: { type: 'integer', minimum: 0, example: 5 },
+      approved: { type: 'integer', minimum: 0, example: 1, description: 'Assigned USER participants; completed participants still occupy a place. STAFF, absent and cancelled assignments are excluded.' },
+      pending: { type: 'integer', minimum: 0, example: 2, description: 'Pending applications do not reserve places.' },
+      remaining: { type: 'integer', minimum: 0, example: 4 },
+      isFull: { type: 'boolean', example: false },
+    },
+  },
   ErrorResponse: {
     type: 'object',
     properties: {
@@ -105,7 +116,7 @@ module.exports = {
       latitude: { type: 'string', example: '10.776889', description: 'Vĩ độ (Latitude)' },
       longitude: { type: 'string', example: '106.700806', description: 'Kinh độ (Longitude)' },
       openingTime: { type: 'string', example: '08:00', description: 'Giờ mở cửa' },
-      closingTime: { type: 'string', example: '17:00', description: 'Giờ đóng cửa' },
+      closingTime: { type: 'string', example: '20:00', description: 'Giờ đóng cửa' },
     },
   },
   StationUpdateRequest: {
@@ -118,7 +129,7 @@ module.exports = {
       latitude: { type: 'string', example: '10.776889', description: 'Vĩ độ (Latitude)' },
       longitude: { type: 'string', example: '106.700806', description: 'Kinh độ (Longitude)' },
       openingTime: { type: 'string', example: '08:00', description: 'Giờ mở cửa' },
-      closingTime: { type: 'string', example: '17:00', description: 'Giờ đóng cửa' },
+      closingTime: { type: 'string', example: '20:00', description: 'Giờ đóng cửa' },
       isActive: { type: 'boolean', example: true },
     },
   },
@@ -293,7 +304,7 @@ module.exports = {
       campaignId: { type: 'string', example: '6acdef2e9fc3bf0d61d9d00b' },
       fromStationId: { type: 'string', example: '671000000000000000000011' },
       toStationId: { type: 'string', example: '671000000000000000000012' },
-      responsibleUserId: { type: 'string', example: '6acbbb6a7faf5d01bb5261e4' },
+      responsibleUserId: { type: 'string', example: '6acbbb6a7faf5d01bb5261e4', description: 'Responsible person at station A; defaults to creator. Station B assigns its receivedBy separately.' },
       transportMethod: { type: 'string', example: 'Xe tải 2.5 tấn' },
       transportNote: { type: 'string', example: 'Chuyển hàng sang trạm trung tâm bằng xe tải 2 tấn' },
       items: {
@@ -317,12 +328,12 @@ module.exports = {
       status: {
         type: 'string',
         enum: ['PENDING', 'PREPARING', 'IN_TRANSIT', 'RECEIVED', 'COMPLETED', 'CANCELLED'],
-        example: 'IN_TRANSIT',
+        example: 'COMPLETED',
       },
       transportMethod: { type: 'string', example: 'Xe tải 2.5 tấn' },
-      transportNote: { type: 'string', example: 'Xe đang di chuyển trên quốc lộ 1A' },
-      responsibleUserId: { type: 'string', example: '6acbbb6a7faf5d01bb5261e4' },
-      receivedBy: { type: 'string', example: '6ac7b15a501de8a3e18592c9' },
+      transportNote: { type: 'string', description: 'New transfers use approval and per-shipment dispatch/report/receive; this endpoint only cancels before dispatch or completes after full receipt.', example: 'Xe đang di chuyển trên quốc lộ 1A' },
+      responsibleUserId: { type: 'string', example: '6acbbb6a7faf5d01bb5261e4', description: 'Responsible person at station A; defaults to creator. Station B assigns its receivedBy separately.' },
+      receivedBy: { type: 'string', example: '6ac7b15a501de8a3e18592c9', description: 'Use PATCH /transfers/{id}/responsibilities to assign the receiver at station B. Not editable through status updates.' },
     },
   },
   ReliefDistributionRequest: {
@@ -336,6 +347,7 @@ module.exports = {
       recipientPhone: { type: 'string', example: '0988776655' },
       recipientAddress: { type: 'string', example: 'UBND Xã Lộc An, Huyện Phú Lộc, Thừa Thiên Huế' },
       distributionDate: { type: 'string', format: 'date-time', example: '2026-10-20T10:00:00.000Z' },
+      completedAt: { type: 'string', format: 'date-time', description: 'Ngày giờ thực tế hoàn tất giao hàng cho người dân/đại diện. Chỉ gửi khi status COMPLETED, không được ở tương lai. Bỏ trống thì tự ghi giờ hoàn tất hiện tại.' },
       status: { type: 'string', enum: ['PLANNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'], example: 'PLANNED' },
       notes: { type: 'string', example: 'Bàn giao đợt 1 gồm 100 thùng mì và 50 KG quần áo ấm' },
       items: {
@@ -359,6 +371,7 @@ module.exports = {
     properties: {
       status: { type: 'string', enum: ['PLANNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'], example: 'COMPLETED' },
       notes: { type: 'string', example: 'Đã hoàn tất bàn giao đầy đủ cho địa phương' },
+      completedAt: { type: 'string', format: 'date-time', description: 'Ngày giờ hoàn tất bàn giao thực tế, ISO có múi giờ. Chuyển sang COMPLETED tự ghi giờ hiện tại nếu không gửi. Không sửa lại ngày đã ghi; phiếu cũ chưa ghi nhận ngày trả null.' },
       closeCampaign: { type: 'boolean', example: true },
     },
   },
@@ -380,18 +393,18 @@ module.exports = {
   },
   TaskRequest: {
     type: 'object',
-    required: ['campaignId', 'stationId', 'title'],
+    required: ['stationId', 'title', 'startTime', 'endTime', 'requiredVolunteers'],
     properties: {
-      campaignId: { type: 'string', example: '6acdef2e9fc3bf0d61d9d00b' },
+      campaignId: { type: 'string', nullable: true, description: 'Optional campaign. A schedule can belong to a station alone.' },
       stationId: { type: 'string', example: '671000000000000000000011' },
       transferId: { type: 'string', example: '6523456789abcdef00000d01' },
       title: { type: 'string', example: 'Bốc xếp và chuyển hàng lên xe tải' },
       description: { type: 'string', example: 'Hỗ trợ tài xế bốc 50 thùng mì và 20 kiện đồ' },
-      startTime: { type: 'string', format: 'date-time', example: '2026-10-16T08:00:00.000Z' },
-      endTime: { type: 'string', format: 'date-time', example: '2026-10-16T12:00:00.000Z' },
+      startTime: { type: 'string', format: 'date-time', example: '2026-11-10T08:00:00+07:00' },
+      endTime: { type: 'string', format: 'date-time', example: '2026-11-10T12:00:00+07:00' },
       recruitmentStatus: { type: 'string', enum: ['NOT_OPEN', 'OPEN', 'FILLED', 'CLOSED'], example: 'OPEN' },
-      requiredVolunteers: { type: 'integer', example: 5 },
-      volunteerDeadline: { type: 'string', format: 'date-time', example: '2026-10-16T07:00:00.000Z' },
+      requiredVolunteers: { type: 'integer', minimum: 1, example: 5, description: 'Number of USER participants to approve.' },
+      volunteerDeadline: { type: 'string', format: 'date-time', example: '2026-11-09T20:00:00+07:00' },
       rewardPoints: { type: 'integer', minimum: 0, example: 50, description: 'Điểm thưởng cố định khi User hoàn thành; 0/bỏ trống thì tính 25 điểm/giờ, tối thiểu 25.' },
     },
   },
@@ -405,7 +418,7 @@ module.exports = {
       endTime: { type: 'string', format: 'date-time' },
       status: { type: 'string', enum: ['PENDING', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'], example: 'IN_PROGRESS' },
       recruitmentStatus: { type: 'string', enum: ['NOT_OPEN', 'OPEN', 'FILLED', 'CLOSED'], example: 'OPEN' },
-      requiredVolunteers: { type: 'integer', example: 5 },
+      requiredVolunteers: { type: 'integer', minimum: 1, example: 5, description: 'Number of USER participants to approve.' },
       volunteerDeadline: { type: 'string', format: 'date-time' },
       rewardPoints: { type: 'integer', minimum: 0, example: 50, description: 'Điểm thưởng cố định khi User hoàn thành; 0 thì dùng quy tắc mặc định 25 điểm/giờ.' },
     },
@@ -430,7 +443,7 @@ module.exports = {
     properties: {
       taskId: { type: 'string', example: '6523456789abcdef00000901' },
       assigneeId: { type: 'string', example: '6acbbb6a7faf5d01bb5261e6' },
-      assigneeType: { type: 'string', enum: ['STAFF', 'VOLUNTEER'], example: 'VOLUNTEER' },
+      assigneeType: { type: 'string', enum: ['STAFF', 'VOLUNTEER'], example: 'VOLUNTEER', description: 'Loại tham gia nhiệm vụ, không phải role tài khoản. USER đăng ký nhận việc được phân công theo loại VOLUNTEER.' },
     },
   },
   TaskCheckInRequest: {
