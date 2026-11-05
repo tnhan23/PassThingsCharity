@@ -7,7 +7,6 @@ const shiftTemplateSchema = new mongoose.Schema(
       default: null, // null: shared catalog; existing station templates remain readable.
       index: true,
     },
-    code: { type: Number, enum: [1, 2] },
     name: {
       type: String,
       required: [true, 'Tên ca làm việc là bắt buộc (ví dụ: Ca Sáng, Ca Chiều).'],
@@ -51,6 +50,5 @@ const shiftTemplateSchema = new mongoose.Schema(
 
 // Tránh đặt trùng tên ca trong cùng 1 trạm (ví dụ: không thể tạo 2 "Ca Sáng" tại cùng 1 trạm)
 shiftTemplateSchema.index({ stationId: 1, name: 1 }, { unique: true });
-shiftTemplateSchema.index({ code: 1 }, { unique: true, partialFilterExpression: { code: { $type: 'number' } } });
 
 module.exports = mongoose.model('ShiftTemplate', shiftTemplateSchema, 'shiftTemplates');

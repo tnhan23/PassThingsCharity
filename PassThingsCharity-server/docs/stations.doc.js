@@ -67,7 +67,7 @@ module.exports = {
                         latitude: { type: 'string', example: '10.776889' },
                         longitude: { type: 'string', example: '106.700806' },
                         openingTime: { type: 'string', example: '08:00' },
-                        closingTime: { type: 'string', example: '17:00' },
+                        closingTime: { type: 'string', example: '20:00' },
                         isActive: { type: 'boolean', example: true },
                         distanceKm: { type: 'number', example: 1.25, description: 'Chỉ xuất hiện khi ĐÃ ĐĂNG NHẬP' },
                         distanceMeters: { type: 'integer', example: 1250, description: 'Chỉ xuất hiện khi ĐÃ ĐĂNG NHẬP' },

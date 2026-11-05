@@ -36,7 +36,7 @@ const stationSchema = new mongoose.Schema(
     closingTime: {
       type: String,
       trim: true,
-      default: '17:00',
+      default: '20:00',
     },
     isActive: {
       type: Boolean,

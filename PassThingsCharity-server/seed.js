@@ -130,7 +130,7 @@ const stationsData = [
     latitude: "10.776889",
     longitude: "106.700806",
     openingTime: "08:00",
-    closingTime: "17:00",
+    closingTime: "20:00",
     isActive: true
   },
   {
@@ -141,7 +141,7 @@ const stationsData = [
     latitude: "10.758889",
     longitude: "106.666806",
     openingTime: "08:00",
-    closingTime: "17:00",
+    closingTime: "20:00",
     isActive: true
   },
   {
@@ -152,7 +152,7 @@ const stationsData = [
     latitude: "10.787800",
     longitude: "106.688100",
     openingTime: "08:00",
-    closingTime: "17:00",
+    closingTime: "20:00",
     isActive: true
   },
   {
@@ -163,7 +163,7 @@ const stationsData = [
     latitude: "10.729800",
     longitude: "106.702200",
     openingTime: "08:00",
-    closingTime: "17:00",
+    closingTime: "20:00",
     isActive: true
   },
   {
@@ -174,7 +174,7 @@ const stationsData = [
     latitude: "10.803800",
     longitude: "106.711800",
     openingTime: "08:00",
-    closingTime: "17:00",
+    closingTime: "20:00",
     isActive: true
   },
   {
@@ -185,7 +185,7 @@ const stationsData = [
     latitude: "10.822200",
     longitude: "106.687200",
     openingTime: "08:00",
-    closingTime: "17:00",
+    closingTime: "20:00",
     isActive: true
   }
 ];

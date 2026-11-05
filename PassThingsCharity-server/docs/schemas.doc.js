@@ -116,7 +116,7 @@ module.exports = {
       latitude: { type: 'string', example: '10.776889', description: 'Vĩ độ (Latitude)' },
       longitude: { type: 'string', example: '106.700806', description: 'Kinh độ (Longitude)' },
       openingTime: { type: 'string', example: '08:00', description: 'Giờ mở cửa' },
-      closingTime: { type: 'string', example: '17:00', description: 'Giờ đóng cửa' },
+      closingTime: { type: 'string', example: '20:00', description: 'Giờ đóng cửa' },
     },
   },
   StationUpdateRequest: {
@@ -129,7 +129,7 @@ module.exports = {
       latitude: { type: 'string', example: '10.776889', description: 'Vĩ độ (Latitude)' },
       longitude: { type: 'string', example: '106.700806', description: 'Kinh độ (Longitude)' },
       openingTime: { type: 'string', example: '08:00', description: 'Giờ mở cửa' },
-      closingTime: { type: 'string', example: '17:00', description: 'Giờ đóng cửa' },
+      closingTime: { type: 'string', example: '20:00', description: 'Giờ đóng cửa' },
       isActive: { type: 'boolean', example: true },
     },
   },
@@ -347,6 +347,7 @@ module.exports = {
       recipientPhone: { type: 'string', example: '0988776655' },
       recipientAddress: { type: 'string', example: 'UBND Xã Lộc An, Huyện Phú Lộc, Thừa Thiên Huế' },
       distributionDate: { type: 'string', format: 'date-time', example: '2026-10-20T10:00:00.000Z' },
+      completedAt: { type: 'string', format: 'date-time', description: 'Ngày giờ thực tế hoàn tất giao hàng cho người dân/đại diện. Chỉ gửi khi status COMPLETED, không được ở tương lai. Bỏ trống thì tự ghi giờ hoàn tất hiện tại.' },
       status: { type: 'string', enum: ['PLANNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'], example: 'PLANNED' },
       notes: { type: 'string', example: 'Bàn giao đợt 1 gồm 100 thùng mì và 50 KG quần áo ấm' },
       items: {
@@ -370,6 +371,7 @@ module.exports = {
     properties: {
       status: { type: 'string', enum: ['PLANNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'], example: 'COMPLETED' },
       notes: { type: 'string', example: 'Đã hoàn tất bàn giao đầy đủ cho địa phương' },
+      completedAt: { type: 'string', format: 'date-time', description: 'Ngày giờ hoàn tất bàn giao thực tế, ISO có múi giờ. Chuyển sang COMPLETED tự ghi giờ hiện tại nếu không gửi. Không sửa lại ngày đã ghi; phiếu cũ chưa ghi nhận ngày trả null.' },
       closeCampaign: { type: 'boolean', example: true },
     },
   },

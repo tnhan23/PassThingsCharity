@@ -63,9 +63,8 @@ async function createSchedules(stationId, rows, user) {
   });
   if (rows.length > 100) fail(400, 'Tối đa 100 phân công sau khi tách staffIds.');
   for (const row of rows) {
-    if (row.shiftCode !== undefined) {
-      if (![1, 2].includes(row.shiftCode) || row.templateId !== undefined) fail(400, 'shiftCode phải là số 1 hoặc 2; không gửi cùng templateId.');
-    } else if (!mongoose.isValidObjectId(row.templateId)) fail(400, 'Cần shiftCode hoặc templateId hợp lệ.');
+    if (row.shiftCode !== undefined) fail(400, 'Không còn hỗ trợ shiftCode; chỉ gửi templateId.');
+    if (!mongoose.isValidObjectId(row.templateId)) fail(400, 'Cần templateId hợp lệ.');
     if (row.requiredStaff !== undefined && (!Number.isInteger(row.requiredStaff) || row.requiredStaff < 1)) fail(400, 'requiredStaff phải là số nguyên dương.');
     if (row.description !== undefined && typeof row.description !== 'string') fail(400, 'description phải là chuỗi.');
     if (row.staffIds && row.staffIds.length > (row.requiredStaff || row.staffIds.length)) fail(400, 'Số nhân viên vượt requiredStaff.');
@@ -81,9 +80,7 @@ async function createSchedules(stationId, rows, user) {
     const created = [];
     const now = new Date();
     for (const row of rows) {
-      const templateFilter = row.shiftCode !== undefined
-        ? { code: row.shiftCode, stationId: null, isActive: true }
-        : { _id: row.templateId, isActive: true, $or: [{ stationId }, { stationId: null, code: { $in: [1, 2] } }] };
+      const templateFilter = { _id: row.templateId, isActive: true, $or: [{ stationId }, { stationId: null }] };
       const template = await Template.findOne(templateFilter).session(session);
       if (!template) fail(404, 'Ca mẫu không tồn tại hoặc không thuộc trạm này.');
       const times = validateFuture(row.date, template, now);

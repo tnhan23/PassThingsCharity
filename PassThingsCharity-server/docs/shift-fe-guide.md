@@ -13,14 +13,14 @@ Giờ làm theo Việt Nam (UTC+7). Danh mục được tự tạo khi backend k
 `GET /shiftstations/shift-templates`, header `Authorization: Bearer <token>`.
 Role: ADMIN, STATION_MANAGER, ORG_MANAGER, STAFF.
 
-Response `{ "data": [...] }`, mỗi phần tử có `_id`, `code`, `name`, `startTime`, `endTime`, `description`:
+Response `{ "data": [...] }`, mỗi phần tử có `_id`, `name`, `startTime`, `endTime`, `description`:
 
-| code | name | startTime | endTime |
-|---|---|---|---|
-| 1 | Ca sáng | 08:00 | 14:00 |
-| 2 | Ca chiều | 14:00 | 20:00 |
+| name | startTime | endTime |
+|---|---|---|
+| Ca sáng | 08:00 | 14:00 |
+| Ca chiều | 14:00 | 20:00 |
 
-Danh mục dùng chung, không cần stationId. Route cũ `GET /shiftstations/:stationId/shift-templates` trả cả mẫu chung và mẫu riêng cũ của trạm. Mẫu riêng cũ và tham chiếu trong lịch cũ được giữ nguyên.
+Danh mục dùng chung, không cần stationId. Chỉ dùng `GET /shiftstations/shift-templates` để lấy ca mẫu; không còn API tạo/lấy ca mẫu riêng theo trạm. Mẫu riêng cũ và tham chiếu trong lịch cũ được giữ nguyên.
 
 ## 2. Phân một ca cho nhiều người
 
@@ -28,7 +28,7 @@ Danh mục dùng chung, không cần stationId. Route cũ `GET /shiftstations/:s
 
 ```json
 {
-  "shiftCode": 1,
+  "templateId": "<ID ca sáng>",
   "date": "2099-11-06",
   "requiredStaff": 2,
   "staffIds": ["<ID tài khoản nhân viên A>", "<ID tài khoản nhân viên B>"],
@@ -36,13 +36,13 @@ Danh mục dùng chung, không cần stationId. Route cũ `GET /shiftstations/:s
 }
 ```
 
-Đổi ngày ví dụ thành ngày thực tế trong tương lai. stationId nằm ở URL, không gửi trong body. shiftCode là số 1/2. date bắt buộc YYYY-MM-DD. requiredStaff là số nguyên dương; nếu bỏ trống mặc định bằng số staffIds (hoặc 1 nếu không có staffIds). description tùy chọn. Mỗi nhân viên phải thuộc trạm. staffIds không rỗng, không trùng, không vượt requiredStaff trong request này. requiredStaff là nhu cầu nhân sự ghi nhận trên từng phân công, không phải bộ đếm chỗ trống toàn ca.
+Đổi ngày ví dụ thành ngày thực tế trong tương lai. stationId nằm ở URL, không gửi trong body. templateId: _id trong API danh mục ca. date bắt buộc YYYY-MM-DD. requiredStaff là số nguyên dương; nếu bỏ trống mặc định bằng số staffIds (hoặc 1 nếu không có staffIds). description tùy chọn. Mỗi nhân viên phải thuộc trạm. staffIds không rỗng, không trùng, không vượt requiredStaff trong request này. requiredStaff là nhu cầu nhân sự ghi nhận trên từng phân công, không phải bộ đếm chỗ trống toàn ca.
 
-Backend tự lưu assignedBy từ token, không gửi createdBy/assignedBy. Không gửi giờ bắt đầu/kết thúc: backend tra từ shiftCode. Mỗi nhân viên tạo một ShiftSchedule riêng để điểm danh.
+Backend tự lưu assignedBy từ token, không gửi createdBy/assignedBy. Không gửi giờ bắt đầu/kết thúc: backend tra từ templateId. Mỗi nhân viên tạo một ShiftSchedule riêng để điểm danh.
 
 Response 201 `{ message, data: [<lịch A>, <lịch B>] }` khi gửi staffIds. Lịch trả về có templateId tham chiếu ca, staffId, requiredStaff, date và assignedBy; description được lưu vào note.
 
-Tương thích cũ: có thể dùng staffId thay staffIds (response data là một object); có thể dùng templateId thay shiftCode. Không gửi đồng thời staffId/staffIds hoặc templateId/shiftCode. Bỏ cả staffId/staffIds sẽ tạo một lịch chưa phân người.
+Tương thích cũ: có thể dùng staffId thay staffIds (response data là một object). Không gửi đồng thời staffId/staffIds. Bỏ cả staffId/staffIds sẽ tạo một lịch chưa phân người.
 
 ## 3. Tạo lịch tuần
 
@@ -51,8 +51,8 @@ Tương thích cũ: có thể dùng staffId thay staffIds (response data là m�
 ```json
 {
   "schedules": [
-    { "shiftCode": 1, "date": "2099-11-06", "requiredStaff": 2, "staffIds": ["<ID A>", "<ID B>"], "description": "Ca sáng" },
-    { "shiftCode": 2, "date": "2099-11-07", "staffId": "<ID A>" }
+    { "templateId": "<ID ca sáng>", "date": "2099-11-06", "requiredStaff": 2, "staffIds": ["<ID A>", "<ID B>"], "description": "Ca sáng" },
+    { "templateId": "<ID ca chiều>", "date": "2099-11-07", "staffId": "<ID A>" }
   ]
 }
 ```
