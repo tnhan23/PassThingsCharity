@@ -1,6 +1,7 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Platform, Text, TextInput, View } from "react-native";
+import * as Linking from "expo-linking";
+import { ActivityIndicator, Alert, AppState, Platform, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 import * as Location from "expo-location";
@@ -64,6 +65,29 @@ function stationCoordinates(station: StationRow): PlaceFix | null {
     || !Number.isFinite(longitude) || longitude < -180 || longitude > 180
   ) return null;
   return { latitude, longitude };
+}
+
+async function openStationDirections(station: StationRow, here: PlaceFix | null) {
+  const coordinates = stationCoordinates(station);
+  const destination = coordinates
+    ? `${coordinates.latitude},${coordinates.longitude}`
+    : station.address.trim();
+  if (!destination) {
+    Alert.alert("Thiếu địa chỉ", "Trạm chưa có địa chỉ để mở chỉ đường.");
+    return;
+  }
+  const origin = here ? `&origin=${encodeURIComponent(`${here.latitude},${here.longitude}`)}` : "";
+  const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}${origin}`;
+  try {
+    await Linking.openURL(url);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Vui lòng thử lại sau.";
+    if (Platform.OS === "web") {
+      window.alert(`Không mở được Google Maps: ${message}`);
+    } else {
+      Alert.alert("Không mở được Google Maps", message);
+    }
+  }
 }
 
 function stationDistance(here: PlaceFix | null, station: StationRow) {
@@ -202,6 +226,13 @@ function StationCards({ here }: { here: PlaceFix | null }) {
                 <Body muted>{canMap ? (open ? "Bấm lại để thu bản đồ." : "Bấm để mở bản đồ của trạm này.") : "Trạm chưa có tọa độ nên chưa mở được bản đồ."}</Body>
               </View>
             </Tap>
+            {station.isActive ? (
+              <Button
+                label="Chỉ đường trên Google Maps"
+                icon="directions"
+                onPress={() => void openStationDirections(station, here)}
+              />
+            ) : null}
             <Button label="Xem chi tiết" tone="ghost" onPress={() => router.push(`/station/${station._id}`)} />
             {open && canMap ? <Body muted>Chọn Bản đồ để xem vị trí trạm.</Body> : null}
           </Card>
@@ -214,41 +245,92 @@ function StationCards({ here }: { here: PlaceFix | null }) {
 type PlaceFix = { latitude: number; longitude: number };
 
 function usePlaceAccess(active: boolean) {
-  const [text, setText] = useState("Đang mở bản đồ các trạm.");
+  const [text, setText] = useState("Chưa kiểm tra quyền vị trí.");
   const [here, setHere] = useState<PlaceFix | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [hasPermission, setHasPermission] = useState(false);
+  const [needsSettings, setNeedsSettings] = useState(false);
+  const settingsOpened = useRef(false);
   useEffect(() => {
     if (!active) return;
     let cancelled = false;
     let subscription: Location.LocationSubscription | null = null;
-    setText("Điện thoại đang hỏi quyền vị trí. Hãy bấm Cho phép.");
+    let latestTimestamp = -Infinity;
+    const showLocationError = (reason: unknown) => {
+      if (cancelled) return;
+      if (
+        Platform.OS === "web"
+        && typeof window !== "undefined"
+        && !window.isSecureContext
+        && window.location.hostname !== "localhost"
+      ) {
+        setText("Trình duyệt chỉ cho phép vị trí qua HTTPS hoặc localhost. Mở app bằng kết nối bảo mật rồi thử lại.");
+        return;
+      }
+      const detail = reason instanceof Error ? reason.message : String(reason);
+      setText(`Không lấy được vị trí (${detail}). Kiểm tra quyền Vị trí và GPS rồi thử lại.`);
+    };
+    const updateLocation = (position: Location.LocationObject) => {
+      if (cancelled || position.timestamp < latestTimestamp) return;
+      latestTimestamp = position.timestamp;
+      setHere({ latitude: position.coords.latitude, longitude: position.coords.longitude });
+      setText("Chấm xanh là bạn. Chấm đậm là trạm nhận đồ. Mũi tên sát mép chỉ trạm ngoài khung và số km.");
+    };
     async function locate() {
+      setText("Đang kiểm tra quyền vị trí.");
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
+        const permission = await Location.getForegroundPermissionsAsync();
         if (cancelled) return;
-        if (status !== "granted") {
-          setHere(null);
-          setText("Chưa cho phép vị trí. Bật quyền Vị trí khi dùng app trong cài đặt của điện thoại.");
+        setHasPermission(permission.granted);
+        setNeedsSettings(!permission.granted && !permission.canAskAgain);
+        if (!permission.granted) {
+          setText(permission.canAskAgain
+            ? "Chưa có quyền vị trí. Bấm bên dưới để điện thoại hỏi quyền."
+            : "Quyền vị trí đã bị từ chối và điện thoại không thể hỏi lại. Bật quyền ứng dụng trong Cài đặt.");
           return;
         }
-        const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        if (cancelled) return;
-        setHere({ latitude: position.coords.latitude, longitude: position.coords.longitude });
-        setText("Chấm xanh là bạn. Chấm đậm là trạm nhận đồ. Mũi tên sát mép chỉ trạm ngoài khung và số km.");
+        if (!(await Location.hasServicesEnabledAsync())) {
+          setText("Dịch vụ vị trí/GPS đang tắt. Bật GPS trên điện thoại rồi thử lại.");
+          return;
+        }
+        const lastKnownPosition = await Location.getLastKnownPositionAsync();
+        if (lastKnownPosition) updateLocation(lastKnownPosition);
+        if (latestTimestamp === -Infinity) {
+          setText("Đã có quyền vị trí. Đang chờ GPS gửi vị trí hiện tại.");
+        }
         const watch = await Location.watchPositionAsync(
           {
             accuracy: Location.Accuracy.Balanced,
             distanceInterval: 10,
             timeInterval: 5000,
           },
-          (update) => {
-            if (cancelled) return;
-            setHere({ latitude: update.coords.latitude, longitude: update.coords.longitude });
+          updateLocation,
+          (error) => {
+            if (latestTimestamp === -Infinity) showLocationError(error);
           },
         );
         if (cancelled) watch.remove();
         else subscription = watch;
-      } catch {
-        if (!cancelled) setText("Không lấy được vị trí hiện tại. Kiểm tra quyền vị trí và thử lại.");
+        if (cancelled) return;
+        if (latestTimestamp === -Infinity) {
+          setText("Đã có quyền vị trí. Đang chờ tín hiệu GPS; có thể mất vài giây.");
+        }
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        try {
+          const position = await Promise.race([
+            Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+            new Promise<never>((_, reject) => {
+              timeout = setTimeout(() => reject(new Error("Đợi vị trí GPS quá lâu.")), 15000);
+            }),
+          ]);
+          updateLocation(position);
+        } catch (error) {
+          if (latestTimestamp === -Infinity) showLocationError(error);
+        } finally {
+          if (timeout) clearTimeout(timeout);
+        }
+      } catch (error) {
+        showLocationError(error);
       }
     }
     void locate();
@@ -256,8 +338,55 @@ function usePlaceAccess(active: boolean) {
       cancelled = true;
       subscription?.remove();
     };
+  }, [active, attempt]);
+  useEffect(() => {
+    if (!active) return;
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active" && settingsOpened.current) {
+        settingsOpened.current = false;
+        setAttempt((value) => value + 1);
+      }
+    });
+    return () => subscription.remove();
   }, [active]);
-  return { text, here };
+  async function openLocationSettings() {
+    settingsOpened.current = true;
+    try {
+      await Linking.openSettings();
+    } catch (error) {
+      settingsOpened.current = false;
+      const message = error instanceof Error ? error.message : "Vui lòng mở cài đặt ứng dụng để bật quyền vị trí.";
+      if (Platform.OS === "web") window.alert(message);
+      else Alert.alert("Không mở được Cài đặt", message);
+    }
+  }
+  async function requestPermission() {
+    setText("Đang yêu cầu quyền vị trí.");
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      setHasPermission(permission.granted);
+      setNeedsSettings(!permission.granted && !permission.canAskAgain);
+      if (permission.granted) {
+        setAttempt((value) => value + 1);
+      } else {
+        setText(permission.canAskAgain
+          ? "Quyền vị trí chưa được cấp. Bấm yêu cầu lại hoặc kiểm tra quyền ứng dụng."
+          : "Quyền vị trí bị từ chối. Bật quyền ứng dụng trong Cài đặt.");
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setText(`Không thể yêu cầu quyền vị trí: ${message}`);
+    }
+  }
+  return {
+    text,
+    here,
+    hasPermission,
+    needsSettings,
+    retry: () => setAttempt((value) => value + 1),
+    requestPermission,
+    openLocationSettings,
+  };
 }
 
 const leafletMapHtml = `<!doctype html>
@@ -414,9 +543,15 @@ function StationFacts({ station, here }: { station: StationRow; here: PlaceFix |
       <Body muted>{km !== null ? `Cách bạn ${km.toFixed(1)} km.` : "Chưa có vị trí đang đứng nên chưa tính khoảng cách."}</Body>
       {isSample ? (
         <Body muted>Đây chỉ là điểm mẫu trên bản đồ, không phải trạm đã đăng ký trên máy chủ.</Body>
-      ) : (
+      ) : null}
+      <Button
+        label="Chỉ đường trên Google Maps"
+        icon="directions"
+        onPress={() => void openStationDirections(station, here)}
+      />
+      {!isSample ? (
         <Button label="Xem chi tiết" tone="ghost" onPress={() => router.push(`/station/${station._id}`)} />
-      )}
+      ) : null}
     </Card>
   );
 }
@@ -587,6 +722,21 @@ export function StationsScreen({
           <PlaceMap here={place.here} focusId={focusId} />
           <NearestSampleStation here={place.here} showMapButton />
           <Body>{`${place.text} Bấm vùng trống trên bản đồ để đóng thẻ trạm.`}</Body>
+          {!place.here ? (
+            <Button
+              label={place.needsSettings
+                ? "Mở cài đặt quyền vị trí"
+                : place.hasPermission
+                  ? "Thử lấy vị trí hiện tại"
+                  : "Cho phép truy cập vị trí"}
+              tone="ghost"
+              onPress={place.needsSettings
+                ? place.openLocationSettings
+                : place.hasPermission
+                  ? place.retry
+                  : place.requestPermission}
+            />
+          ) : null}
         </View>
       </Screen>
     );
@@ -598,6 +748,24 @@ export function StationsScreen({
         <Pill label="Bản đồ" active={false} onPress={() => router.push("/stations/map")} />
       </View>
       <StationCards here={place.here} />
+      {!place.here ? (
+        <>
+          <Body muted>{place.text}</Body>
+          <Button
+            label={place.needsSettings
+              ? "Mở cài đặt quyền vị trí"
+              : place.hasPermission
+                ? "Thử lấy vị trí hiện tại"
+                : "Cho phép truy cập vị trí"}
+            tone="ghost"
+            onPress={place.needsSettings
+              ? place.openLocationSettings
+              : place.hasPermission
+                ? place.retry
+                : place.requestPermission}
+          />
+        </>
+      ) : null}
       {isOperator(user?.role) ? <Button label="Vào quầy kiểm định" onPress={() => router.push("/intake/review")} /> : null}
       {user?.role === "STATION_MANAGER" || user?.role === "ORG_MANAGER" || user?.role === "STAFF" ? <Button label="Ca trực hôm nay" tone="ghost" onPress={() => router.push("/shifts")} /> : null}
     </Screen>

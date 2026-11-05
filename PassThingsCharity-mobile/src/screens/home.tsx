@@ -356,19 +356,56 @@ function CampaignLive() {
           return;
         }
         const next = await backend.getCampaign(id);
-        try {
-          let coords: { userLat: string; userLng: string } | undefined;
-          const permission = await Location.requestForegroundPermissionsAsync();
-          if (permission.granted) {
-            const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-            coords = { userLat: String(position.coords.latitude), userLng: String(position.coords.longitude) };
-          }
-          const stationList = await backend.campaignStations(id, coords);
-          next.stations = stationList.stations;
-        } catch {
-          // Chi tiết chiến dịch đã kèm trạm. Route riêng lỗi thì vẫn hiện chi tiết.
-        }
         if (!cancelled) setDetail(next);
+        let stationRequest = 0;
+        const loadStations = async (coords?: { userLat: string; userLng: string }) => {
+          const request = ++stationRequest;
+          try {
+            const stationList = await backend.campaignStations(id, coords);
+            if (!cancelled && request === stationRequest) {
+              setDetail((current) => current ? { ...current, stations: stationList.stations } : current);
+            }
+          } catch {
+            // The campaign detail remains available if the optional station request fails.
+          }
+        };
+        void loadStations();
+        try {
+          const permission = await Location.requestForegroundPermissionsAsync();
+          if (cancelled) return;
+          if (!permission.granted) return;
+          const cachedPosition = await Location.getLastKnownPositionAsync();
+          if (cancelled) return;
+          if (cachedPosition) {
+            void loadStations({
+              userLat: String(cachedPosition.coords.latitude),
+              userLng: String(cachedPosition.coords.longitude),
+            });
+            return;
+          }
+
+          let timeout: ReturnType<typeof setTimeout> | undefined;
+          try {
+            const position = await Promise.race([
+              Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+              new Promise<never>((_, reject) => {
+                timeout = setTimeout(() => reject(new Error("Location request timed out.")), 8000);
+              }),
+            ]);
+            if (!cancelled) {
+              void loadStations({
+                userLat: String(position.coords.latitude),
+                userLng: String(position.coords.longitude),
+              });
+            }
+          } catch {
+            // Stations without distance are already being loaded.
+          } finally {
+            if (timeout) clearTimeout(timeout);
+          }
+        } catch {
+          // Location is optional; stations without distance are already being loaded.
+        }
       } catch (caught) {
         if (!cancelled) setProblem(caught instanceof ApiError ? caught.message : "Không mở được chiến dịch.");
       }
