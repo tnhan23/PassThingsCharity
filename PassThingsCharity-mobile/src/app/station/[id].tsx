@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator } from "react-native";
 import { backend } from "@/api/backend";
 import { ApiError } from "@/api/client";
-import { formatDay, itemName, itemUnit, statusLabel } from "@/api/labels";
+import { donorLabel, formatDay, itemName, itemUnit } from "@/api/labels";
 import { useSession } from "@/api/session";
 import type { CampaignDetail, StationRow, TaskRow } from "@/api/types";
 import { Screen } from "@/components/chrome";
@@ -99,7 +99,7 @@ export default function StationDetailPage() {
       {active.length === 0 ? <Body>Trạm này chưa gắn chiến dịch đang diễn ra.</Body> : null}
       {active.map((detail) => (
         <Card key={detail.campaign._id}>
-          <Eyebrow>{`${statusLabel(detail.campaign.status)} · ${formatDay(detail.campaign.startDate)} đến ${formatDay(detail.campaign.endDate)}`}</Eyebrow>
+          <Eyebrow>{`${donorLabel(detail.campaign)} · ${formatDay(detail.campaign.startDate)} đến ${formatDay(detail.campaign.endDate)}`}</Eyebrow>
           <Title>{detail.campaign.title}</Title>
           {detail.campaign.description ? <Body>{detail.campaign.description}</Body> : null}
           {detail.items.length === 0 ? <Body muted>Chiến dịch chưa khai báo món đồ.</Body> : null}

@@ -26,14 +26,44 @@ function personName(value: ShiftScheduleRow["staffId"]) {
 
 function templateName(value: ShiftScheduleRow["templateId"]) {
   if (!value || typeof value === "string") return "Ca";
-  const hours = value.startTime && value.endTime ? ` ${value.startTime}–${value.endTime}` : "";
-  return `${value.name || "Ca"}${hours}`;
+  return value.name || "Ca";
+}
+
+function templateHours(value: ShiftScheduleRow["templateId"]) {
+  if (!value || typeof value === "string" || !value.startTime || !value.endTime) return "Chưa có giờ";
+  return `${value.startTime}-${value.endTime}`;
+}
+
+function localDate(date: Date) {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+const weekDays = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
+
+function comingWeek() {
+  const start = new Date();
+  start.setHours(12, 0, 0, 0);
+  return Array.from({ length: 7 }, (_, index) => {
+    const day = new Date(start);
+    day.setDate(start.getDate() + index);
+    return { key: localDate(day), short: weekDays[day.getDay()], number: String(day.getDate()) };
+  });
+}
+
+function shiftState(status: string) {
+  if (status === "SCHEDULED") return "Chờ vào ca";
+  if (status === "IN_PROGRESS") return "Đang trong ca";
+  if (status === "COMPLETED") return "Đã tan ca";
+  return status;
 }
 
 export function ShiftsScreen() {
   const { token, user } = useSession();
   const role = user?.role && shiftRoles.includes(user.role) ? user.role : "";
   const canWrite = role === "STATION_MANAGER" || role === "ORG_MANAGER";
+  const staffStations = user?.stations;
   const [stations, setStations] = useState<StationRow[] | null>(null);
   const [stationId, setStationId] = useState("");
   const [templates, setTemplates] = useState<{ _id: string; name: string; startTime: string; endTime: string }[]>([]);
@@ -45,18 +75,25 @@ export function ShiftsScreen() {
   const [startTime, setStartTime] = useState("08:00");
   const [endTime, setEndTime] = useState("12:00");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [dayKey, setDayKey] = useState(localDate(new Date()));
   const [templateId, setTemplateId] = useState("");
   const [staffId, setStaffId] = useState("");
 
   useEffect(() => {
     if (!token || !role) return;
+    if (role === "STAFF") {
+      const mine = staffStations ?? [];
+      setStations(mine);
+      setStationId((current) => current || mine[0]?._id || "");
+      return;
+    }
     backend.listStations(token)
       .then((data) => setStations(data.data))
       .catch((reason: unknown) => {
         setStations([]);
         setError(reason instanceof ApiError ? reason.message : "Không tải được trạm.");
       });
-  }, [token, role]);
+  }, [token, role, staffStations]);
 
   useEffect(() => {
     if (!token || !stationId) return;
@@ -152,11 +189,12 @@ export function ShiftsScreen() {
   return (
     <Screen tab="stations">
       <Title>Ca trực</Title>
-      <Body muted>Điểm danh chỉ ghi giờ vào và giờ ra. Server không tính công và không cộng điểm.</Body>
+      {role === "STAFF" ? <Body muted>Bảy ngày tới. Chọn một ngày để xem ca của bạn.</Body> : <Body muted>Điểm danh chỉ ghi giờ vào và giờ ra. Server không tính công và không cộng điểm.</Body>}
       {note ? <Body>{note}</Body> : null}
       {error ? <Body>{error}</Body> : null}
       {stations === null ? <ActivityIndicator color={colors.primary} /> : null}
-      {stations && stations.length === 0 ? <Body>Chưa có trạm nào tài khoản này được xem.</Body> : null}
+      {role === "STAFF" && stations && stations.length === 0 ? <Body>Bạn chưa được gán vào trạm nào. Đăng nhập lại nếu vừa được phân trạm.</Body> : null}
+      {role !== "STAFF" && stations && stations.length === 0 ? <Body>Chưa có trạm nào tài khoản này được xem.</Body> : null}
       <View style={{ gap: 8 }}>
         {stations?.map((item) => (
           <Tap key={item._id} onPress={() => setStationId(item._id)}>
@@ -166,19 +204,72 @@ export function ShiftsScreen() {
       </View>
       {station ? <Body muted>{station.address || "Trạm chưa có địa chỉ."}</Body> : null}
       {schedules === null && stationId ? <ActivityIndicator color={colors.primary} /> : null}
-      {schedules && schedules.length === 0 ? <Body>Trạm này chưa có lịch phân ca.</Body> : null}
-      {schedules?.map((item) => {
+      {role !== "STAFF" && schedules && schedules.length === 0 ? <Body>Trạm này chưa có lịch phân ca.</Body> : null}
+      {role === "STAFF" && stationId ? (() => {
+        const week = comingWeek();
+        const mine = (schedules ?? []).filter((item) => personId(item.staffId) === user?.id);
+        const selected = mine
+          .filter((item) => item.date.slice(0, 10) === dayKey)
+          .sort((a, b) => templateHours(a.templateId).localeCompare(templateHours(b.templateId)));
+        const chosen = week.find((day) => day.key === dayKey) ?? week[0];
+        return (
+          <View style={{ gap: 12 }}>
+            <View style={{ flexDirection: "row", gap: 6 }}>
+              {week.map((day) => {
+                const on = day.key === chosen.key;
+                const has = mine.some((item) => item.date.slice(0, 10) === day.key);
+                return (
+                  <Tap
+                    key={day.key}
+                    accessibilityLabel={day.short}
+                    onPress={() => setDayKey(day.key)}
+                    style={{
+                      flex: 1,
+                      alignItems: "center",
+                      gap: 2,
+                      paddingVertical: 8,
+                      borderRadius: 14,
+                      backgroundColor: on ? colors.primary : colors.card,
+                      borderWidth: 1,
+                      borderColor: on ? colors.primary : colors.hairline,
+                    }}
+                  >
+                    <Text style={{ fontFamily: fonts.medium, fontSize: 11, color: on ? colors.onPrimary : colors.muted }}>{day.short}</Text>
+                    <Text style={{ fontFamily: fonts.bold, fontSize: 16, color: on ? colors.onPrimary : colors.ink }}>{day.number}</Text>
+                    <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: has ? (on ? colors.onPrimary : colors.secondary) : "transparent" }} />
+                  </Tap>
+                );
+              })}
+            </View>
+            {mine.length === 0 ? <Body muted>Tuần này chưa có ca được giao.</Body> : null}
+            {mine.length > 0 && selected.length === 0 ? <Body muted>Ngày này chưa có ca.</Body> : null}
+            {selected.map((item) => (
+              <View key={item._id} style={{ flexDirection: "row", gap: 12, backgroundColor: colors.card, borderRadius: 16, borderWidth: 1, borderColor: colors.hairline, padding: 14 }}>
+                <View style={{ width: 4, borderRadius: 2, backgroundColor: item.status === "COMPLETED" ? colors.line : colors.secondary }} />
+                <View style={{ flex: 1, gap: 4 }}>
+                  <Text style={{ fontFamily: fonts.bold, fontSize: 22, color: colors.ink }}>{templateHours(item.templateId)}</Text>
+                  <Text style={{ fontFamily: fonts.semibold, fontSize: 15, color: colors.ink }}>{templateName(item.templateId)}</Text>
+                  <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.muted }}>{shiftState(item.status)}</Text>
+                  {item.status === "SCHEDULED" ? <Button label="Vào ca" onPress={() => punch(item._id, "in")} /> : null}
+                  {item.status === "IN_PROGRESS" ? <Button label="Tan ca" tone="ghost" onPress={() => punch(item._id, "out")} /> : null}
+                </View>
+              </View>
+            ))}
+          </View>
+        );
+      })() : null}
+      {role !== "STAFF" ? schedules?.map((item) => {
         const mine = personId(item.staffId) === user?.id;
         return (
           <Card key={item._id}>
             <Title>{templateName(item.templateId)}</Title>
-            <Body>{`${item.date} · ${personName(item.staffId)}`}</Body>
-            <Body muted>{item.status}</Body>
-            {role === "STAFF" && mine && item.status === "SCHEDULED" ? <Button label="Vào ca" onPress={() => punch(item._id, "in")} /> : null}
-            {role === "STAFF" && mine && item.status === "IN_PROGRESS" ? <Button label="Tan ca" tone="ghost" onPress={() => punch(item._id, "out")} /> : null}
+            <Body>{`${item.date.slice(0, 10)} · ${templateHours(item.templateId)} · ${personName(item.staffId)}`}</Body>
+            <Body muted>{shiftState(item.status)}</Body>
+            {mine && item.status === "SCHEDULED" ? <Button label="Vào ca" onPress={() => punch(item._id, "in")} /> : null}
+            {mine && item.status === "IN_PROGRESS" ? <Button label="Tan ca" tone="ghost" onPress={() => punch(item._id, "out")} /> : null}
           </Card>
         );
-      })}
+      }) : null}
       {canWrite && stationId ? (
         <Card>
           <Title>Tạo ca mẫu</Title>

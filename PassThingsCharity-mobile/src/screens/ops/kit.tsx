@@ -21,8 +21,14 @@ export type Row = {
   unit?: string;
   fullName?: string;
   username?: string;
+  role?: string;
   ownerId?: string;
   phone?: string;
+  email?: string;
+  description?: string;
+  operatingArea?: string;
+  idCardNumber?: string;
+  rejectionReason?: string;
   recipientName?: string;
   recruitmentStatus?: string;
   campaignId?: { title?: string; _id?: string } | string;
@@ -51,6 +57,20 @@ export function can(role: string, allowed: string[]) {
   return role !== "" && allowed.includes(role);
 }
 
+export const deskAccess = {
+  orgs: ["ADMIN", "ORG_MANAGER", "STATION_MANAGER"],
+  stations: ["ADMIN", "ORG_MANAGER", "STATION_MANAGER"],
+  catalog: ["ADMIN", "ORG_MANAGER", "STATION_MANAGER"],
+  campaigns: ["ADMIN", "ORG_MANAGER", "STATION_MANAGER"],
+  intake: ["STATION_MANAGER", "STAFF"],
+  users: ["ADMIN"],
+  alerts: ["ADMIN"],
+  transfers: ["ADMIN", "STATION_MANAGER", "STAFF"],
+  relief: ["ADMIN", "STATION_MANAGER", "STAFF"],
+  crew: ["ADMIN", "STATION_MANAGER", "STAFF"],
+  rewards: ["ADMIN", "ORG_MANAGER", "STATION_MANAGER", "STAFF"],
+} as const;
+
 const campaignNext: Record<string, string[]> = {
   DRAFT: ["PUBLISHED", "CANCELLED"],
   PUBLISHED: ["ACTIVE", "CANCELLED"],
@@ -64,9 +84,7 @@ export function nextCampaignStatuses(status: string) {
 }
 
 export function RoleNote() {
-  const role = useRole();
-  if (role) return <Body muted>{`Vai trò đang đăng nhập: ${role}. Nút ghi dữ liệu chỉ hiện khi server cho phép vai trò này.`}</Body>;
-  return <Body>Đăng nhập lại để app nhận vai trò. Nút ghi dữ liệu sẽ hiện theo quyền server sau lần đăng nhập đó.</Body>;
+  return null;
 }
 
 export function OpsGate({ children }: { children: ReactNode }) {

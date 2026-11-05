@@ -1,13 +1,59 @@
-import { useEffect, useState } from "react";
-import { View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Platform, ScrollView, View } from "react-native";
 import { backend } from "@/api/backend";
 import { ApiError } from "@/api/client";
-import { Body, Button, Title } from "@/components/ui";
+import { Body, Button, Card, Pill, Title } from "@/components/ui";
+import { colors } from "@/theme";
 import { can, nextCampaignStatuses, Note, OpsGate, PickList, RoleNote, TextField, Units, useJob, useRole, useRows, type Row } from "@/screens/ops/kit";
 
+const AppleMaps = Platform.OS === "ios" ? (require("expo-maps") as typeof import("expo-maps")).AppleMaps : null;
+
+function StationPlaceMap({
+  latitude,
+  longitude,
+  onPick,
+}: {
+  latitude: string;
+  longitude: string;
+  onPick: (latitude: string, longitude: string) => void;
+}) {
+  const camera = useRef({ coordinates: { latitude: 10.7769, longitude: 106.7009 }, zoom: 13 }).current;
+  if (!AppleMaps) return null;
+  const lat = Number(latitude);
+  const lng = Number(longitude);
+  const picked = Number.isFinite(lat) && Number.isFinite(lng);
+  return (
+    <View style={{ height: 220, borderRadius: 14, overflow: "hidden" }}>
+      <AppleMaps.View
+        style={{ flex: 1, width: "100%" }}
+        cameraPosition={camera}
+        markers={picked ? [{ id: "new-station", title: "Vị trí trạm", coordinates: { latitude: lat, longitude: lng }, tintColor: colors.primary }] : []}
+        onMapClick={(event) => {
+          const nextLat = event.coordinates.latitude;
+          const nextLng = event.coordinates.longitude;
+          if (!Number.isFinite(nextLat) || !Number.isFinite(nextLng)) return;
+          onPick(nextLat.toFixed(6), nextLng.toFixed(6));
+        }}
+        colorScheme={AppleMaps.MapColorScheme.LIGHT}
+      />
+    </View>
+  );
+}
+
+function orgState(row: Row) {
+  if (row.status === "REJECTED") return "Bị từ chối";
+  if (row.status === "APPROVED" || row.isVerified) return "Đã duyệt";
+  return "Chờ duyệt";
+}
+
 function orgDetail(row: Row) {
-  const state = row.status || (row.isVerified ? "APPROVED" : "PENDING");
-  return `${state}${row.code ? ` · ${row.code}` : ""}`;
+  return `${orgState(row)}${row.code ? ` · ${row.code}` : ""}`;
+}
+
+function orgBucket(row: Row) {
+  if (row.status === "REJECTED") return "REJECTED";
+  if (row.status === "APPROVED" || row.isVerified) return "APPROVED";
+  return "PENDING";
 }
 
 export function OrgScreen() {
@@ -16,17 +62,38 @@ export function OrgScreen() {
   const role = useRole();
   const [picked, setPicked] = useState("");
   const [reason, setReason] = useState("");
+  const [bucket, setBucket] = useState<"ALL" | "PENDING" | "APPROVED" | "REJECTED">(role === "ADMIN" ? "PENDING" : "ALL");
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [address, setAddress] = useState("");
+  const shown = (list.rows ?? []).filter((row) => bucket === "ALL" || orgBucket(row) === bucket);
+  const chosen = shown.find((row) => row._id === picked) ?? list.rows?.find((row) => row._id === picked);
 
   return (
     <OpsGate>
       <Title>Tổ chức</Title>
       <RoleNote />
-      <Body>ADMIN thấy mọi trạng thái. Quản lý trạm thấy tổ chức do mình gửi. Quản lý tổ chức, nhân viên, tình nguyện viên và người dùng thấy tổ chức đã duyệt.</Body>
       <Note text={list.error || job.note} />
-      <PickList rows={list.rows} selected={picked} onPick={setPicked} detail={orgDetail} />
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+        <Pill label="Chờ duyệt" active={bucket === "PENDING"} onPress={() => setBucket("PENDING")} />
+        <Pill label="Đã duyệt" active={bucket === "APPROVED"} onPress={() => setBucket("APPROVED")} />
+        <Pill label="Bị từ chối" active={bucket === "REJECTED"} onPress={() => setBucket("REJECTED")} />
+        <Pill label="Tất cả" active={bucket === "ALL"} onPress={() => setBucket("ALL")} />
+      </ScrollView>
+      <PickList rows={list.rows ? shown : null} selected={picked} onPick={setPicked} detail={orgDetail} />
+      {chosen && can(role, ["ADMIN"]) ? (
+        <Card>
+          <Title>{chosen.name || "Tổ chức"}</Title>
+          <Body>{orgState(chosen)}</Body>
+          {chosen.address ? <Body>{chosen.address}</Body> : null}
+          {chosen.phone ? <Body muted>{chosen.phone}</Body> : null}
+          {chosen.email ? <Body muted>{chosen.email}</Body> : null}
+          {chosen.operatingArea ? <Body muted>{chosen.operatingArea}</Body> : null}
+          {chosen.idCardNumber ? <Body muted>{`CCCD ${chosen.idCardNumber}`}</Body> : null}
+          {chosen.description ? <Body>{chosen.description}</Body> : null}
+          {chosen.rejectionReason ? <Body>{chosen.rejectionReason}</Body> : null}
+        </Card>
+      ) : null}
       {picked && can(role, ["ADMIN"]) ? (
         <View style={{ gap: 8 }}>
           <Button label={job.busy ? "Đang gửi" : "Duyệt tổ chức này"} onPress={() => void job.run((token) => backend.approveOrganization(token, picked)).then((ok) => ok && list.reload())} />
@@ -34,8 +101,8 @@ export function OrgScreen() {
           <Button label="Từ chối tổ chức này" tone="danger" onPress={() => void job.run((token) => backend.rejectOrganization(token, picked, reason.trim())).then((ok) => ok && list.reload())} />
         </View>
       ) : null}
-      {can(role, ["ADMIN", "ORG_MANAGER", "USER"]) ? <Title>Tổ chức mới</Title> : <Body muted>Vai trò này không tạo tổ chức.</Body>}
-      {can(role, ["ADMIN", "ORG_MANAGER", "USER"]) ? (
+      {role === "USER" ? <Title>Tổ chức mới</Title> : null}
+      {role === "USER" ? (
         <View style={{ gap: 8 }}>
           <TextField label="Tên" value={name} onChangeText={setName} />
           <TextField label="Mã" value={code} onChangeText={setCode} />
@@ -104,14 +171,13 @@ export function StationScreen() {
   return (
     <OpsGate>
       <Title>Trạm</Title>
-      <RoleNote />
-      <Body>Trạm mới chưa hoạt động. Duyệt tổ chức trước, rồi mới kích hoạt trạm.</Body>
       <Note text={stations.error || orgs.error || staffError || job.note} />
       <PickList rows={stations.rows} selected={picked} onPick={setPicked} detail={(row) => `${row.isActive ? "Đang mở" : "Chưa kích hoạt"} · ${row.address || ""}`} />
       {picked ? (
         <View style={{ gap: 8 }}>
-          {can(role, ["ADMIN"]) ? <Button label={job.busy ? "Đang gửi" : "Kích hoạt trạm này"} onPress={() => void job.run((token) => backend.approveStation(token, picked)).then((ok) => ok && stations.reload())} /> : null}
-          {can(role, ["ADMIN", "ORG_MANAGER"]) ? (
+          {can(role, ["ADMIN"]) && stations.rows?.find((row) => row._id === picked)?.isActive ? <Body>Trạm này đã được duyệt.</Body> : null}
+          {can(role, ["ADMIN"]) && !stations.rows?.find((row) => row._id === picked)?.isActive ? <Button label={job.busy ? "Đang gửi" : "Duyệt trạm"} onPress={() => void job.run((token) => backend.approveStation(token, picked)).then((ok) => ok && stations.reload())} /> : null}
+          {role === "ORG_MANAGER" && stations.rows?.find((row) => row._id === picked)?.isActive ? (
             <View style={{ gap: 8 }}>
               <TextField label="Email hoặc điện thoại của trưởng trạm có sẵn" value={identifier} onChangeText={setIdentifier} />
               <Button label="Gán trưởng trạm có sẵn" tone="ghost" onPress={() => void job.run((token) => backend.assignStationManagerByContact(token, picked, identifier.trim()))} />
@@ -125,7 +191,8 @@ export function StationScreen() {
               {staffId ? <Button label="Gỡ nhân viên này" tone="danger" onPress={() => void job.run((token) => backend.removeStaff(token, picked, staffId))} /> : null}
             </View>
           ) : null}
-          {can(role, ["ADMIN", "ORG_MANAGER", "STATION_MANAGER"]) ? (
+          {role === "ORG_MANAGER" && picked && !stations.rows?.find((row) => row._id === picked)?.isActive ? <Body muted>Chờ admin duyệt trạm này rồi mới gán trưởng trạm.</Body> : null}
+          {can(role, ["ORG_MANAGER", "STATION_MANAGER"]) ? (
             <View style={{ gap: 8 }}>
               <Title>Tài khoản mới cho trạm</Title>
               <TextField label="Email" value={email} onChangeText={setEmail} />
@@ -148,7 +215,7 @@ export function StationScreen() {
               }))}
             />
           ) : null}
-          {can(role, ["ADMIN", "ORG_MANAGER"]) ? (
+          {role === "ORG_MANAGER" && stations.rows?.find((row) => row._id === picked)?.isActive ? (
             <Button
               label="Tạo và gán trưởng trạm"
               onPress={() => void job.run((token) => backend.createStationManager(token, picked, {
@@ -162,13 +229,15 @@ export function StationScreen() {
           ) : null}
         </View>
       ) : null}
-      {can(role, ["ADMIN", "ORG_MANAGER", "STATION_MANAGER"]) ? (
+      {role === "ORG_MANAGER" ? (
         <View style={{ gap: 8 }}>
           <Title>Trạm mới</Title>
           <Body muted>Chọn tổ chức sở hữu trạm.</Body>
           <PickList rows={orgs.rows} selected={orgId} onPick={setOrgId} detail={orgDetail} />
           <TextField label="Tên trạm" value={name} onChangeText={setName} />
           <TextField label="Địa chỉ" value={address} onChangeText={setAddress} />
+          {AppleMaps ? <Body muted>Chạm bản đồ để đặt vị trí trạm.</Body> : null}
+          {AppleMaps ? <StationPlaceMap latitude={latitude} longitude={longitude} onPick={(lat, lng) => { setLatitude(lat); setLongitude(lng); }} /> : null}
           <TextField label="Vĩ độ" value={latitude} onChangeText={setLatitude} />
           <TextField label="Kinh độ" value={longitude} onChangeText={setLongitude} />
           <Button
@@ -181,7 +250,7 @@ export function StationScreen() {
             })).then((ok) => ok && stations.reload())}
           />
         </View>
-      ) : <Body muted>Vai trò này không tạo trạm.</Body>}
+      ) : role === "ADMIN" ? null : <Body muted>Vai trò này không tạo trạm.</Body>}
     </OpsGate>
   );
 }
@@ -253,7 +322,6 @@ export function CampaignWork() {
     <OpsGate>
       <Title>Chiến dịch</Title>
       <RoleNote />
-      <Body>Danh sách công khai không gồm bản nháp. Chiến dịch mới là DRAFT. Chỉ hiện trạng thái server cho phép đi tiếp.</Body>
       <Note text={campaigns.error || job.note} />
       <PickList rows={campaigns.rows} selected={picked} onPick={setPicked} detail={(row) => row.status || ""} />
       {picked && editor ? (

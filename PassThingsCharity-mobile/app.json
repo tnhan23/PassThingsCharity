@@ -37,7 +37,7 @@
       "favicon": "./assets/favicon.png"
     },
     "extra": {
-      "apiUrl": "http://localhost:8080"
+      "apiUrl": "https://passthingscharity-api.onrender.com"
     },
     "plugins": [
       "expo-router",

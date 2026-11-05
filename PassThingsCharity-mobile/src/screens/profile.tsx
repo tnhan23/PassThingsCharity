@@ -1,14 +1,19 @@
-import { router } from "expo-router";
+import { Redirect, router } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Text, View } from "react-native";
+import { ActivityIndicator, Text } from "react-native";
 import { backend } from "@/api/backend";
 import { ApiError } from "@/api/client";
 import { isOperator, useSession } from "@/api/session";
+import { useShell } from "@/api/shell";
 import { Screen } from "@/components/chrome";
 import { Body, Button, Card, Eyebrow, Photo, Title } from "@/components/ui";
-import { colors, fonts, photos } from "@/theme";
+import { MyDonations } from "@/screens/receive";
+import { colors, fonts } from "@/theme";
 
 export function ProfileScreen({ state }: { state: "full" | "low" | "empty" | "loading" | "error" }) {
+  const { user } = useSession();
+  const { desk } = useShell();
+  if (!user && state === "full") return <Redirect href="/login" />;
   if (state === "loading") {
     return (
       <Screen tab="profile">
@@ -58,40 +63,15 @@ export function ProfileScreen({ state }: { state: "full" | "low" | "empty" | "lo
   return (
     <Screen tab="profile">
       <AccountCard />
-      <Eyebrow>Số minh họa, máy chủ chưa có sổ tiếp nhận</Eyebrow>
-      <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
-        <Photo uri={photos.portrait} height={72} width={72} radius={36} />
-        <View style={{ flex: 1, gap: 4 }}>
-          <Title>Trần Hoàng Nam</Title>
-          <Body muted>Thành viên từ tháng 3, 2024 · Bình Thạnh</Body>
-        </View>
-      </View>
-      <View style={{ flexDirection: "row", gap: 8 }}>
-        <Stat n="18" label="Lượt trao" />
-        <Stat n="52,5 kg" label="Đã được nhận" />
-        <Stat n="98,4" label="Tín nhiệm" />
-      </View>
-      <Card>
-        <Eyebrow>#DN-2025-0894 · 20/03/2025</Eyebrow>
-        <Text style={{ fontFamily: fonts.semibold, fontSize: 16 }}>Áo ấm Hà Giang</Text>
-        <Body muted>Kiểm định đạt 8,5 / 10 kg. +85 điểm. Đang giữ tại Trạm Đa Kao.</Body>
-        <Button label="Biên lai" tone="ghost" onPress={() => router.push("/receipt/done")} />
-      </Card>
-      <Card>
-        <Eyebrow>Ca tình nguyện</Eyebrow>
-        <Body>24 giờ đã chốt · 180 điểm tình nguyện</Body>
-        <Button label="Bảng ca" onPress={() => router.push("/volunteer/tasks")} />
-      </Card>
-      <Button label="Lịch sử đóng góp" onPress={() => router.push("/history/content")} />
-      <Button label="Cài đặt" tone="ghost" onPress={() => router.push("/settings")} />
-      <Button label="Hồ sơ mới" tone="ghost" onPress={() => router.push("/profile/empty")} />
-      <Button label="Cảnh báo điểm thấp" tone="ghost" onPress={() => router.push("/profile/low")} />
+      {desk ? null : <MyDonations summary />}
+      {user?.role === "USER" || user?.role === "VOLUNTEER" ? <Button label="Việc tình nguyện" onPress={() => router.push("/volunteer/tasks")} /> : null}
     </Screen>
   );
 }
 
 function AccountCard() {
   const { user, token, logout } = useSession();
+  const { desk, canSwitch, setMode } = useShell();
   const [points, setPoints] = useState<number | null>(null);
   const [lines, setLines] = useState("");
   const [problem, setProblem] = useState("");
@@ -133,14 +113,18 @@ function AccountCard() {
       {user.avatarUrl ? <Photo uri={user.avatarUrl} height={96} width={96} radius={48} /> : <Body muted>Chưa có ảnh tài khoản.</Body>}
       <Title>{user.username}</Title>
       <Body muted>{user.phone}</Body>
-      <Text style={{ fontFamily: fonts.bold, fontSize: 28, color: colors.primary }}>
-        {points === null ? "…" : `${points} điểm`}
-      </Text>
-      <Body muted>Điểm quyên góp là 20 mỗi phiếu cộng thêm tối đa 50 mỗi dòng. Điểm tình nguyện cộng lúc check-out.</Body>
-      {problem ? <Body>{problem}</Body> : null}
-      {lines ? <Body muted>{lines}</Body> : null}
+      {desk ? null : (
+        <Text style={{ fontFamily: fonts.bold, fontSize: 28, color: colors.primary }}>
+          {points === null ? "…" : `${points} điểm`}
+        </Text>
+      )}
+      {desk ? null : problem ? <Body>{problem}</Body> : null}
+      {desk ? null : lines ? <Body muted>{lines}</Body> : null}
+      {user.role === "USER" ? <Button label="Đăng ký tổ chức" onPress={() => router.push("/organization")} /> : null}
+      {canSwitch && desk ? <Button label="Đóng góp như người dùng" onPress={() => setMode("member")} /> : null}
+      {canSwitch && !desk ? <Button label="Chế độ quản lý" onPress={() => setMode("desk")} /> : null}
       <Button label="Sửa tài khoản" tone="ghost" onPress={() => router.push("/account")} />
-      {isOperator(user.role) ? <Button label="Vận hành" tone="ghost" onPress={() => router.push("/desk")} /> : null}
+      {isOperator(user.role) && !canSwitch && !desk ? <Button label="Về việc" tone="ghost" onPress={() => router.push("/")} /> : null}
       <Button
         label="Đăng xuất"
         tone="ghost"
@@ -148,15 +132,6 @@ function AccountCard() {
           void logout();
         }}
       />
-    </Card>
-  );
-}
-
-function Stat({ n, label }: { n: string; label: string }) {
-  return (
-    <Card style={{ flex: 1, padding: 12 }}>
-      <Text style={{ fontFamily: fonts.bold, fontSize: 16, color: colors.primary }}>{n}</Text>
-      <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.muted }}>{label}</Text>
     </Card>
   );
 }

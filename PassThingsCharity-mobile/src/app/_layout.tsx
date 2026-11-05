@@ -11,6 +11,7 @@ import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { SessionProvider } from "@/api/session";
+import { ShellProvider } from "@/api/shell";
 import { colors } from "@/theme";
 
 SplashScreen.preventAutoHideAsync();
@@ -36,9 +37,11 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <SessionProvider>
+          <ShellProvider>
           <Stack
             screenOptions={{
               headerShown: false,
+              animation: "none",
               contentStyle: { backgroundColor: colors.surface },
             }}
           >
@@ -48,6 +51,7 @@ export default function RootLayout() {
             <Stack.Screen name="profile/[mode]" options={{ animation: "none" }} />
             <Stack.Screen name="login" options={{ animation: "none" }} />
           </Stack>
+          </ShellProvider>
         </SessionProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

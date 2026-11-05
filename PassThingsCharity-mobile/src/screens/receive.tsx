@@ -1,0 +1,507 @@
+import { router, useLocalSearchParams } from "expo-router";
+import { useEffect, useMemo, useState } from "react";
+import { ActivityIndicator, ScrollView, Text, View } from "react-native";
+import { backend } from "@/api/backend";
+import { ApiError } from "@/api/client";
+import { pickImages } from "@/api/images";
+import { formatDay, unitSpoken } from "@/api/labels";
+import { useSession } from "@/api/session";
+import type { CampaignSummary, ContributionItemRow, ContributionRow, PointsPayload, StationRow } from "@/api/types";
+import { Field } from "@/components/form";
+import { Body, Button, Card, Icon, Photo, Pill, Tap, Title } from "@/components/ui";
+import { colors, fonts } from "@/theme";
+
+type CatalogItem = {
+  _id: string;
+  name: string;
+  unit: string;
+  pointsPerUnit: number;
+};
+
+type Donor = {
+  _id: string;
+  fullName?: string;
+  email?: string;
+  phone?: string;
+  username?: string;
+};
+
+type Line = {
+  key: string;
+  itemTypeId: string;
+  quantity: string;
+  note: string;
+};
+
+function blankLine(): Line {
+  return { key: `${Date.now()}-${Math.random()}`, itemTypeId: "", quantity: "", note: "" };
+}
+
+function refTitle(value: ContributionRow["campaignId"]) {
+  if (value && typeof value === "object") return value.title || value.name || "";
+  return "";
+}
+
+function receiptStatus(status: string) {
+  if (status === "ACCEPTED") return "Đã tiếp nhận";
+  if (status === "REJECTED") return "Từ chối";
+  if (status === "COMPLETED") return "Hoàn tất";
+  if (status === "PENDING") return "Chờ xử lý";
+  return status;
+}
+
+export function pointsForReceipt(points: PointsPayload | null, contributionId: string) {
+  if (!points) return null;
+  const match = points.transactions.find((row) => row.type === "DONATION" && String(row.sourceId) === String(contributionId));
+  return match ? match.points : null;
+}
+
+function itemLabel(item: ContributionItemRow) {
+  if (item.itemTypeId && typeof item.itemTypeId === "object" && item.itemTypeId.name) return item.itemTypeId.name;
+  return "Vật phẩm";
+}
+
+export function MyDonations({ summary = false }: { summary?: boolean }) {
+  const { token, user } = useSession();
+  const [rows, setRows] = useState<ContributionRow[] | null>(null);
+  const [points, setPoints] = useState<PointsPayload | null>(null);
+  const [quantities, setQuantities] = useState<string>("");
+  const [problem, setProblem] = useState("");
+
+  useEffect(() => {
+    if (!token || !user?.id) return;
+    let cancelled = false;
+    Promise.all([
+      backend.listMyContributions(token, user.id),
+      backend.myPoints(token),
+    ])
+      .then(async ([list, score]) => {
+        if (cancelled) return;
+        const receipts = list.data ?? [];
+        setRows(receipts);
+        setPoints(score);
+        const accepted = receipts.filter((row) => row.status === "ACCEPTED");
+        const details = await Promise.all(accepted.map((row) => backend.getContribution(token, row._id).catch(() => null)));
+        if (cancelled) return;
+        const totals = new Map<string, number>();
+        for (const detail of details) {
+          for (const item of detail?.items ?? []) {
+            const unit = item.unit || "đơn vị";
+            totals.set(unit, (totals.get(unit) ?? 0) + (Number(item.quantity) || 0));
+          }
+        }
+        setQuantities([...totals.entries()].map(([unit, amount]) => `${amount} ${unitSpoken(unit)}`).join(", "));
+      })
+      .catch((caught) => {
+        if (!cancelled) setProblem(caught instanceof ApiError ? caught.message : "Không tải được phiếu quyên góp.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, user?.id]);
+
+  if (!token || !user) {
+    return (
+      <Card>
+        <Title>Quyên góp của tôi</Title>
+        <Body>Đăng nhập để xem các phiếu nhân viên đã lập cho bạn.</Body>
+        <Button label="Đăng nhập" onPress={() => router.push("/login")} />
+      </Card>
+    );
+  }
+
+  if (!rows && !problem) {
+    return (
+      <Card>
+        <ActivityIndicator color={colors.primary} />
+        <Title>Đang tải phiếu</Title>
+      </Card>
+    );
+  }
+
+  if (problem || !rows) {
+    return (
+      <Card>
+        <Title>Không tải được phiếu</Title>
+        <Body>{problem || "Máy chủ không trả danh sách."}</Body>
+      </Card>
+    );
+  }
+
+  const accepted = rows.filter((row) => row.status === "ACCEPTED");
+  const campaigns = new Set(accepted.map((row) => (typeof row.campaignId === "object" ? row.campaignId?._id || row.campaignId?.title : row.campaignId) || row._id));
+  const firstDay = accepted
+    .map((row) => row.createdAt)
+    .filter((value): value is string => Boolean(value))
+    .sort()[0];
+
+  return (
+    <View style={{ gap: 14 }}>
+      <Title>Quyên góp của tôi</Title>
+      <Card>
+        <Text style={{ fontFamily: fonts.bold, fontSize: 28, color: colors.primary }}>
+          {points ? `${points.totalPoints} điểm` : "…"}
+        </Text>
+        <Body>{`${accepted.length} phiếu đã tiếp nhận.`}</Body>
+        <Body>{`${campaigns.size} chiến dịch.`}</Body>
+        <Body>{quantities ? `Đồ đã ghi: ${quantities}.` : "Chưa cộng được số lượng từng món."}</Body>
+        <Body muted>{firstDay ? `Quyên góp từ ${formatDay(firstDay)}.` : "Chưa có phiếu để tính mốc thời gian."}</Body>
+      </Card>
+      {summary ? null : <Body muted>Nhân viên lập phiếu khi bạn mang đồ tới quầy.</Body>}
+      {rows.length === 0 ? <Body>Chưa có phiếu nào gắn với tài khoản này.</Body> : null}
+      {rows.map((row) => {
+        const awarded = pointsForReceipt(points, row._id);
+        return (
+          <Tap key={row._id} onPress={() => router.push(`/contribution/${row._id}`)}>
+            <Card>
+              <Text style={{ fontFamily: fonts.bold, fontSize: 16, color: colors.ink }}>{row.code}</Text>
+              <Body>{receiptStatus(row.status)}</Body>
+              <Body muted>{refTitle(row.stationId) || "Trạm"}</Body>
+              <Body muted>{refTitle(row.campaignId) || "Chiến dịch"}</Body>
+              {row.createdAt ? <Body muted>{formatDay(row.createdAt)}</Body> : null}
+              {awarded !== null ? <Text style={{ fontFamily: fonts.bold, fontSize: 16, color: colors.secondary }}>{`+${awarded} điểm`}</Text> : null}
+            </Card>
+          </Tap>
+        );
+      })}
+    </View>
+  );
+}
+
+export function ContributionDetailScreen() {
+  const { id } = useLocalSearchParams<{ id?: string }>();
+  const receiptId = typeof id === "string" ? id : "";
+  const { token } = useSession();
+  const [detail, setDetail] = useState<Awaited<ReturnType<typeof backend.getContribution>> | null>(null);
+  const [points, setPoints] = useState<PointsPayload | null>(null);
+  const [problem, setProblem] = useState("");
+
+  useEffect(() => {
+    if (!token || !receiptId) return;
+    let cancelled = false;
+    Promise.all([backend.getContribution(token, receiptId), backend.myPoints(token)])
+      .then(([next, score]) => {
+        if (cancelled) return;
+        setDetail(next);
+        setPoints(score);
+      })
+      .catch((caught) => {
+        if (!cancelled) setProblem(caught instanceof ApiError ? caught.message : "Không mở được phiếu.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [receiptId, token]);
+
+  if (!token) {
+    return (
+      <Card>
+        <Title>Chi tiết phiếu</Title>
+        <Body>Đăng nhập để xem phiếu.</Body>
+        <Button label="Đăng nhập" onPress={() => router.push("/login")} />
+      </Card>
+    );
+  }
+
+  if (!detail && !problem) {
+    return (
+      <Card>
+        <ActivityIndicator color={colors.primary} />
+        <Title>Đang mở phiếu</Title>
+      </Card>
+    );
+  }
+
+  if (problem || !detail) {
+    return (
+      <Card>
+        <Title>Không mở được phiếu</Title>
+        <Body>{problem || "Không có dữ liệu."}</Body>
+      </Card>
+    );
+  }
+
+  const awarded = pointsForReceipt(points, detail.contribution._id);
+  return (
+    <View style={{ gap: 14 }}>
+      <Title>{detail.contribution.code}</Title>
+      <Body>{receiptStatus(detail.contribution.status)}</Body>
+      <Body muted>{refTitle(detail.contribution.stationId) || "Trạm"}</Body>
+      <Body muted>{refTitle(detail.contribution.campaignId) || "Chiến dịch"}</Body>
+      {detail.contribution.createdAt ? <Body muted>{formatDay(detail.contribution.createdAt)}</Body> : null}
+      {awarded !== null ? <Text style={{ fontFamily: fonts.bold, fontSize: 22, color: colors.secondary }}>{`+${awarded} điểm`}</Text> : <Body muted>Phiếu này chưa có dòng điểm loại DONATION.</Body>}
+      <Title>Các món trong phiếu</Title>
+      {detail.items.length === 0 ? <Body>Phiếu chưa có món.</Body> : null}
+      {detail.items.map((item, index) => (
+        <Card key={`${itemLabel(item)}-${index}`}>
+          <Text style={{ fontFamily: fonts.bold, fontSize: 16, color: colors.ink }}>{itemLabel(item)}</Text>
+          <Body>{`${item.quantity} ${unitSpoken(item.unit)}`}</Body>
+          {item.note ? <Body muted>{item.note}</Body> : null}
+        </Card>
+      ))}
+      {detail.images.length > 0 ? <Title>Ảnh xác minh</Title> : null}
+      {detail.images.map((image, index) => image.imageUrl ? <Photo key={image.imageUrl} uri={image.imageUrl} height={180} radius={16} /> : <Body key={index} muted>Ảnh không có đường dẫn.</Body>)}
+    </View>
+  );
+}
+
+export function ReceptionForm({ onCreated }: { onCreated?: () => void }) {
+  const { token, user } = useSession();
+  const stations = user?.stations ?? [];
+  const [stationId, setStationId] = useState(stations.length === 1 ? stations[0]._id : "");
+  const [extraStations, setExtraStations] = useState<StationRow[] | null>(stations.length ? stations : null);
+  const [query, setQuery] = useState("");
+  const [donors, setDonors] = useState<Donor[]>([]);
+  const [donor, setDonor] = useState<Donor | null>(null);
+  const [campaigns, setCampaigns] = useState<CampaignSummary[]>([]);
+  const [campaignId, setCampaignId] = useState("");
+  const [catalog, setCatalog] = useState<CatalogItem[]>([]);
+  const [lines, setLines] = useState<Line[]>([blankLine()]);
+  const [notes, setNotes] = useState("");
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  const [done, setDone] = useState<{ code: string; count: number; points: number } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      backend.listCampaigns({ status: "ACTIVE" }),
+      backend.listItemTypes(true),
+    ]).then(([campaignList, itemList]) => {
+      if (cancelled) return;
+      setCampaigns(campaignList.campaigns);
+      setCatalog(itemList.itemTypes.flatMap((item) => item.unit ? [{
+        _id: item._id,
+        name: item.name,
+        unit: item.unit,
+        pointsPerUnit: item.pointsPerUnit || 0,
+      }] : []));
+    }).catch((caught) => {
+      if (!cancelled) setNote(caught instanceof ApiError ? caught.message : "Không tải được danh mục.");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (stations.length || !token || user?.role !== "ADMIN") return;
+    let cancelled = false;
+    backend.listStations(token).then((data) => {
+      if (!cancelled) setExtraStations(data.data);
+    }).catch(() => {
+      if (!cancelled) setExtraStations([]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [stations.length, token, user?.role]);
+
+  const stationChoices = stations.length ? stations : (extraStations ?? []);
+  const neededIds = useMemo(() => {
+    const campaign = campaigns.find((item) => item._id === campaignId);
+    const ids = new Set<string>();
+    for (const item of campaign?.items ?? []) {
+      const id = typeof item.itemTypeId === "object" ? item.itemTypeId?._id : item.itemTypeId;
+      if (id) ids.add(String(id));
+    }
+    return ids;
+  }, [campaignId, campaigns]);
+
+  const estimated = 20 + lines.reduce((sum, line) => {
+    const type = catalog.find((item) => item._id === line.itemTypeId);
+    return sum + Math.round(Number(line.quantity || 0) * (type?.pointsPerUnit || 0));
+  }, 0);
+  const filled = lines.filter((line) => line.itemTypeId && Number(line.quantity) > 0);
+
+  function chooseItem(index: number, item: CatalogItem) {
+    setLines((current) => current.map((line, lineIndex) => {
+      if (lineIndex !== index) return line;
+      return { ...line, itemTypeId: item._id, quantity: line.quantity };
+    }));
+  }
+
+  function resetForm() {
+    setDonor(null);
+    setDonors([]);
+    setQuery("");
+    setCampaignId("");
+    setLines([blankLine()]);
+    setNotes("");
+    setImageUrls([]);
+    setDone(null);
+    setNote("");
+    if (stations.length === 1) setStationId(stations[0]._id);
+  }
+
+  async function searchDonor() {
+    if (!token || !query.trim()) return;
+    setBusy(true);
+    setNote("");
+    try {
+      const data = await backend.lookupDonor(token, query.trim());
+      setDonors(data.data || []);
+      setNote(data.data?.length ? `Có ${data.data.length} người.` : "Không thấy người quyên góp.");
+    } catch (caught) {
+      setNote(caught instanceof ApiError ? caught.message : "Không tra được người quyên góp.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function upload() {
+    if (!token) return;
+    setBusy(true);
+    setNote("");
+    try {
+      const files = await pickImages();
+      if (!files.length) {
+        setNote("Chưa chọn ảnh.");
+        return;
+      }
+      const uploaded = await backend.uploadContributionImages(token, files.slice(0, 5));
+      setImageUrls(uploaded.imageUrls ?? []);
+      setNote(uploaded.imageUrls?.length ? `Đã tải ${uploaded.imageUrls.length} ảnh.` : "Máy chủ không trả đường dẫn ảnh.");
+    } catch (caught) {
+      setNote(caught instanceof ApiError ? caught.message : "Không tải được ảnh.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submit() {
+    if (!token) return;
+    const items = lines.flatMap((line) => {
+      const type = catalog.find((item) => item._id === line.itemTypeId);
+      const quantity = Number(line.quantity);
+      if (!type || !(quantity > 0)) return [];
+      if (type.unit !== "KG" && !Number.isInteger(quantity)) return [];
+      return [{ itemTypeId: type._id, quantity, unit: type.unit, note: line.note.trim() }];
+    });
+    if (!donor || !stationId || !campaignId || items.length !== filled.length || items.length === 0) {
+      setNote("Chọn người tặng, trạm, chiến dịch, và nhập số lượng hợp lệ cho từng món. Đơn vị khác Kg dùng số nguyên.");
+      return;
+    }
+    setBusy(true);
+    setNote("");
+    try {
+      const data = await backend.createContribution(token, {
+        userId: donor._id,
+        stationId,
+        campaignId,
+        notes: notes.trim(),
+        items,
+        imageUrls,
+      });
+      setDone({
+        code: data.contribution.code,
+        count: Array.isArray(data.items) ? data.items.length : items.length,
+        points: data.gamification?.pointsAwarded ?? 0,
+      });
+      onCreated?.();
+    } catch (caught) {
+      setNote(caught instanceof ApiError ? caught.message : "Không lập được phiếu.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (done) {
+    return (
+      <Card>
+        <Title>Đã tiếp nhận</Title>
+        <Text style={{ fontFamily: fonts.bold, fontSize: 28, color: colors.primary }}>{done.code}</Text>
+        <Body>{`${done.count} món trong phiếu.`}</Body>
+        <Text style={{ fontFamily: fonts.bold, fontSize: 22, color: colors.secondary }}>{`+${done.points} điểm`}</Text>
+        <Button label="Lập phiếu tiếp theo" onPress={resetForm} />
+      </Card>
+    );
+  }
+
+  const stationName = stationChoices.find((item) => item._id === stationId)?.name;
+
+  return (
+    <View style={{ gap: 12 }}>
+      <Title>Lập phiếu tiếp nhận</Title>
+      <Body muted>Một phiếu ghi nhiều loại đồ. Đơn vị gửi lên đúng mã máy chủ đang lưu.</Body>
+      {stations.length === 1 ? <Body>{`Trạm ${stations[0].name}`}</Body> : null}
+      {stationChoices.length !== 1 ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+          {stationChoices.map((station) => (
+            <Pill key={station._id} label={station.name} active={station._id === stationId} onPress={() => setStationId(station._id)} />
+          ))}
+        </ScrollView>
+      ) : null}
+      {user?.role === "STAFF" && stations.length === 0 ? <Body>Bạn chưa được gán vào trạm nào. Đăng nhập lại nếu vừa được phân trạm.</Body> : null}
+      {stationName && stations.length !== 1 ? <Body muted>{stationName}</Body> : null}
+      {donor ? (
+        <Card>
+          <Text style={{ fontFamily: fonts.bold, fontSize: 18, color: colors.ink }}>{donor.fullName || donor.username || "Người tặng"}</Text>
+          {donor.phone ? <Body>{donor.phone}</Body> : null}
+          {donor.email ? <Body muted>{donor.email}</Body> : null}
+          {donor.username ? <Body muted>{donor.username}</Body> : null}
+          <Button label="Đổi người khác" tone="ghost" onPress={() => setDonor(null)} />
+        </Card>
+      ) : (
+        <View style={{ gap: 8 }}>
+          <Field label="Số điện thoại, email, username hoặc họ tên" value={query} onChangeText={setQuery} />
+          <Button label={busy ? "Đang tìm" : "Tìm người tặng"} tone="ghost" disabled={busy} onPress={() => void searchDonor()} />
+          {donors.map((person) => (
+            <Tap key={person._id} onPress={() => setDonor(person)}>
+              <Card>
+                <Text style={{ fontFamily: fonts.semibold, fontSize: 16, color: colors.ink }}>{person.fullName || person.username}</Text>
+                <Body muted>{[person.phone, person.email, person.username].filter(Boolean).join("\n")}</Body>
+              </Card>
+            </Tap>
+          ))}
+        </View>
+      )}
+      <Body>Chiến dịch đang nhận</Body>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+        {campaigns.map((campaign) => (
+          <Pill key={campaign._id} label={campaign.title} active={campaign._id === campaignId} onPress={() => setCampaignId(campaign._id)} />
+        ))}
+      </ScrollView>
+      {lines.map((line, index) => {
+        const chosen = catalog.find((item) => item._id === line.itemTypeId);
+        const taken = new Set(lines.flatMap((row, rowIndex) => rowIndex === index || !row.itemTypeId ? [] : [row.itemTypeId]));
+        return (
+          <Card key={line.key}>
+            <Text style={{ fontFamily: fonts.bold, fontSize: 16, color: colors.ink }}>{chosen ? chosen.name : "Chọn vật phẩm"}</Text>
+            {chosen && neededIds.has(chosen._id) ? <Body>Chiến dịch đang cần</Body> : null}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+              {catalog.filter((item) => item._id === line.itemTypeId || !taken.has(item._id)).map((item) => (
+                <Pill key={item._id} label={item.name} active={item._id === line.itemTypeId} onPress={() => chooseItem(index, item)} />
+              ))}
+            </ScrollView>
+            <Field
+              label={chosen ? `Số lượng, ${unitSpoken(chosen.unit)}` : "Số lượng"}
+              value={line.quantity}
+              onChangeText={(value) => setLines((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, quantity: value.replace(",", ".") } : row))}
+              keyboardType={chosen?.unit === "KG" ? "decimal-pad" : "number-pad"}
+            />
+            {chosen ? <Body muted>{`Đơn vị khóa theo vật phẩm: ${chosen.unit}`}</Body> : null}
+            <Field label="Ghi chú món" value={line.note} onChangeText={(value) => setLines((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, note: value } : row))} autoCapitalize="sentences" />
+            {lines.length > 1 ? (
+              <Tap
+                onPress={() => setLines((current) => current.filter((_, rowIndex) => rowIndex !== index))}
+                accessibilityLabel="Xóa món"
+                style={{ alignSelf: "flex-start" }}
+              >
+                <Icon name="delete-outline" size={22} color={colors.error} />
+              </Tap>
+            ) : null}
+          </Card>
+        );
+      })}
+      <Button label="Thêm vật phẩm" tone="ghost" onPress={() => setLines((current) => [...current, blankLine()])} />
+      <Field label="Ghi chú phiếu" value={notes} onChangeText={setNotes} autoCapitalize="sentences" />
+      <Body muted>{imageUrls.length ? `Đã có ${imageUrls.length} ảnh.` : "Chưa đính ảnh. Tối đa 5 ảnh."}</Body>
+      <Button label={busy ? "Đang gửi" : "Tải ảnh"} tone="ghost" disabled={busy} onPress={() => void upload()} />
+      {filled.length > 0 ? <Body>{`Tổng cộng: ${filled.length} loại vật phẩm. Dự kiến cộng +${estimated} điểm cho người tặng.`}</Body> : null}
+      {note ? <Body>{note}</Body> : null}
+      <Button label={busy ? "Đang gửi" : "Lập phiếu"} disabled={busy} onPress={() => void submit()} />
+    </View>
+  );
+}
