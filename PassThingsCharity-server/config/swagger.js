@@ -1,0 +1,72 @@
+const schemas = require('../docs/schemas.doc');
+const authDocs = require('../docs/auth.doc');
+const usersDocs = require('../docs/users.doc');
+const organizationsDocs = require('../docs/organizations.doc');
+const stationsDocs = require('../docs/stations.doc');
+const stationManagerDocs = require('../docs/stationManager.doc');
+const adminApprovalDocs = require('../docs/adminApproval.doc');
+
+// BE2 Swagger Docs
+const itemCatalogDocs = require('../docs/itemCatalog.doc');
+const campaignDocs = require('../docs/campaign.doc');
+const gamificationDocs = require('../docs/gamification.doc');
+
+// BE3 Swagger Docs
+const operationsDocs = require('../docs/operations.doc');
+const uploadDocs = require('../docs/upload.doc');
+const shiftDocs = require('../docs/shift.doc');
+const notificationDocs = require('../docs/notification.doc');
+
+// Hide campaign registration from Swagger only; backend endpoints stay enabled.
+const visibleOperationsDocs = Object.fromEntries(
+  Object.entries(operationsDocs).filter(([path]) => !path.startsWith('/workforce/volunteers/'))
+);
+
+const createSwaggerDocument = (port = process.env.PORT || 8080) => ({
+  openapi: '3.0.0',
+  info: {
+    title: 'PassThingsCharity API Documentation',
+    version: '1.0.0',
+    description: 'Tài liệu API chính thức cho hệ thống quyên góp thiện nguyện PassThingsCharity.',
+  },
+  servers: [
+    {
+      url: '/',
+      description: 'Current Server',
+    },
+  ],
+  components: {
+    securitySchemes: {
+      bearerAuth: {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        description: 'Nhập token JWT lấy được từ API /auth/login (không cần gõ chữ Bearer, Swagger sẽ tự thêm)',
+      },
+    },
+    schemas,
+  },
+  security: [
+    {
+      bearerAuth: [],
+    },
+  ],
+  paths: {
+    ...authDocs,
+    ...usersDocs,
+    ...organizationsDocs,
+    ...stationsDocs,
+    ...stationManagerDocs,
+    ...adminApprovalDocs,
+    ...itemCatalogDocs,
+    ...campaignDocs,
+    ...gamificationDocs,
+    ...visibleOperationsDocs,
+    ...require('../docs/inventory.doc'),
+    ...uploadDocs,
+    ...shiftDocs,
+    ...notificationDocs,
+  },
+});
+
+module.exports = createSwaggerDocument;
