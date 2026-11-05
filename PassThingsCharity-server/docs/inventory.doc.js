@@ -41,14 +41,14 @@ module.exports = {
 
 const mutationResponses = {
   200: { description: 'Đã điều chỉnh/xóa dòng kho và lưu lịch sử.' },
-  400: { description: 'Body không hợp lệ hoặc thiếu reason.' },
+  400: { description: 'Body không hợp lệ hoặc thiếu description.' },
   401: { description: 'Chưa đăng nhập.' },
   403: { description: 'Không thuộc trạm được phép.' },
   404: { description: 'Không tìm thấy dòng kho/trạm/loại hàng trong phạm vi được phép.' },
   409: { description: 'Dòng kho trùng hoặc không đủ hàng để đáp ứng lượng giữ chỗ.' },
   503: { description: 'Kho chưa được khởi tạo.' },
 };
-const reason = { type: 'string', minLength: 1, description: 'Lý do điều chỉnh, bắt buộc cho cả xóa.' };
+const description = { type: 'string', minLength: 1, description: 'Lý do điều chỉnh, bắt buộc cho cả xóa.' };
 function mutation(summary, properties, required) {
   return {
     tags: ['Inventory'], summary,
@@ -59,12 +59,26 @@ function mutation(summary, properties, required) {
 }
 module.exports['/inventory'].post = mutation('Thêm dòng kho thủ công (không được trùng)', {
   stationId: { type: 'string' }, itemTypeId: { type: 'string' }, unit: { type: 'string', enum: ['KG', 'PAIR', 'BOX', 'PACK', 'PIECE'] },
-  quantity: { type: 'number', minimum: 0 }, reason,
-}, ['stationId', 'itemTypeId', 'unit', 'quantity', 'reason']);
+  quantity: { type: 'number', minimum: 0 }, description,
+}, ['stationId', 'itemTypeId', 'unit', 'quantity', 'description']);
 module.exports['/inventory'].post.responses = { ...mutationResponses, 201: { description: 'Đã tạo dòng kho và lưu lịch sử.' } };
+const createSchema = module.exports['/inventory'].post.requestBody.content['application/json'].schema;
+const createExamples = [
+  { stationId: '671000000000000000000015', itemTypeId: '6523456789abcdef00000201', unit: 'KG', quantity: 40, description: 'Quần áo nam nữ' },
+  { stationId: '671000000000000000000015', itemTypeId: '6523456789abcdef00000203', unit: 'BOX', quantity: 40, description: 'Sữa hộp đóng thùng' },
+];
+module.exports['/inventory'].post.summary = 'Thêm một hoặc nhiều dòng kho thủ công (không được trùng)';
+module.exports['/inventory'].post.description += ' Nhận một object hoặc mảng JSON từ 1 đến 100 món. Gửi nhiều món phải bọc trong [...]. Mỗi món có stationId, itemTypeId, unit, quantity, description. Toàn bộ món được tạo trong cùng transaction: một món lỗi thì không lưu món nào. Không được trùng dòng trong request hoặc với kho hiện có. Gửi object trả data object; gửi mảng trả data mảng.';
+module.exports['/inventory'].post.requestBody.content['application/json'] = {
+  schema: { oneOf: [createSchema, { type: 'array', minItems: 1, maxItems: 100, items: createSchema }] },
+  examples: {
+    multiple: { summary: 'Thêm nhiều món', value: createExamples },
+    single: { summary: 'Thêm một món', value: createExamples[0] },
+  },
+};
 module.exports['/inventory/{id}'] = {
   parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-  patch: mutation('Sửa số lượng tồn kho tuyệt đối', { quantity: { type: 'number', minimum: 0 }, reason }, ['quantity', 'reason']),
-  delete: mutation('Xóa dòng tồn kho, giữ lịch sử điều chỉnh', { reason }, ['reason']),
+  patch: mutation('Sửa số lượng tồn kho tuyệt đối', { quantity: { type: 'number', minimum: 0 }, description }, ['quantity', 'description']),
+  delete: mutation('Xóa dòng tồn kho, giữ lịch sử điều chỉnh', { description }, ['description']),
 };
 module.exports['/inventory/history'].get.parameters.find(p => p.name === 'type').schema.enum.push('MANUAL_CREATE', 'MANUAL_UPDATE', 'MANUAL_DELETE');

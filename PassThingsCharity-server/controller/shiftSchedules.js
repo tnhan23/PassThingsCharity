@@ -34,7 +34,7 @@ async function getStationSchedules(req, res, next) {
         if (fromDate) filter.date = { $gte: fromDate, $lte: toDate };
         if (staffId && mongoose.isValidObjectId(staffId)) filter.staffId = staffId;
         const schedules = await ShiftSchedule.find(filter)
-            .populate('templateId', 'code name startTime endTime')
+            .populate('templateId', 'name startTime endTime')
             .populate('staffId', 'fullName email phone username')
             .populate('assignedBy', 'fullName username')
             .sort({ date: 1, templateId: 1, staffId: 1, _id: 1 });
