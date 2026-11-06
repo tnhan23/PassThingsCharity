@@ -164,6 +164,7 @@ export type OrgApplication = {
   description?: string;
   operatingArea?: string;
   idCardNumber?: string;
+  evidenceImageUrls?: string[];
   status?: string;
   isVerified?: boolean;
   rejectionReason?: string;

@@ -82,7 +82,10 @@ export const backend = {
   },
 
   listOrganizations(token: Token) {
-    return api<{ data: { _id: string; name: string; code?: string; isVerified?: boolean; status?: string }[] }>("/organizations", { token });
+    return api<{ data: OrgApplication[] }>("/organizations", { token });
+  },
+  uploadOrganizationEvidence(token: Token, files: UploadFile[]) {
+    return uploadImages<{ imageUrls: string[] }>("/organizations/upload-evidence", token, files);
   },
   getOrganization(token: Token, id: string) {
     return api<{ organization: OrgApplication }>(`/organizations/${id}`, { token });

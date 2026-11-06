@@ -7,8 +7,9 @@ const CampaignItem = require('../models/campaignItem');
 const Station = require('../models/station');
 const User = require('../models/user');
 const ItemType = require('../models/itemType');
-const PointTransaction = require('../models/pointTransaction');
 const { checkAndUnlockAchievements } = require('./gamification');
+const { calculateDonationPoints } = require('../services/gamificationPolicy');
+const { createOrGetPointTransaction } = require('../services/pointTransactions');
 
 /**
  * Generate unique Contribution Code (e.g. CTB-261015-8492)
@@ -101,6 +102,7 @@ async function createContribution(req, res, next) {
     // Validate each item
     const validUnits = ['KG', 'PAIR', 'BOX', 'PACK', 'PIECE'];
     const validatedItems = [];
+    let totalPoints = 0;
     for (let i = 0; i < items.length; i++) {
       const it = items[i];
       if (!mongoose.isValidObjectId(it.itemTypeId)) {
@@ -122,13 +124,18 @@ async function createContribution(req, res, next) {
         return res.status(404).json({ error: `Không tìm thấy loại vật phẩm với ID: ${it.itemTypeId}` });
       }
 
+      if (unit !== itemType.unit) {
+        return res.status(400).json({ error: `Vật phẩm thứ ${i + 1}: đơn vị phải là ${itemType.unit}.` });
+      }
       validatedItems.push({
         itemTypeId: it.itemTypeId,
         quantity: qty,
         unit,
+        pointsPerUnit: itemType.pointsPerUnit || 0,
         note: typeof it.note === 'string' ? it.note.trim() : '',
       });
     }
+    totalPoints = calculateDonationPoints(validatedItems);
 
     // Generate unique code
     let code = generateContributionCode();
@@ -149,7 +156,6 @@ async function createContribution(req, res, next) {
 
     // Save items & update Campaign progress (CampaignItem.currentQuantity)
     const savedItems = [];
-    let totalPoints = 20; // Base donation reward points
 
     for (const it of validatedItems) {
       // Find matching campaign target item
@@ -174,7 +180,6 @@ async function createContribution(req, res, next) {
       });
 
       savedItems.push(createdItem);
-      totalPoints += Math.min(Math.round(it.quantity * 2), 50); // Additional points proportional to quantity
     }
 
     // Save images if provided
@@ -192,7 +197,7 @@ async function createContribution(req, res, next) {
     }
 
     // Gamification: Award Points to Donor
-    const pointTx = await PointTransaction.create({
+    const pointTx = await createOrGetPointTransaction(`contribution:${contribution._id}`, {
       userId,
       points: totalPoints,
       type: 'DONATION',
@@ -200,7 +205,6 @@ async function createContribution(req, res, next) {
       description: `Cộng ${totalPoints} điểm cho lượt quyên góp ${contribution.code}`,
     });
 
-    // Gamification: Auto Check & Unlock Achievements
     const newBadges = await checkAndUnlockAchievements(userId);
 
     return res.status(201).json({
@@ -349,14 +353,16 @@ async function updateContributionStatus(req, res, next) {
 
     const previousStatus = contribution.status;
 
-    // Rollback quantities if newly REJECTED from ACCEPTED/COMPLETED
-    if (newStatus === 'REJECTED' && ['ACCEPTED', 'COMPLETED'].includes(previousStatus)) {
+    const wasCounted = ['ACCEPTED', 'COMPLETED'].includes(previousStatus);
+    const isCounted = ['ACCEPTED', 'COMPLETED'].includes(newStatus);
+    // Keep campaign progress consistent when accepting or reversing a receipt.
+    if (wasCounted !== isCounted) {
       const items = await ContributionItem.find({ contributionId: id });
       for (const item of items) {
         if (item.campaignItemId) {
           const cItem = await CampaignItem.findById(item.campaignItemId);
           if (cItem) {
-            cItem.currentQuantity = Math.max(0, (cItem.currentQuantity || 0) - item.quantity);
+            cItem.currentQuantity = Math.max(0, (cItem.currentQuantity || 0) + (isCounted ? item.quantity : -item.quantity));
             await cItem.save();
           }
         }
@@ -419,11 +425,12 @@ async function addContributionImages(req, res, next) {
   }
 }
 
+const { inventoryTransaction } = require('../services/inventory');
 module.exports = {
   lookupDonor,
-  createContribution,
+  createContribution: inventoryTransaction(createContribution, 'CONTRIBUTION'),
   getAllContributions,
   getContributionById,
-  updateContributionStatus,
+  updateContributionStatus: inventoryTransaction(updateContributionStatus, 'CONTRIBUTION'),
   addContributionImages,
 };

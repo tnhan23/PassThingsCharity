@@ -36,12 +36,10 @@ export function Screen({
   children,
   tab,
   scroll = true,
-  scrollEnabled = true,
 }: {
   children: ReactNode;
   tab: TabKey;
   scroll?: boolean;
-  scrollEnabled?: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const path = usePathname();
@@ -55,26 +53,25 @@ export function Screen({
   return (
     <View style={styles.frame}>
       <View style={styles.root}>
-      <Header />
-      {scroll ? (
-        <ScrollView
-          scrollEnabled={scrollEnabled}
-          contentInsetAdjustmentBehavior="automatic"
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{
-            paddingHorizontal: 16,
-            paddingTop: 12,
-            paddingBottom: insets.bottom + (desk ? 58 : 112),
-            gap: 14,
-          }}
-        >
-          {children}
-        </ScrollView>
-      ) : (
-        <View style={{ flex: 1, paddingBottom: insets.bottom + 88, overflow: "hidden" }}>{children}</View>
-      )}
-      <TabBar active={active} desk={desk} sheet={sheet} onCreate={onCreate} />
-      {desk ? null : <CreateSheet open={sheet} onClose={() => setSheet(false)} />}
+        <Header />
+        {scroll ? (
+          <ScrollView
+            contentInsetAdjustmentBehavior="automatic"
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{
+              paddingHorizontal: 16,
+              paddingTop: 12,
+              paddingBottom: insets.bottom + (desk ? 58 : 112),
+              gap: 14,
+            }}
+          >
+            {children}
+          </ScrollView>
+        ) : (
+          <View style={{ flex: 1, paddingBottom: insets.bottom + 88, overflow: "hidden" }}>{children}</View>
+        )}
+        <TabBar active={active} desk={desk} sheet={sheet} onCreate={onCreate} />
+        {desk ? null : <CreateSheet open={sheet} onClose={() => setSheet(false)} />}
       </View>
     </View>
   );
@@ -98,6 +95,7 @@ function pathTitle(path: string, t: (key: CopyKey) => string): string {
   }
   if (path.startsWith("/campaign")) return "Chiến dịch";
   if (path.startsWith("/station/")) return "Chi tiết trạm";
+  if (path.startsWith("/stations/map")) return "Bản đồ trạm";
   if (path.startsWith("/stations")) return t("nav.stations");
   if (path.startsWith("/contribution/")) return "Chi tiết phiếu";
   if (path.startsWith("/receive/new")) return "Lập phiếu tiếp nhận";
@@ -241,7 +239,7 @@ function Header() {
   );
 }
 
-type TabIcon = "explore" | "dashboard" | "volunteer-activism" | "warehouse" | "account-circle" | "schedule";
+type TabIcon = "explore" | "dashboard" | "volunteer-activism" | "warehouse" | "account-circle" | "schedule" | "map";
 
 function tabsFor(role: string | undefined, _signedIn: boolean, desk: boolean): { key: TabKey; label: CopyKey; icon: TabIcon; href: Href }[] {
   const profile: Href = "/profile/full";
@@ -257,14 +255,14 @@ function tabsFor(role: string | undefined, _signedIn: boolean, desk: boolean): {
   if (role === "ADMIN") {
     return [
       { key: "home", label: homeLabel, icon: "dashboard", href: "/" },
-      { key: "stations", label: "nav.stations", icon: "warehouse", href: "/stations/list" },
+      { key: "stations", label: "nav.map", icon: "map", href: "/stations/list" },
       { key: "profile", label: "nav.profile", icon: "account-circle", href: profile },
     ];
   }
   return [
     { key: "home", label: homeLabel, icon: "dashboard", href: "/" },
     { key: "give", label: "nav.shifts", icon: "schedule", href: "/shifts" },
-    { key: "stations", label: "nav.stations", icon: "warehouse", href: "/stations/list" },
+    { key: "stations", label: "nav.map", icon: "map", href: "/stations/list" },
     { key: "profile", label: "nav.profile", icon: "account-circle", href: profile },
   ];
 }
@@ -345,11 +343,11 @@ function TabItem({
 
 const actions: { label: string; href: Href; tone?: "ghost"; roles?: string[] }[] = [
   { label: "Lập phiếu tiếp nhận", href: "/receive/new", roles: ["STAFF", "STATION_MANAGER", "ADMIN"] },
-  { label: "Mang đồ tới trạm", href: "/stations/list" },
+  { label: "Mang đồ tới trạm", href: "/stations/map" },
   { label: "Đăng ký tổ chức", href: "/organization", tone: "ghost", roles: ["USER"] },
   { label: "Việc tình nguyện", href: "/jobs", tone: "ghost" },
   { label: "Ca trực", href: "/shifts", tone: "ghost", roles: ["STATION_MANAGER", "ORG_MANAGER", "STAFF"] },
-  { label: "Vận hành", href: "/desk", tone: "ghost" },
+  { label: "Vận hành", href: "/desk", tone: "ghost", roles: ["ADMIN", "ORG_MANAGER", "STATION_MANAGER", "STAFF"] },
 ];
 
 function MemberCard({ onClose }: { onClose: () => void }) {
@@ -396,7 +394,7 @@ function CreateSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
   const { canSwitch, setMode } = useShell();
   const visible = actions.filter((action) => {
     if (action.href === "/desk") return user?.role === "STAFF";
-    if (action.href === "/stations/list" || action.href === "/volunteer/tasks") {
+    if (action.href === "/stations/map" || action.href === "/volunteer/tasks") {
       return !user || user.role === "USER" || user.role === "VOLUNTEER";
     }
     if (action.roles) return Boolean(user?.role && action.roles.includes(user.role));
@@ -426,7 +424,7 @@ function CreateSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
           <>
             <Title>Tác vụ nhanh</Title>
             <Body muted>Tài khoản quản lý vẫn có thể tặng đồ tại trạm hoặc chuyển sang bảng điều hành.</Body>
-            <Button icon="warehouse" label="Mang đồ tới trạm" onPress={() => { onClose(); router.push("/stations/list"); }} />
+            <Button icon="map" label="Mang đồ tới trạm" onPress={() => { onClose(); router.push("/stations/map"); }} />
             <Button icon="volunteer-activism" label="Việc tình nguyện" tone="ghost" onPress={() => { onClose(); router.push("/volunteer/tasks"); }} />
             <Button icon="dashboard" label="Chế độ quản lý" tone="ghost" onPress={() => { onClose(); setMode("desk"); }} />
           </>

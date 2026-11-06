@@ -1,6 +1,8 @@
 const mongoose = require('mongoose')
 const organizationSchema = new mongoose.Schema(
   {
+    logoUrl: { type: String, trim: true, default: null },
+    imagePublicId: { type: String, default: null },
     name: {
       type: String,
       required: true,
@@ -34,6 +36,10 @@ const organizationSchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: '',
+    },
+    evidenceImageUrls: {
+      type: [String],
+      default: [],
     },
     submittedBy: {
       type: mongoose.Schema.Types.ObjectId,

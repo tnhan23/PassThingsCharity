@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import { attestationHeaders, resetAttestation } from "@/api/attest";
 import { apiBaseUrl } from "@/api/base";
 import { signatureHeaders } from "@/api/sign";
@@ -81,6 +82,13 @@ export async function uploadImages<T>(path: string, token: string, files: Upload
   }
   const body = new FormData();
   for (const file of files) {
+    if (Platform.OS === "web" && file.base64) {
+      const binary = atob(file.base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+      body.append(field, new Blob([bytes], { type: file.type }), file.name);
+      continue;
+    }
     const part = imagePart(file);
     if (part) {
       body.append(field, part as unknown as Blob);

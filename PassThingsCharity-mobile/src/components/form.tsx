@@ -3,7 +3,7 @@ import { Text, TextInput, View } from "react-native";
 import { ApiError } from "@/api/client";
 import { backend, resultText } from "@/api/backend";
 import { useSession } from "@/api/session";
-import { Body, Button, Card, Tap, Title } from "@/components/ui";
+import { Body, Button, Card, Title } from "@/components/ui";
 import { colors, fonts } from "@/theme";
 
 export function Field({
@@ -50,84 +50,6 @@ export function Field({
           color: colors.ink,
         }}
       />
-    </View>
-  );
-}
-
-export function NumberPicker({
-  label,
-  value,
-  minimum,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  minimum: number;
-  onChange: (value: string) => void;
-}) {
-  const parsedValue = Number(value);
-  const currentValue = Number.isInteger(parsedValue) && parsedValue >= minimum ? parsedValue : minimum;
-
-  return (
-    <View style={{ gap: 6 }}>
-      <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.muted }}>{label}</Text>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-        <Tap
-          accessibilityLabel={`Giảm ${label}`}
-          disabled={currentValue === minimum}
-          onPress={() => onChange(String(Math.max(minimum, currentValue - 1)))}
-          style={{
-            width: 48,
-            height: 48,
-            alignItems: "center",
-            justifyContent: "center",
-            borderRadius: 12,
-            borderWidth: 1,
-            borderColor: colors.hairline,
-            backgroundColor: colors.surface,
-          }}
-        >
-          <Text style={{ fontFamily: fonts.medium, fontSize: 24, color: colors.primary }}>−</Text>
-        </Tap>
-        <TextInput
-          value={value}
-          onChangeText={onChange}
-          onBlur={() => {
-            if (!Number.isInteger(Number(value)) || Number(value) < minimum) onChange(String(minimum));
-          }}
-          keyboardType="number-pad"
-          accessibilityLabel={label}
-          style={{
-            flex: 1,
-            minHeight: 48,
-            borderRadius: 12,
-            borderWidth: 1,
-            borderColor: colors.hairline,
-            backgroundColor: colors.surface,
-            paddingHorizontal: 12,
-            fontFamily: fonts.medium,
-            fontSize: 18,
-            color: colors.ink,
-            textAlign: "center",
-          }}
-        />
-        <Tap
-          accessibilityLabel={`Tăng ${label}`}
-          onPress={() => onChange(String(currentValue + 1))}
-          style={{
-            width: 48,
-            height: 48,
-            alignItems: "center",
-            justifyContent: "center",
-            borderRadius: 12,
-            borderWidth: 1,
-            borderColor: colors.hairline,
-            backgroundColor: colors.surface,
-          }}
-        >
-          <Text style={{ fontFamily: fonts.medium, fontSize: 24, color: colors.primary }}>+</Text>
-        </Tap>
-      </View>
     </View>
   );
 }

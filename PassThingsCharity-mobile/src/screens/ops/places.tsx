@@ -1,10 +1,45 @@
-import { useEffect, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Platform, ScrollView, View } from "react-native";
 import { backend } from "@/api/backend";
-import { ApiError } from "@/api/client";
 import { donorLabel } from "@/api/labels";
-import { Body, Button, Card, Pill, StatRow, Title } from "@/components/ui";
+import { ApiError } from "@/api/client";
+import { Body, Button, Card, Photo, Pill, StatRow, Title } from "@/components/ui";
+import { colors } from "@/theme";
 import { can, Fold, nextCampaignStatuses, Note, OpsGate, PickList, RoleNote, TextField, Units, useJob, useRole, useRows, type Row } from "@/screens/ops/kit";
+
+const AppleMaps = Platform.OS === "ios" ? (require("expo-maps") as typeof import("expo-maps")).AppleMaps : null;
+
+function StationPlaceMap({
+  latitude,
+  longitude,
+  onPick,
+}: {
+  latitude: string;
+  longitude: string;
+  onPick: (latitude: string, longitude: string) => void;
+}) {
+  const camera = useRef({ coordinates: { latitude: 10.7769, longitude: 106.7009 }, zoom: 13 }).current;
+  if (!AppleMaps) return null;
+  const lat = Number(latitude);
+  const lng = Number(longitude);
+  const picked = Number.isFinite(lat) && Number.isFinite(lng);
+  return (
+    <View style={{ height: 220, borderRadius: 14, overflow: "hidden" }}>
+      <AppleMaps.View
+        style={{ flex: 1, width: "100%" }}
+        cameraPosition={camera}
+        markers={picked ? [{ id: "new-station", title: "Vị trí trạm", coordinates: { latitude: lat, longitude: lng }, tintColor: colors.primary }] : []}
+        onMapClick={(event) => {
+          const nextLat = event.coordinates.latitude;
+          const nextLng = event.coordinates.longitude;
+          if (typeof nextLat !== "number" || typeof nextLng !== "number" || !Number.isFinite(nextLat) || !Number.isFinite(nextLng)) return;
+          onPick(nextLat.toFixed(6), nextLng.toFixed(6));
+        }}
+        colorScheme={AppleMaps.MapColorScheme.LIGHT}
+      />
+    </View>
+  );
+}
 
 function orgState(row: Row) {
   if (row.status === "REJECTED") return "Bị từ chối";
@@ -73,6 +108,16 @@ export function OrgScreen() {
             {row.operatingArea ? <Body muted>{row.operatingArea}</Body> : null}
             {row.idCardNumber ? <Body muted>{`CCCD ${row.idCardNumber}`}</Body> : null}
             {row.description ? <Body>{row.description}</Body> : null}
+            {row.evidenceImageUrls?.length ? (
+              <View style={{ gap: 8 }}>
+                <Body muted>{`Ảnh minh chứng (${row.evidenceImageUrls.length})`}</Body>
+                {row.evidenceImageUrls.map((url) => (
+                  <Photo key={url} uri={url} height={160} radius={14} />
+                ))}
+              </View>
+            ) : (
+              <Body muted>Chưa có ảnh minh chứng.</Body>
+            )}
             {row.rejectionReason ? <Body>{row.rejectionReason}</Body> : null}
             {orgBucket(row) === "PENDING" ? (
               <>
@@ -116,6 +161,8 @@ export function StationScreen() {
   const [orgId, setOrgId] = useState("");
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
+  const [latitude, setLatitude] = useState("");
+  const [longitude, setLongitude] = useState("");
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -227,11 +274,17 @@ export function StationScreen() {
           <PickList rows={orgs.rows} selected={orgId} onPick={setOrgId} detail={orgDetail} />
           <TextField label="Tên trạm" value={name} onChangeText={setName} />
           <TextField label="Địa chỉ" value={address} onChangeText={setAddress} />
+          {AppleMaps ? <Body muted>Chạm bản đồ để đặt vị trí trạm.</Body> : null}
+          {AppleMaps ? <StationPlaceMap latitude={latitude} longitude={longitude} onPick={(lat, lng) => { setLatitude(lat); setLongitude(lng); }} /> : null}
+          <TextField label="Vĩ độ" value={latitude} onChangeText={setLatitude} />
+          <TextField label="Kinh độ" value={longitude} onChangeText={setLongitude} />
           <Button
             label="Tạo trạm"
             onPress={() => void job.run((token) => backend.createStationForOrganization(token, orgId, {
               name: name.trim(),
               address: address.trim(),
+              latitude: latitude.trim(),
+              longitude: longitude.trim(),
             })).then((ok) => ok && stations.reload())}
           />
         </View>

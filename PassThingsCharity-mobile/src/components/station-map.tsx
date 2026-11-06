@@ -175,12 +175,14 @@ export function StationMap({
   rows,
   problem,
   onInteractionChange,
+  initialStationId = "",
 }: {
   rows: StationRow[] | null;
   problem: string;
   onInteractionChange: (interacting: boolean) => void;
+  initialStationId?: string;
 }) {
-  const [selectedId, setSelectedId] = useState("");
+  const [selectedId, setSelectedId] = useState(initialStationId);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locationBusy, setLocationBusy] = useState(false);
   const [locationStatus, setLocationStatus] = useState("");
@@ -194,18 +196,29 @@ export function StationMap({
     const coordinates = stationCoordinates(station);
     return coordinates ? [{ ...station, ...coordinates }] : [];
   }), [rows]);
+  const focusedStation = points.find((point) => point._id === initialStationId) ?? null;
   const nearestStation = useMemo(() => {
     if (!userLocation || points.length === 0) return null;
     return points.reduce((nearest, point) => (
       distanceBetween(userLocation, point) < distanceBetween(userLocation, nearest) ? point : nearest
     ));
   }, [points, userLocation]);
-  const html = useMemo(
-    () => stationMapHtml(points, userLocation, nearestStation?._id ?? null, mapCenter, centerRequest),
-    [points, userLocation, nearestStation, mapCenter, centerRequest],
+  const initialCenter = useMemo(
+    () => mapCenter ?? (focusedStation
+      ? { latitude: focusedStation.latitude, longitude: focusedStation.longitude }
+      : null),
+    [mapCenter, focusedStation],
   );
-  const mapRenderKey = `${nearestStation?._id ?? ""}:${userLocation?.latitude ?? ""}:${userLocation?.longitude ?? ""}:${centerRequest}`;
+  const html = useMemo(
+    () => stationMapHtml(points, userLocation, nearestStation?._id ?? null, initialCenter, centerRequest),
+    [points, userLocation, nearestStation, initialCenter, centerRequest],
+  );
+  const mapRenderKey = `${initialStationId}:${nearestStation?._id ?? ""}:${userLocation?.latitude ?? ""}:${userLocation?.longitude ?? ""}:${centerRequest}`;
   const selected = points.find((point) => point._id === selectedId) ?? nearestStation;
+
+  useEffect(() => {
+    setSelectedId(initialStationId);
+  }, [initialStationId]);
 
   useEffect(() => {
     let cancelled = false;

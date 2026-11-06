@@ -1,4 +1,34 @@
 module.exports = {
+  '/organizations/upload-evidence': {
+    post: {
+      tags: ['Organizations'],
+      summary: 'Upload 1–5 ảnh bằng chứng thành lập tổ chức lên Cloudinary (ADMIN, ORG_MANAGER, USER)',
+      requestBody: {
+        required: true,
+        content: {
+          'multipart/form-data': {
+            schema: {
+              type: 'object',
+              required: ['images'],
+              properties: {
+                images: {
+                  type: 'array',
+                  minItems: 1,
+                  maxItems: 5,
+                  items: { type: 'string', format: 'binary' },
+                  description: 'Đính kèm 1–5 ảnh JPEG, PNG hoặc WebP (tối đa 5MB/ảnh)',
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        201: { description: 'Trả về { images, imageUrls } chứa các URL Cloudinary' },
+        400: { description: 'File ảnh không hợp lệ hoặc thiếu field images' },
+      },
+    },
+  },
   '/organizations': {
     get: {
       tags: ['Organizations'],
@@ -38,13 +68,14 @@ module.exports = {
     patch: {
       tags: ['Organizations'],
       summary: 'Cập nhật thông tin tổ chức (ADMIN, ORG_MANAGER)',
+      description: 'Người tạo tổ chức (USER/ORG_MANAGER/STATION_MANAGER) hoặc ADMIN được sửa. Cập nhật bởi người không phải ADMIN sẽ bỏ xác minh và tạm ngừng các trạm thuộc tổ chức theo quy tắc hiện tại.',
       parameters: [
         { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
       ],
       requestBody: {
         content: {
           'application/json': {
-            schema: { $ref: '#/components/schemas/OrganizationRequest' },
+            schema: { $ref: '#/components/schemas/OrganizationUpdateRequest' },
           },
         },
       },
@@ -83,7 +114,7 @@ module.exports = {
                 latitude: { type: 'string', example: '10.776889', description: 'Vĩ độ (Latitude)' },
                 longitude: { type: 'string', example: '106.700806', description: 'Kinh độ (Longitude)' },
                 openingTime: { type: 'string', example: '08:00', description: 'Giờ mở cửa' },
-                closingTime: { type: 'string', example: '17:00', description: 'Giờ đóng cửa' },
+                closingTime: { type: 'string', example: '20:00', description: 'Giờ đóng cửa' },
               },
             },
           },

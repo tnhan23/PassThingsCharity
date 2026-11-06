@@ -5,6 +5,7 @@ const ItemType = require('../models/itemType');
 const Station = require('../models/station');
 const Organization = require('../models/organization');
 const mongoose = require('mongoose');
+const { getCampaignProgress, summarizeCampaignProgress } = require('../services/campaignProgress');
 
 const MIN_CAMPAIGN_DURATION_MS = 5 * 24 * 60 * 60 * 1000;
 const MAX_CAMPAIGN_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -31,6 +32,7 @@ function getHaversineDistanceKm(lat1, lon1, lat2, lon2) {
  */
 async function createCampaign(req, res, next) {
   try {
+    const imageFields = require('../utils/resourceImageFields')(req.body || {});
     const { title, description, startDate, endDate, organizationId } = req.body || {};
 
     if (typeof title !== 'string' || !title.trim()) {
@@ -68,6 +70,7 @@ async function createCampaign(req, res, next) {
     }
 
     const campaign = await Campaign.create({
+      ...imageFields,
       title: title.trim(),
       description: typeof description === 'string' ? description.trim() : '',
       startDate: start,
@@ -130,7 +133,17 @@ async function getAllCampaigns(req, res, next) {
       .populate('createdBy', 'fullName username')
       .sort({ createdAt: -1 });
 
-    return res.status(200).json({ campaigns });
+    const progressItems = await getCampaignProgress(campaigns.map(campaign => campaign._id));
+    const byCampaign = new Map();
+    for (const item of progressItems) {
+      const key = String(item.campaignId);
+      if (!byCampaign.has(key)) byCampaign.set(key, []);
+      byCampaign.get(key).push(item);
+    }
+    return res.status(200).json({ campaigns: campaigns.map(campaign => {
+      const items = byCampaign.get(String(campaign._id)) || [];
+      return { ...campaign.toObject(), items, progress: summarizeCampaignProgress(items) };
+    }) });
   } catch (error) {
     return next(error);
   }
@@ -148,6 +161,7 @@ async function getCampaignById(req, res, next) {
 
     const campaign = await Campaign.findById(id)
       .populate('organizationId', 'name code address phone email')
+      .populate('results.handovers.items.itemTypeId', 'name unit')
       .populate('createdBy', 'fullName username');
 
     if (!campaign) {
@@ -158,11 +172,9 @@ async function getCampaignById(req, res, next) {
     }
 
     // Fetch associated targeted items
-    const items = await CampaignItem.find({ campaignId: id }).populate({
-      path: 'itemTypeId',
-      select: 'name unit categoryId',
-      populate: { path: 'categoryId', select: 'name' },
-    });
+    const items = await getCampaignProgress([id]);
+    const campaignDetails = campaign.toObject();
+    if (campaignDetails.results) campaignDetails.results.itemsSummary = require('../services/campaignResults').summarize(items, campaignDetails.results.handovers);
 
     // Fetch associated stations
     const stations = await CampaignStation.find({ campaignId: id }).populate({
@@ -171,9 +183,11 @@ async function getCampaignById(req, res, next) {
     });
 
     return res.status(200).json({
-      campaign,
+      campaign: campaignDetails,
       items,
-      stations: stations.map((s) => s.stationId),
+      progress: summarizeCampaignProgress(items),
+      totalStations: stations.filter(s => s.stationId?.isActive).length,
+      stations: stations.map(s => s.stationId).filter(station => station?.isActive),
     });
   } catch (error) {
     return next(error);
@@ -186,6 +200,18 @@ async function getCampaignById(req, res, next) {
 async function updateCampaign(req, res, next) {
   try {
     const { id } = req.params;
+    const body = req.body;
+    const allowed = ['title', 'description', 'startDate', 'endDate', 'imageUrl'];
+    if (!body || typeof body !== 'object' || Array.isArray(body) || !Object.keys(body).length) {
+      return res.status(400).json({ error: 'Cần gửi ít nhất một trường thông tin chiến dịch để cập nhật.' });
+    }
+    const unsupported = Object.keys(body).filter(key => !allowed.includes(key));
+    if (unsupported.length) {
+      return res.status(400).json({
+        error: `Trường không hỗ trợ: ${unsupported.join(', ')}. Gắn trạm dùng POST /campaigns/${id}/stations; cập nhật kết quả dùng PATCH /campaigns/${id}/results; đổi trạng thái dùng PATCH /campaigns/${id}/status.`,
+        allowedFields: allowed,
+      });
+    }
     const { title, description, startDate, endDate } = req.body || {};
 
     if (!mongoose.isValidObjectId(id)) {
@@ -200,6 +226,7 @@ async function updateCampaign(req, res, next) {
     if (title !== undefined && (typeof title !== 'string' || !title.trim())) {
       return res.status(400).json({ error: 'Campaign title must be a non-empty string.' });
     }
+    await require('../utils/resourceImageAccess').applyImageFromForm(campaign, req.body || {}, 'campaigns', req.user);
     if (title !== undefined) {
       campaign.title = title.trim();
     }
@@ -293,6 +320,12 @@ async function updateCampaignStatus(req, res, next) {
       });
     }
 
+    if (['PUBLISHED', 'ACTIVE'].includes(formattedStatus)) {
+      const links = await CampaignStation.find({ campaignId: id }).populate('stationId', 'isActive');
+      if (!links.some(link => link.stationId?.isActive)) {
+        return res.status(409).json({ error: 'Cần gắn ít nhất một trạm tiếp nhận đang hoạt động trước khi công bố hoặc kích hoạt chiến dịch.' });
+      }
+    }
     campaign.status = formattedStatus;
     await campaign.save();
 
@@ -425,7 +458,7 @@ async function assignStationToCampaign(req, res, next) {
       { campaignId: id, stationId },
       { assignedAt: new Date() },
       { upsert: true, returnDocument: 'after' }
-    );
+    ).populate('stationId', 'name address latitude longitude openingTime closingTime isActive');
 
     return res.status(200).json({
       message: 'Station assigned to campaign successfully.',

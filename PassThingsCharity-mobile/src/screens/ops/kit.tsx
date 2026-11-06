@@ -28,11 +28,13 @@ export type Row = {
   description?: string;
   operatingArea?: string;
   idCardNumber?: string;
+  evidenceImageUrls?: string[];
   rejectionReason?: string;
   recipientName?: string;
   recruitmentStatus?: string;
+  slots?: { total?: number; approved?: number; pending?: number; remaining?: number; isFull?: boolean };
   campaignId?: { title?: string; _id?: string } | string;
-  stationId?: { name?: string } | string;
+  stationId?: { _id?: string; name?: string; address?: string } | string;
   fromStationId?: { name?: string } | string;
   toStationId?: { name?: string } | string;
 };
@@ -62,11 +64,11 @@ export const deskAccess = {
   stations: ["ADMIN", "ORG_MANAGER", "STATION_MANAGER"],
   catalog: ["ADMIN", "ORG_MANAGER", "STATION_MANAGER"],
   campaigns: ["ADMIN", "ORG_MANAGER", "STATION_MANAGER"],
-  intake: ["STATION_MANAGER", "STAFF"],
+  intake: ["ADMIN", "ORG_MANAGER", "STATION_MANAGER", "STAFF"],
   users: ["ADMIN"],
   alerts: ["ADMIN"],
   transfers: ["ADMIN", "STATION_MANAGER", "STAFF"],
-  relief: ["ADMIN", "STATION_MANAGER", "STAFF"],
+  relief: ["ADMIN", "ORG_MANAGER", "STATION_MANAGER", "STAFF"],
   crew: ["ADMIN", "STATION_MANAGER", "STAFF"],
   rewards: ["ADMIN", "ORG_MANAGER", "STATION_MANAGER", "STAFF"],
   stock: ["ADMIN", "STATION_MANAGER", "STAFF"],
@@ -88,7 +90,7 @@ export function RoleNote() {
   return null;
 }
 
-export function OpsGate({ children, allowNonOperator = false }: { children: ReactNode; allowNonOperator?: boolean }) {
+export function OpsGate({ children }: { children: ReactNode }) {
   const { token, user } = useSession();
   if (!token) {
     return (
@@ -99,7 +101,7 @@ export function OpsGate({ children, allowNonOperator = false }: { children: Reac
       </Screen>
     );
   }
-  if (!allowNonOperator && !isOperator(user?.role)) {
+  if (!isOperator(user?.role)) {
     return (
       <Screen tab="profile">
         <Title>Tài khoản này không vận hành</Title>
@@ -300,6 +302,18 @@ export function Units({ value, onChange }: { value: string; onChange: (unit: str
   );
 }
 
-export function TextField({ label, value, onChangeText, secure }: { label: string; value: string; onChangeText: (value: string) => void; secure?: boolean }) {
-  return <Field label={label} value={value} onChangeText={onChangeText} secure={secure} />;
+export function TextField({
+  label,
+  value,
+  onChangeText,
+  secure,
+  keyboardType,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (value: string) => void;
+  secure?: boolean;
+  keyboardType?: "default" | "email-address" | "phone-pad" | "number-pad" | "decimal-pad";
+}) {
+  return <Field label={label} value={value} onChangeText={onChangeText} secure={secure} keyboardType={keyboardType} />;
 }
