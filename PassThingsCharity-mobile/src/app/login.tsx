@@ -22,15 +22,26 @@ export default function LoginPage() {
     if (busy) return;
     setError("");
     setBusy(true);
+
+    if (creating) {
+      console.log("[LoginPage] Register attempt:", { email, username, fullname, phone });
+    } else {
+      console.log("[LoginPage] Login attempt:", { username: username.trim() });
+    }
+
     try {
       if (creating) {
         await register({ email, username, password, fullname, phone });
+        console.log("[LoginPage] Register succeeded");
       } else {
         await login(username.trim(), password);
+        console.log("[LoginPage] Login succeeded");
       }
       router.replace("/");
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "Không đăng nhập được.");
+      const message = caught instanceof ApiError ? caught.message : "Không đăng nhập được.";
+      console.warn("[LoginPage] Auth failed:", message, caught);
+      setError(message);
     } finally {
       setBusy(false);
     }
