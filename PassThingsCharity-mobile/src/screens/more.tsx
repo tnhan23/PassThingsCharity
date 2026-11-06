@@ -5,12 +5,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Location from "expo-location";
 import { backend } from "@/api/backend";
 import { ApiError } from "@/api/client";
+import { useGuest } from "@/api/guest";
 import { isOperator, useSession } from "@/api/session";
 import { campaignPhase, donorLabel, formatDay } from "@/api/labels";
 import type { CampaignSummary, StationRow } from "@/api/types";
 import { Screen } from "@/components/chrome";
 import { PasswordReset } from "@/components/form";
-import { Body, Button, Card, Eyebrow, Icon, Pill, Tap, Title } from "@/components/ui";
+import { Badge, Body, Button, Card, Eyebrow, Icon, Pill, StatRow, Tap, Title } from "@/components/ui";
 import { colors, fonts } from "@/theme";
 
 const AppleMaps = Platform.OS === "ios" ? (require("expo-maps") as typeof import("expo-maps")).AppleMaps : null;
@@ -99,12 +100,28 @@ function StationCards({
 
   return (
     <View style={{ gap: 14 }}>
+      <StatRow
+        items={[
+          { label: "Trạm đang mở", value: rows.filter((r) => r.isActive).length, unit: "trạm", tone: "primary" },
+          {
+            label: "Có bản đồ",
+            value: rows.filter((r) => Number.isFinite(Number(r.latitude)) && Number.isFinite(Number(r.longitude))).length,
+            unit: "trạm",
+            tone: "coral",
+          },
+        ]}
+      />
       {rows.map((station) => {
         const km = stationDistance(here, station);
         const latitude = Number(station.latitude);
         const longitude = Number(station.longitude);
         const canMap = Number.isFinite(latitude) && Number.isFinite(longitude);
         const open = openId === station._id;
+        const distLabel = station.formattedDistance
+          ? `Cách ${station.formattedDistance}`
+          : km !== null
+            ? `Cách ${km.toFixed(1)} km`
+            : "";
         return (
           <Card key={station._id}>
             <Tap
@@ -114,13 +131,24 @@ function StationCards({
               }}
               accessibilityLabel={`Xem ${station.name} trên bản đồ`}
             >
-              <View style={{ gap: 4 }}>
-                <Eyebrow>{station.isActive ? "Đang mở" : "Chưa kích hoạt"}</Eyebrow>
-                <Text style={{ fontFamily: fonts.bold, fontSize: 17 }}>{station.name}</Text>
+              <View style={{ gap: 6 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                  <Badge label={station.isActive ? "Đang mở" : "Chưa kích hoạt"} tone={station.isActive ? "primary" : "neutral"} />
+                  {distLabel ? <Badge label={distLabel} tone="coral" /> : null}
+                </View>
+                <Text style={{ fontFamily: fonts.bold, fontSize: 17, color: colors.ink }}>{station.name}</Text>
                 <Body muted>{station.address}</Body>
-                {station.openingTime || station.closingTime ? <Body muted>{`${station.openingTime || "?"} đến ${station.closingTime || "?"}`}</Body> : null}
-                {station.formattedDistance ? <Body muted>{`Cách bạn ${station.formattedDistance}.`}</Body> : km !== null ? <Body muted>{`Cách bạn ${km.toFixed(1)} km.`}</Body> : <Body muted>Đăng nhập và bật vị trí để xem khoảng cách từ máy chủ.</Body>}
-                <Body muted>{canMap ? (open ? "Bấm lại để thu bản đồ." : "Bấm để mở bản đồ của trạm này.") : "Trạm chưa có tọa độ nên chưa mở được bản đồ."}</Body>
+                {station.openingTime || station.closingTime ? (
+                  <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.muted, fontVariant: ["tabular-nums"] }}>
+                    {`Giờ mở: ${station.openingTime || "?"} – ${station.closingTime || "?"}`}
+                  </Text>
+                ) : null}
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingTop: 4 }}>
+                  <Text style={{ fontFamily: fonts.semibold, fontSize: 13, color: canMap ? colors.primary : colors.muted }}>
+                    {canMap ? (open ? "Bấm để thu bản đồ" : "Bấm để xem bản đồ trạm") : "Chưa có tọa độ bản đồ"}
+                  </Text>
+                  {canMap ? <Icon name={open ? "expand-less" : "expand-more"} size={20} color={colors.primary} /> : null}
+                </View>
               </View>
             </Tap>
             <Button label="Xem chi tiết" tone="ghost" onPress={() => router.push(`/station/${station._id}`)} />
@@ -280,9 +308,9 @@ function MapAction({
       accessibilityLabel={label}
       onPress={onPress}
       style={{
-        width: 36,
-        height: 36,
-        borderRadius: 18,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
         alignItems: "center",
         justifyContent: "center",
         backgroundColor: filled ? colors.primary : colors.primarySoft,
@@ -504,7 +532,7 @@ function PlaceMap({ here, focusId, rows }: { here: PlaceFix | null; focusId: str
       }}
     >
       <AppleMaps.View
-        ref={mapRef}
+        ref={mapRef as never}
         style={{ flex: 1, width: "100%" }}
         cameraPosition={{
           coordinates: { latitude: anchor.current.latitude, longitude: anchor.current.longitude },
@@ -912,7 +940,6 @@ export function OtpScreen({ state }: { state: "enter" | "resend" | "error" | "lo
       <PasswordReset />
       {state === "error" ? <Body>Mã sai hoặc đã hết hạn. Gửi lại email để lấy mã mới.</Body> : null}
       {state === "resend" ? <Body muted>Bấm Gửi mã ở form trên. Máy chủ không đếm 42 giây.</Body> : null}
-      <Button label="Mã bị khóa" tone="ghost" onPress={() => router.push("/otp/locked")} />
     </Screen>
   );
 }
@@ -1099,6 +1126,7 @@ export function FeedbackScreen({ mode = "form" }: { mode?: "form" | "sent" | "in
 
 export function SettingsScreen({ mode = "ready" }: { mode?: "ready" | "off" | "save-error" }) {
   const { logout } = useSession();
+  const { leaveGuest } = useGuest();
   const [confirming, setConfirming] = useState(false);
   return (
     <Screen tab="profile">
@@ -1114,6 +1142,7 @@ export function SettingsScreen({ mode = "ready" }: { mode?: "ready" | "off" | "s
             label="Đăng xuất"
             tone="danger"
             onPress={() => {
+              leaveGuest();
               void logout().then(() => router.replace("/login"));
             }}
           />

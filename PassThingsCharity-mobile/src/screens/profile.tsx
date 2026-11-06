@@ -1,19 +1,30 @@
-import { Redirect, router } from "expo-router";
+import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Text } from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
 import { backend } from "@/api/backend";
 import { ApiError } from "@/api/client";
+import { useGuest } from "@/api/guest";
+import { useLocale } from "@/api/locale";
 import { isOperator, useSession } from "@/api/session";
 import { useShell } from "@/api/shell";
 import { Screen } from "@/components/chrome";
-import { Body, Button, Card, Eyebrow, Photo, Title } from "@/components/ui";
+import { Badge, Body, Button, Card, Eyebrow, Icon, Photo, StatRow, Title } from "@/components/ui";
 import { MyDonations } from "@/screens/receive";
 import { colors, fonts } from "@/theme";
 
 export function ProfileScreen({ state }: { state: "full" | "low" | "empty" | "loading" | "error" }) {
   const { user } = useSession();
+  const { t } = useLocale();
   const { desk } = useShell();
-  if (!user && state === "full") return <Redirect href="/login" />;
+  if (!user && state === "full") {
+    return (
+      <Screen tab="profile">
+        <Title>{t("guest.title")}</Title>
+        <Body>{t("guest.body")}</Body>
+        <Button label={t("welcome.login")} onPress={() => router.push("/login")} />
+      </Screen>
+    );
+  }
   if (state === "loading") {
     return (
       <Screen tab="profile">
@@ -71,15 +82,21 @@ export function ProfileScreen({ state }: { state: "full" | "low" | "empty" | "lo
 
 function AccountCard() {
   const { user, token, logout } = useSession();
+  const { leaveGuest } = useGuest();
+  const { t } = useLocale();
   const { desk, canSwitch, setMode } = useShell();
   const [points, setPoints] = useState<number | null>(null);
-  const [lines, setLines] = useState("");
+  const [transactions, setTransactions] = useState<{ _id: string; points: number; type: string; description?: string }[]>([]);
+  const [badgeTitles, setBadgeTitles] = useState<string[]>([]);
+  const [paperTitles, setPaperTitles] = useState<string[]>([]);
   const [problem, setProblem] = useState("");
 
   useEffect(() => {
     if (!token) {
       setPoints(null);
-      setLines("");
+      setTransactions([]);
+      setBadgeTitles([]);
+      setPaperTitles([]);
       return;
     }
     let cancelled = false;
@@ -87,13 +104,13 @@ function AccountCard() {
       .then(([pointData, badges, papers]) => {
         if (cancelled) return;
         setPoints(pointData.totalPoints);
-        const history = pointData.transactions.slice(0, 5).map((row) => `${row.points} điểm ${row.type}`).join(". ");
-        const badgeText = badges.unlockedAchievements
-          .map((row) => (typeof row.achievementId === "object" ? row.achievementId?.title : ""))
-          .filter((title): title is string => Boolean(title))
-          .join(", ");
-        const paperText = papers.certificates.map((row) => row.title ?? "Chứng nhận").join(", ");
-        setLines([history && `Giao dịch: ${history}`, badgeText && `Thành tích: ${badgeText}`, paperText && `Chứng nhận: ${paperText}`].filter(Boolean).join("\n"));
+        setTransactions(pointData.transactions.slice(0, 5));
+        setBadgeTitles(
+          badges.unlockedAchievements
+            .map((row) => (typeof row.achievementId === "object" ? row.achievementId?.title : ""))
+            .filter((title): title is string => Boolean(title)),
+        );
+        setPaperTitles(papers.certificates.map((row) => row.title ?? "Chứng nhận"));
       })
       .catch((caught) => {
         if (!cancelled) setProblem(caught instanceof ApiError ? caught.message : "Không tải được điểm.");
@@ -109,27 +126,89 @@ function AccountCard() {
 
   return (
     <Card>
-      <Eyebrow>Tài khoản máy chủ</Eyebrow>
-      {user.avatarUrl ? <Photo uri={user.avatarUrl} height={96} width={96} radius={48} /> : <Body muted>Chưa có ảnh tài khoản.</Body>}
-      <Title>{user.username}</Title>
-      <Body muted>{user.phone}</Body>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+        {user.avatarUrl ? (
+          <Photo uri={user.avatarUrl} height={72} width={72} radius={36} />
+        ) : (
+          <View
+            style={{
+              width: 72,
+              height: 72,
+              borderRadius: 36,
+              backgroundColor: colors.primarySoft,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Icon name="person" size={32} color={colors.primary} />
+          </View>
+        )}
+        <View style={{ flex: 1, gap: 4 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <Eyebrow>Tài khoản máy chủ</Eyebrow>
+            {user.role ? <Badge label={user.role} tone="primary" /> : null}
+          </View>
+          <Title>{user.username}</Title>
+          <Text style={{ fontFamily: fonts.medium, fontSize: 14, color: colors.muted, fontVariant: ["tabular-nums"] }}>
+            {user.phone}
+          </Text>
+        </View>
+      </View>
       {desk ? null : (
-        <Text style={{ fontFamily: fonts.bold, fontSize: 28, color: colors.primary }}>
-          {points === null ? "…" : `${points} điểm`}
-        </Text>
+        <StatRow
+          items={[
+            { label: "Điểm tích lũy", value: points === null ? "…" : points, unit: "điểm", tone: "primary" },
+            { label: "Thành tích", value: badgeTitles.length, unit: "mốc", tone: "coral" },
+            { label: "Chứng nhận", value: paperTitles.length, unit: "giấy", tone: "ink" },
+          ]}
+        />
       )}
       {desk ? null : problem ? <Body>{problem}</Body> : null}
-      {desk ? null : lines ? <Body muted>{lines}</Body> : null}
+      {!desk && (badgeTitles.length > 0 || paperTitles.length > 0) ? (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+          {badgeTitles.map((title, index) => (
+            <Badge key={`badge-${title}-${index}`} label={`★ ${title}`} tone="coral" />
+          ))}
+          {paperTitles.map((title, index) => (
+            <Badge key={`paper-${title}-${index}`} label={`✓ ${title}`} tone="primary" />
+          ))}
+        </View>
+      ) : null}
+      {!desk && transactions.length > 0 ? (
+        <View style={{ gap: 6, paddingTop: 6, borderTopWidth: 1, borderTopColor: colors.hairline }}>
+          <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: colors.ink }}>Biến động điểm gần đây</Text>
+          {transactions.map((row) => (
+            <View
+              key={row._id}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                paddingVertical: 4,
+              }}
+            >
+              <Text style={{ flex: 1, fontFamily: fonts.regular, fontSize: 13, color: colors.muted }}>
+                {row.description || row.type}
+              </Text>
+              <Badge
+                label={`${row.points >= 0 ? "+" : ""}${row.points} điểm`}
+                tone={row.points >= 0 ? "primary" : "danger"}
+              />
+            </View>
+          ))}
+        </View>
+      ) : null}
       {user.role === "USER" ? <Button label="Đăng ký tổ chức" onPress={() => router.push("/organization")} /> : null}
       {canSwitch && desk ? <Button label="Đóng góp như người dùng" onPress={() => setMode("member")} /> : null}
       {canSwitch && !desk ? <Button label="Chế độ quản lý" onPress={() => setMode("desk")} /> : null}
-      <Button label="Sửa tài khoản" tone="ghost" onPress={() => router.push("/account")} />
+      <Button label={t("account.edit")} tone="ghost" onPress={() => router.push("/account")} />
       {isOperator(user.role) && !canSwitch && !desk ? <Button label="Về việc" tone="ghost" onPress={() => router.push("/")} /> : null}
       <Button
-        label="Đăng xuất"
+        label={t("account.logout")}
         tone="ghost"
         onPress={() => {
-          void logout();
+          leaveGuest();
+          void logout().then(() => router.replace("/login"));
         }}
       />
     </Card>

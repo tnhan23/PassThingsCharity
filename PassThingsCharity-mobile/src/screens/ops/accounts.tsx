@@ -28,9 +28,6 @@ export function AccountsScreen() {
   const [picked, setPicked] = useState("");
   const [bucket, setBucket] = useState<"ALL" | "active" | "banned">("ALL");
   const shown = (people.rows ?? []).filter((row) => bucket === "ALL" || row.status === bucket);
-  const chosen = shown.find((row) => row._id === picked);
-  const mine = String(chosen?._id || "") === String(user?.id || "");
-  const adminRow = chosen?.role === "ADMIN";
 
   return (
     <OpsGate>
@@ -47,41 +44,43 @@ export function AccountsScreen() {
         <View style={styles.list}>
           {shown.map((row, index) => {
             const selected = row._id === picked;
+            const self = String(row._id) === String(user?.id || "");
+            const locked = row.role === "ADMIN";
             return (
-              <Tap
-                key={row._id}
-                onPress={() => setPicked(row._id)}
-                accessibilityLabel={row.fullName || row.username || "Tài khoản"}
-                style={[styles.row, index > 0 ? styles.rowLine : null, selected ? styles.rowOn : null]}
-              >
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={styles.name}>{row.fullName || row.username || "Chưa có tên"}</Text>
-                  <Text style={styles.meta}>{row.username || "Chưa có tên đăng nhập"}</Text>
-                  <Text style={styles.meta}>{`${roleText[row.role || ""] || "Chưa rõ vai"}  ${row.phone || "Chưa có số"}`}</Text>
-                </View>
-                <Text style={[styles.state, row.status === "banned" ? { color: colors.error } : null]}>{accountState(row.status)}</Text>
-              </Tap>
+              <View key={row._id} style={index > 0 ? styles.rowLine : null}>
+                <Tap
+                  onPress={() => setPicked(selected ? "" : row._id)}
+                  accessibilityLabel={row.fullName || row.username || "Tài khoản"}
+                  style={[styles.row, selected ? styles.rowOn : null]}
+                >
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={styles.name}>{row.fullName || row.username || "Chưa có tên"}</Text>
+                    <Text style={styles.meta}>{row.username || "Chưa có tên đăng nhập"}</Text>
+                    <Text style={styles.meta}>{`${roleText[row.role || ""] || "Chưa rõ vai"}  ${row.phone || "Chưa có số"}`}</Text>
+                  </View>
+                  <Text style={[styles.state, row.status === "banned" ? { color: colors.error } : null]}>{accountState(row.status)}</Text>
+                </Tap>
+                {selected ? (
+                  <View style={{ gap: 8, paddingHorizontal: 14, paddingBottom: 14 }}>
+                    {self || locked ? <Body muted>Tài khoản quản trị và tài khoản đang đăng nhập không khóa tại đây.</Body> : null}
+                    {!self && !locked && row.status !== "banned" ? (
+                      <Button
+                        label="Khóa vĩnh viễn"
+                        tone="danger"
+                        onPress={() => void job.run((token) => backend.setUserStatus(token, row._id, "banned")).then((ok) => ok && people.reload())}
+                      />
+                    ) : null}
+                    {!self && !locked && row.status === "banned" ? (
+                      <Button
+                        label="Mở khóa"
+                        onPress={() => void job.run((token) => backend.setUserStatus(token, row._id, "active")).then((ok) => ok && people.reload())}
+                      />
+                    ) : null}
+                  </View>
+                ) : null}
+              </View>
             );
           })}
-        </View>
-      ) : null}
-      {chosen ? (
-        <View style={{ gap: 8 }}>
-          <Body>{accountState(chosen.status)}</Body>
-          {mine || adminRow ? <Body muted>Tài khoản quản trị và tài khoản đang đăng nhập không khóa tại đây.</Body> : null}
-          {!mine && !adminRow && chosen.status !== "banned" ? (
-            <Button
-              label="Khóa vĩnh viễn"
-              tone="danger"
-              onPress={() => void job.run((token) => backend.setUserStatus(token, chosen._id, "banned")).then((ok) => ok && people.reload())}
-            />
-          ) : null}
-          {!mine && !adminRow && chosen.status === "banned" ? (
-            <Button
-              label="Mở khóa"
-              onPress={() => void job.run((token) => backend.setUserStatus(token, chosen._id, "active")).then((ok) => ok && people.reload())}
-            />
-          ) : null}
         </View>
       ) : null}
     </OpsGate>
