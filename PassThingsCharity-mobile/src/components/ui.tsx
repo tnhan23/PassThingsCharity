@@ -24,12 +24,14 @@ export function Tap({
   style,
   disabled,
   accessibilityLabel,
+  hitSlop = 6,
 }: {
   children: ReactNode;
   onPress?: () => void;
   style?: StyleProp<ViewStyle>;
   disabled?: boolean;
   accessibilityLabel?: string;
+  hitSlop?: number;
 }) {
   const depth = useSharedValue(0);
   const motion = useAnimatedStyle(() => ({
@@ -41,6 +43,7 @@ export function Tap({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       disabled={disabled}
+      hitSlop={hitSlop}
       onPressIn={() => {
         if (!disabled) depth.value = withTiming(1, pressIn);
       }}
@@ -156,8 +159,61 @@ export function Title({ children }: { children: string }) {
   return <Text style={styles.title}>{children}</Text>;
 }
 
-export function Body({ children, muted }: { children: string; muted?: boolean }) {
-  return <Text style={[styles.body, muted ? { color: colors.muted } : null]}>{children}</Text>;
+export function Body({ children, muted, numberOfLines }: { children: string; muted?: boolean; numberOfLines?: number }) {
+  return (
+    <Text numberOfLines={numberOfLines} style={[styles.body, muted ? { color: colors.muted } : null]}>
+      {children}
+    </Text>
+  );
+}
+
+export type BadgeTone = "primary" | "coral" | "warning" | "danger" | "neutral";
+
+export function Badge({
+  label,
+  tone = "primary",
+  icon,
+}: {
+  label: string;
+  tone?: BadgeTone;
+  icon?: IconName;
+}) {
+  const palette = {
+    primary: { bg: colors.primarySoft, fg: colors.primary },
+    coral: { bg: colors.coralSoft, fg: colors.secondary },
+    warning: { bg: colors.warningSoft, fg: colors.warning },
+    danger: { bg: colors.errorSoft, fg: colors.error },
+    neutral: { bg: colors.surfaceContainer, fg: colors.muted },
+  }[tone];
+  return (
+    <View style={[styles.badge, { backgroundColor: palette.bg }]}>
+      {icon ? <Icon name={icon} size={13} color={palette.fg} /> : null}
+      <Text style={[styles.badgeText, { color: palette.fg }]}>{label}</Text>
+    </View>
+  );
+}
+
+export function StatRow({
+  items,
+}: {
+  items: { label: string; value: string | number; unit?: string; tone?: "primary" | "coral" | "ink" }[];
+}) {
+  return (
+    <View style={styles.statRow}>
+      {items.map((item, index) => {
+        const fg = item.tone === "primary" ? colors.primary : item.tone === "coral" ? colors.secondary : colors.ink;
+        return (
+          <View key={`${item.label}-${index}`} style={[styles.statCell, index > 0 ? styles.statDivider : null]}>
+            <Text style={[styles.statValue, { color: fg }]} numberOfLines={1}>
+              {typeof item.value === "number" ? item.value.toLocaleString("vi-VN") : item.value}
+              {item.unit ? <Text style={styles.statUnit}> {item.unit}</Text> : null}
+            </Text>
+            <Text style={styles.statLabel} numberOfLines={1}>{item.label}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
 }
 
 export function Meter({
@@ -172,6 +228,8 @@ export function Meter({
   unit: string;
 }) {
   const ratio = Math.max(0, Math.min(1, max > 0 ? value / max : 0));
+  const pct = Math.round(ratio * 100);
+  const done = max > 0 && value >= max;
   const width = useSharedValue(ratio);
   useEffect(() => {
     width.value = withTiming(ratio, { duration: 240, easing: Easing.out(Easing.cubic) });
@@ -184,10 +242,14 @@ export function Meter({
           {value.toLocaleString("vi-VN")}
           <Text style={styles.meterMax}> / {max.toLocaleString("vi-VN")} {unit}</Text>
         </Text>
-        <Text style={styles.meterPct}>{Math.round(ratio * 100)}%</Text>
+        <View style={[styles.meterPctBadge, done ? { backgroundColor: colors.primary } : null]}>
+          <Text style={[styles.meterPct, done ? { color: colors.onPrimary } : null]}>
+            {done ? `Đạt ${pct}%` : `${pct}%`}
+          </Text>
+        </View>
       </View>
       <View style={styles.track}>
-        <Animated.View style={[styles.fill, fill]} />
+        <Animated.View style={[styles.fill, done ? { backgroundColor: colors.primary } : null, fill]} />
       </View>
       <Text style={styles.meterLabel}>{label}</Text>
     </View>
@@ -222,7 +284,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: 12,
+    minHeight: 38,
+    paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 999,
     borderCurve: "continuous",
@@ -230,6 +293,60 @@ const styles = StyleSheet.create({
   pillOn: { backgroundColor: colors.primary },
   pillOff: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.hairline },
   pillText: { fontFamily: fonts.semibold, fontSize: 13 },
+  badge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderCurve: "continuous",
+  },
+  badgeText: {
+    fontFamily: fonts.semibold,
+    fontSize: 12,
+    lineHeight: 16,
+    fontVariant: ["tabular-nums"],
+  },
+  statRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.surfaceLow,
+    borderRadius: 14,
+    borderCurve: "continuous",
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+  },
+  statCell: {
+    flex: 1,
+    alignItems: "center",
+    paddingHorizontal: 6,
+    gap: 2,
+  },
+  statDivider: {
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: colors.line,
+  },
+  statValue: {
+    fontFamily: fonts.bold,
+    fontSize: 18,
+    lineHeight: 22,
+    fontVariant: ["tabular-nums"],
+  },
+  statUnit: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.muted,
+  },
+  statLabel: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    lineHeight: 15,
+    color: colors.muted,
+  },
   button: {
     minHeight: 48,
     borderRadius: 14,
@@ -260,13 +377,19 @@ const styles = StyleSheet.create({
   },
   title: { fontFamily: fonts.bold, fontSize: 22, lineHeight: 28, color: colors.ink },
   body: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 21, color: colors.ink },
-  meterRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
+  meterRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   meterValue: { fontFamily: fonts.bold, fontSize: 18, color: colors.ink, fontVariant: ["tabular-nums"] },
-  meterMax: { fontFamily: fonts.medium, fontSize: 13, color: colors.muted },
-  meterPct: { fontFamily: fonts.semibold, fontSize: 13, color: colors.primary, fontVariant: ["tabular-nums"] },
-  meterLabel: { fontFamily: fonts.regular, fontSize: 12, color: colors.muted },
-  track: { height: 8, borderRadius: 99, backgroundColor: colors.surfaceContainer, overflow: "hidden" },
-  fill: { height: 8, borderRadius: 99, backgroundColor: colors.primary },
+  meterMax: { fontFamily: fonts.medium, fontSize: 13, color: colors.muted, fontVariant: ["tabular-nums"] },
+  meterPctBadge: {
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  meterPct: { fontFamily: fonts.bold, fontSize: 12, color: colors.primary, fontVariant: ["tabular-nums"] },
+  meterLabel: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 17, color: colors.muted },
+  track: { height: 10, borderRadius: 99, backgroundColor: colors.surfaceContainer, overflow: "hidden" },
+  fill: { height: 10, borderRadius: 99, backgroundColor: colors.primary },
   line: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 },
   lineTitle: { fontFamily: fonts.semibold, fontSize: 14, color: colors.ink },
   lineDetail: { fontFamily: fonts.regular, fontSize: 12, color: colors.muted },

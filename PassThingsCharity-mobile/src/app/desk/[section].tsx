@@ -4,7 +4,7 @@ import { can, deskAccess, OpsGate, useRole } from "@/screens/ops/kit";
 import { CampaignWork, CatalogScreen, OrgScreen, StationScreen } from "@/screens/ops/places";
 import { AccountsScreen } from "@/screens/ops/accounts";
 import { AlertCompose } from "@/screens/ops/alerts";
-import { CrewWork, IntakeWork, ReliefWork, RewardWork, TransferWork } from "@/screens/ops/flow";
+import { CrewWork, IntakeWork, ReliefWork, RewardWork, StockWork, TransferWork } from "@/screens/ops/flow";
 
 const pages = {
   orgs: OrgScreen,
@@ -16,6 +16,7 @@ const pages = {
   relief: ReliefWork,
   crew: CrewWork,
   rewards: RewardWork,
+  stock: StockWork,
   users: AccountsScreen,
   alerts: AlertCompose,
 };
@@ -26,7 +27,8 @@ export default function DeskSection() {
   const Page = pages[section as keyof typeof pages];
   const allowed = deskAccess[section as keyof typeof deskAccess];
   if (!Page || !allowed) return <Redirect href="/desk" />;
-  if (!can(role, [...allowed]) && section !== "stations" && section !== "intake") {
+  const viewIntake = section === "intake" && role === "ADMIN";
+  if (!can(role, [...allowed]) && !viewIntake) {
     return (
       <OpsGate>
         <Title>Mục này không mở cho vai trò hiện tại</Title>

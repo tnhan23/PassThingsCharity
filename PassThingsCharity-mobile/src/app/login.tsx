@@ -1,15 +1,21 @@
-import { router } from "expo-router";
+import { Redirect, router } from "expo-router";
 import { useState } from "react";
-import { Text, TextInput, View } from "react-native";
+import { Image, ScrollView, Text, TextInput, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ApiError } from "@/api/client";
+import { useGuest } from "@/api/guest";
+import { useLocale } from "@/api/locale";
 import { useSession } from "@/api/session";
-import { Screen } from "@/components/chrome";
-import { Body, Button, Card, Title } from "@/components/ui";
+import { PasswordReset } from "@/components/form";
+import { Body, Button, Title } from "@/components/ui";
 import { colors, fonts } from "@/theme";
 
 export default function LoginPage() {
-  const { login, register } = useSession();
-  const [creating, setCreating] = useState(false);
+  const { ready, user, login, register } = useSession();
+  const { guest, enterGuest } = useGuest();
+  const { t } = useLocale();
+  const insets = useSafeAreaInsets();
+  const [form, setForm] = useState<"login" | "register" | "forgot" | null>(null);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [email, setEmail] = useState("");
@@ -18,59 +24,84 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
+  if (ready && user) return <Redirect href="/" />;
+
   async function submit() {
     if (busy) return;
     setError("");
     setBusy(true);
-
-    if (creating) {
-      console.log("[LoginPage] Register attempt:", { email, username, fullname, phone });
-    } else {
-      console.log("[LoginPage] Login attempt:", { username: username.trim() });
-    }
-
     try {
-      if (creating) {
+      if (form === "register") {
         await register({ email, username, password, fullname, phone });
-        console.log("[LoginPage] Register succeeded");
       } else {
         await login(username.trim(), password);
-        console.log("[LoginPage] Login succeeded");
       }
       router.replace("/");
     } catch (caught) {
-      const message = caught instanceof ApiError ? caught.message : "Không đăng nhập được.";
-      console.warn("[LoginPage] Auth failed:", message, caught);
-      setError(message);
+      setError(caught instanceof ApiError ? caught.message : t("welcome.fail"));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <Screen tab="profile">
-      <Title>{creating ? "Tạo tài khoản" : "Đăng nhập"}</Title>
-      <Body muted>Máy chủ nhận username và mật khẩu. Quên mật khẩu thì nhận mã 6 số qua email.</Body>
-      <Card>
-        {creating ? <Field label="Email" value={email} onChangeText={setEmail} keyboard="email-address" /> : null}
-        {creating ? <Field label="Họ tên" value={fullname} onChangeText={setFullname} /> : null}
-        {creating ? <Field label="Số điện thoại, 10 số" value={phone} onChangeText={setPhone} keyboard="phone-pad" /> : null}
-        <Field label="Username" value={username} onChangeText={setUsername} autoCapitalize="none" />
-        <Field label="Mật khẩu" value={password} onChangeText={setPassword} secure />
-        {error ? <Text style={{ fontFamily: fonts.medium, color: colors.error, fontSize: 14 }}>{error}</Text> : null}
-        <Button disabled={busy} label={busy ? "Đang gửi" : creating ? "Tạo và vào app" : "Vào app"} onPress={() => void submit()} />
-      </Card>
-      <Button
-        label={creating ? "Đã có tài khoản" : "Chưa có tài khoản"}
-        tone="ghost"
-        onPress={() => {
-          setCreating((value) => !value);
-          setError("");
-        }}
-      />
-      <Button label="Quên mật khẩu" tone="ghost" onPress={() => router.push("/otp/enter")} />
-      <Button label="Xem app không đăng nhập" tone="ghost" onPress={() => router.replace("/")} />
-    </Screen>
+    <ScrollView
+      keyboardShouldPersistTaps="handled"
+      contentContainerStyle={{
+        flexGrow: 1,
+        justifyContent: "center",
+        paddingTop: insets.top + 24,
+        paddingBottom: insets.bottom + 24,
+        paddingHorizontal: 24,
+        backgroundColor: colors.surface,
+        gap: 16,
+      }}
+    >
+      <Image source={require("../../assets/icon.png")} style={{ width: 96, height: 96, borderRadius: 22, alignSelf: "center" }} />
+      <View style={{ gap: 8 }}>
+        <Title>{t("welcome.title")}</Title>
+        <Body muted>{t("welcome.body")}</Body>
+      </View>
+      {form === "forgot" ? (
+        <View style={{ gap: 10 }}>
+          <PasswordReset />
+          <Button label={t("welcome.back")} tone="ghost" onPress={() => setForm(null)} />
+        </View>
+      ) : null}
+      {form === "login" || form === "register" ? (
+        <View style={{ gap: 10 }}>
+          {form === "register" ? <Field label={t("welcome.email")} value={email} onChangeText={setEmail} keyboard="email-address" /> : null}
+          {form === "register" ? <Field label={t("welcome.name")} value={fullname} onChangeText={setFullname} /> : null}
+          {form === "register" ? <Field label={t("welcome.phone")} value={phone} onChangeText={setPhone} keyboard="phone-pad" /> : null}
+          <Field label={t("welcome.user")} value={username} onChangeText={setUsername} autoCapitalize="none" />
+          <Field label={t("welcome.password")} value={password} onChangeText={setPassword} secure />
+          {error ? <Text style={{ fontFamily: fonts.medium, color: colors.error, fontSize: 14 }}>{error}</Text> : null}
+          <Button
+            disabled={busy}
+            label={busy ? t("welcome.sending") : form === "register" ? t("welcome.create") : t("welcome.enter")}
+            onPress={() => void submit()}
+          />
+          {form === "login" ? <Button label={t("welcome.forgot")} tone="ghost" onPress={() => setForm("forgot")} /> : null}
+          <Button label={t("welcome.back")} tone="ghost" onPress={() => { setForm(null); setError(""); }} />
+        </View>
+      ) : null}
+      {form === null ? (
+        <View style={{ gap: 10 }}>
+          <Button label={t("welcome.login")} onPress={() => setForm("login")} />
+          <Button label={t("welcome.register")} tone="ghost" onPress={() => setForm("register")} />
+          <Button label={t("welcome.forgot")} tone="ghost" onPress={() => setForm("forgot")} />
+          <Button
+            label={t("welcome.guest")}
+            tone="ghost"
+            onPress={() => {
+              enterGuest();
+              router.replace("/");
+            }}
+          />
+          {guest ? <Button label={t("nav.back")} tone="ghost" onPress={() => router.back()} /> : null}
+        </View>
+      ) : null}
+    </ScrollView>
   );
 }
 
@@ -107,7 +138,7 @@ function Field({
           borderRadius: 12,
           borderWidth: 1,
           borderColor: focused ? colors.primary : colors.hairline,
-          backgroundColor: colors.surface,
+          backgroundColor: colors.card,
           paddingHorizontal: 12,
           fontFamily: fonts.regular,
           fontSize: 16,

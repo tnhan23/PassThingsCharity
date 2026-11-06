@@ -3,12 +3,12 @@ import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { backend } from "@/api/backend";
 import { ApiError } from "@/api/client";
-import { pickImages } from "@/api/images";
+import { pickImage } from "@/api/images";
 import { formatDay, unitSpoken } from "@/api/labels";
 import { useSession } from "@/api/session";
 import type { CampaignSummary, ContributionItemRow, ContributionRow, PointsPayload, StationRow } from "@/api/types";
 import { Field } from "@/components/form";
-import { Body, Button, Card, Icon, Photo, Pill, Tap, Title } from "@/components/ui";
+import { Badge, Body, Button, Card, Icon, Photo, Pill, StatRow, Tap, Title } from "@/components/ui";
 import { colors, fonts } from "@/theme";
 
 type CatalogItem = {
@@ -138,13 +138,17 @@ export function MyDonations({ summary = false }: { summary?: boolean }) {
   return (
     <View style={{ gap: 14 }}>
       <Title>Quyên góp của tôi</Title>
+      <StatRow
+        items={[
+          { label: "Tổng điểm", value: points ? points.totalPoints : "…", unit: "điểm", tone: "primary" },
+          { label: "Đã tiếp nhận", value: accepted.length, unit: "phiếu", tone: "coral" },
+          { label: "Chiến dịch", value: campaigns.size, unit: "đợt", tone: "ink" },
+        ]}
+      />
       <Card>
-        <Text style={{ fontFamily: fonts.bold, fontSize: 28, color: colors.primary }}>
-          {points ? `${points.totalPoints} điểm` : "…"}
+        <Text style={{ fontFamily: fonts.bold, fontSize: 15, color: colors.ink }}>
+          {quantities ? `Tổng đồ đã ghi nhận: ${quantities}.` : "Chưa cộng được số lượng từng món."}
         </Text>
-        <Body>{`${accepted.length} phiếu đã tiếp nhận.`}</Body>
-        <Body>{`${campaigns.size} chiến dịch.`}</Body>
-        <Body>{quantities ? `Đồ đã ghi: ${quantities}.` : "Chưa cộng được số lượng từng món."}</Body>
         <Body muted>{firstDay ? `Quyên góp từ ${formatDay(firstDay)}.` : "Chưa có phiếu để tính mốc thời gian."}</Body>
       </Card>
       {summary ? null : <Body muted>Nhân viên lập phiếu khi bạn mang đồ tới quầy.</Body>}
@@ -154,12 +158,32 @@ export function MyDonations({ summary = false }: { summary?: boolean }) {
         return (
           <Tap key={row._id} onPress={() => router.push(`/contribution/${row._id}`)}>
             <Card>
-              <Text style={{ fontFamily: fonts.bold, fontSize: 16, color: colors.ink }}>{row.code}</Text>
-              <Body>{receiptStatus(row.status)}</Body>
-              <Body muted>{refTitle(row.stationId) || "Trạm"}</Body>
-              <Body muted>{refTitle(row.campaignId) || "Chiến dịch"}</Body>
-              {row.createdAt ? <Body muted>{formatDay(row.createdAt)}</Body> : null}
-              {awarded !== null ? <Text style={{ fontFamily: fonts.bold, fontSize: 16, color: colors.secondary }}>{`+${awarded} điểm`}</Text> : null}
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                <Text style={{ fontFamily: fonts.bold, fontSize: 16, color: colors.ink, fontVariant: ["tabular-nums"] }}>{row.code}</Text>
+                <Badge
+                  label={receiptStatus(row.status)}
+                  tone={row.status === "ACCEPTED" ? "primary" : row.status === "REJECTED" ? "danger" : "warning"}
+                />
+              </View>
+              <Body muted>{`${refTitle(row.stationId) || "Trạm"} · ${refTitle(row.campaignId) || "Chiến dịch"}`}</Body>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  paddingTop: 6,
+                  borderTopWidth: 1,
+                  borderTopColor: colors.hairline,
+                }}
+              >
+                <Text style={{ fontFamily: fonts.medium, fontSize: 12, color: colors.muted, fontVariant: ["tabular-nums"] }}>
+                  {row.createdAt ? formatDay(row.createdAt) : ""}
+                </Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  {awarded !== null ? <Badge label={`+${awarded} điểm`} tone="coral" /> : null}
+                  <Icon name="chevron-right" size={18} color={colors.primary} />
+                </View>
+              </View>
             </Card>
           </Tap>
         );
@@ -224,18 +248,30 @@ export function ContributionDetailScreen() {
   const awarded = pointsForReceipt(points, detail.contribution._id);
   return (
     <View style={{ gap: 14 }}>
-      <Title>{detail.contribution.code}</Title>
-      <Body>{receiptStatus(detail.contribution.status)}</Body>
-      <Body muted>{refTitle(detail.contribution.stationId) || "Trạm"}</Body>
-      <Body muted>{refTitle(detail.contribution.campaignId) || "Chiến dịch"}</Body>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+        <Title>{detail.contribution.code}</Title>
+        <Badge
+          label={receiptStatus(detail.contribution.status)}
+          tone={detail.contribution.status === "ACCEPTED" ? "primary" : detail.contribution.status === "REJECTED" ? "danger" : "warning"}
+        />
+      </View>
+      <Body muted>{`${refTitle(detail.contribution.stationId) || "Trạm"} · ${refTitle(detail.contribution.campaignId) || "Chiến dịch"}`}</Body>
       {detail.contribution.createdAt ? <Body muted>{formatDay(detail.contribution.createdAt)}</Body> : null}
-      {awarded !== null ? <Text style={{ fontFamily: fonts.bold, fontSize: 22, color: colors.secondary }}>{`+${awarded} điểm`}</Text> : <Body muted>Phiếu này chưa có dòng điểm loại DONATION.</Body>}
+      <StatRow
+        items={[
+          { label: "Loại vật phẩm", value: detail.items.length, unit: "mục", tone: "ink" },
+          { label: "Điểm cộng", value: awarded !== null ? `+${awarded}` : "0", unit: "điểm", tone: "coral" },
+          { label: "Ảnh xác minh", value: detail.images.length, unit: "ảnh", tone: "primary" },
+        ]}
+      />
       <Title>Các món trong phiếu</Title>
       {detail.items.length === 0 ? <Body>Phiếu chưa có món.</Body> : null}
       {detail.items.map((item, index) => (
         <Card key={`${itemLabel(item)}-${index}`}>
-          <Text style={{ fontFamily: fonts.bold, fontSize: 16, color: colors.ink }}>{itemLabel(item)}</Text>
-          <Body>{`${item.quantity} ${unitSpoken(item.unit)}`}</Body>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <Text style={{ flex: 1, fontFamily: fonts.bold, fontSize: 16, color: colors.ink }}>{itemLabel(item)}</Text>
+            <Badge label={`${item.quantity} ${unitSpoken(item.unit)}`} tone="primary" />
+          </View>
           {item.note ? <Body muted>{item.note}</Body> : null}
         </Card>
       ))}
@@ -355,12 +391,12 @@ export function ReceptionForm({ onCreated }: { onCreated?: () => void }) {
     setBusy(true);
     setNote("");
     try {
-      const files = await pickImages();
-      if (!files.length) {
+      const file = await pickImage();
+      if (!file) {
         setNote("Chưa chọn ảnh.");
         return;
       }
-      const uploaded = await backend.uploadContributionImages(token, files.slice(0, 5));
+      const uploaded = await backend.uploadContributionImages(token, [file]);
       setImageUrls(uploaded.imageUrls ?? []);
       setNote(uploaded.imageUrls?.length ? `Đã tải ${uploaded.imageUrls.length} ảnh.` : "Máy chủ không trả đường dẫn ảnh.");
     } catch (caught) {
@@ -468,28 +504,35 @@ export function ReceptionForm({ onCreated }: { onCreated?: () => void }) {
         const taken = new Set(lines.flatMap((row, rowIndex) => rowIndex === index || !row.itemTypeId ? [] : [row.itemTypeId]));
         return (
           <Card key={line.key}>
-            <Text style={{ fontFamily: fonts.bold, fontSize: 16, color: colors.ink }}>{chosen ? chosen.name : "Chọn vật phẩm"}</Text>
-            {chosen && neededIds.has(chosen._id) ? <Body>Chiến dịch đang cần</Body> : null}
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+              <Text style={{ flex: 1, fontFamily: fonts.bold, fontSize: 16, color: colors.ink }}>
+                {chosen ? `${index + 1}. ${chosen.name}` : `Món #${index + 1} · Chọn vật phẩm`}
+              </Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                {chosen && neededIds.has(chosen._id) ? <Badge label="Chiến dịch đang cần" tone="primary" /> : null}
+                {chosen ? <Badge label={chosen.unit} tone="neutral" /> : null}
+              </View>
+            </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
               {catalog.filter((item) => item._id === line.itemTypeId || !taken.has(item._id)).map((item) => (
                 <Pill key={item._id} label={item.name} active={item._id === line.itemTypeId} onPress={() => chooseItem(index, item)} />
               ))}
             </ScrollView>
             <Field
-              label={chosen ? `Số lượng, ${unitSpoken(chosen.unit)}` : "Số lượng"}
+              label={chosen ? `Số lượng (${unitSpoken(chosen.unit)})` : "Số lượng"}
               value={line.quantity}
               onChangeText={(value) => setLines((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, quantity: value.replace(",", ".") } : row))}
               keyboardType={chosen?.unit === "KG" ? "decimal-pad" : "number-pad"}
             />
-            {chosen ? <Body muted>{`Đơn vị khóa theo vật phẩm: ${chosen.unit}`}</Body> : null}
             <Field label="Ghi chú món" value={line.note} onChangeText={(value) => setLines((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, note: value } : row))} autoCapitalize="sentences" />
             {lines.length > 1 ? (
               <Tap
                 onPress={() => setLines((current) => current.filter((_, rowIndex) => rowIndex !== index))}
                 accessibilityLabel="Xóa món"
-                style={{ alignSelf: "flex-start" }}
+                style={{ alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 4, minHeight: 36 }}
               >
-                <Icon name="delete-outline" size={22} color={colors.error} />
+                <Icon name="delete-outline" size={20} color={colors.error} />
+                <Text style={{ fontFamily: fonts.semibold, fontSize: 13, color: colors.error }}>Xóa dòng này</Text>
               </Tap>
             ) : null}
           </Card>
@@ -497,9 +540,15 @@ export function ReceptionForm({ onCreated }: { onCreated?: () => void }) {
       })}
       <Button label="Thêm vật phẩm" tone="ghost" onPress={() => setLines((current) => [...current, blankLine()])} />
       <Field label="Ghi chú phiếu" value={notes} onChangeText={setNotes} autoCapitalize="sentences" />
-      <Body muted>{imageUrls.length ? `Đã có ${imageUrls.length} ảnh.` : "Chưa đính ảnh. Tối đa 5 ảnh."}</Body>
+      <Body muted>{imageUrls.length ? "Đã có 1 ảnh." : "Chưa đính ảnh. Mỗi lần chỉ chọn một ảnh."}</Body>
       <Button label={busy ? "Đang gửi" : "Tải ảnh"} tone="ghost" disabled={busy} onPress={() => void upload()} />
-      {filled.length > 0 ? <Body>{`Tổng cộng: ${filled.length} loại vật phẩm. Dự kiến cộng +${estimated} điểm cho người tặng.`}</Body> : null}
+      <StatRow
+        items={[
+          { label: "Loại vật phẩm", value: filled.length, unit: "món", tone: "primary" },
+          { label: "Điểm dự kiến", value: filled.length > 0 ? `+${estimated}` : "0", unit: "điểm", tone: "coral" },
+          { label: "Ảnh đính kèm", value: imageUrls.length, unit: "ảnh", tone: "ink" },
+        ]}
+      />
       {note ? <Body>{note}</Body> : null}
       <Button label={busy ? "Đang gửi" : "Lập phiếu"} disabled={busy} onPress={() => void submit()} />
     </View>
