@@ -87,7 +87,7 @@ export function RoleNote() {
   return null;
 }
 
-export function OpsGate({ children }: { children: ReactNode }) {
+export function OpsGate({ children, allowNonOperator = false }: { children: ReactNode; allowNonOperator?: boolean }) {
   const { token, user } = useSession();
   if (!token) {
     return (
@@ -98,7 +98,7 @@ export function OpsGate({ children }: { children: ReactNode }) {
       </Screen>
     );
   }
-  if (!isOperator(user?.role)) {
+  if (!allowNonOperator && !isOperator(user?.role)) {
     return (
       <Screen tab="profile">
         <Title>Tài khoản này không vận hành</Title>

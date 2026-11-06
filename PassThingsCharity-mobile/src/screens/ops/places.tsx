@@ -132,7 +132,7 @@ export function StationScreen() {
   }, [job.token, picked, job.note, role]);
 
   return (
-    <OpsGate>
+    <OpsGate allowNonOperator>
       <Title>Trạm</Title>
       <Note text={stations.error || orgs.error || staffError || job.note} />
       <PickList rows={stations.rows} selected={picked} onPick={setPicked} detail={(row) => `${row.isActive ? "Đang mở" : "Chưa kích hoạt"} · ${row.address || ""}`} />

@@ -26,7 +26,7 @@ export default function DeskSection() {
   const Page = pages[section as keyof typeof pages];
   const allowed = deskAccess[section as keyof typeof deskAccess];
   if (!Page || !allowed) return <Redirect href="/desk" />;
-  if (!can(role, [...allowed])) {
+  if (!can(role, [...allowed]) && section !== "stations" && section !== "intake") {
     return (
       <OpsGate>
         <Title>Mục này không mở cho vai trò hiện tại</Title>

@@ -68,7 +68,7 @@ export function IntakeWork() {
   const visible = receipts.rows?.filter((row) => !String(row.code || "").startsWith("SAMPLE-")) ?? null;
 
   return (
-    <OpsGate>
+    <OpsGate allowNonOperator>
       <Title>Tiếp nhận</Title>
       <RoleNote />
       <Note text={receipts.error || job.note} />
@@ -237,7 +237,7 @@ export function ReliefWork() {
   );
 }
 
-export function CrewWork() {
+export function CrewWork({ allowNonOperator = false }: { allowNonOperator?: boolean }) {
   const tasks = useRows((token) => backend.listTasks(token).then((data) => data.data as Row[]));
   const campaigns = useRows(async () => (await backend.listCampaigns()).campaigns as Row[]);
   const stations = useRows((token) => backend.listStations(token).then((data) => data.data as Row[]));
@@ -294,7 +294,7 @@ export function CrewWork() {
   }, [job.token, taskId, applyStamp]);
 
   return (
-    <OpsGate>
+    <OpsGate allowNonOperator={allowNonOperator}>
       <Title>Nhân sự</Title>
       <RoleNote />
       <Note text={tasks.error || peopleError || job.note} />

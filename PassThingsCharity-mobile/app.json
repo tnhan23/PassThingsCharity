@@ -69,7 +69,8 @@
         {
           "cameraPermission": "Pass Things Charity dùng camera để quét mã QR trên giao diện. Máy chủ chưa dùng mã này để ghi nhận ca."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ]
   }
 }

@@ -88,6 +88,9 @@ export function HomeScreen({ state = "content" }: { state?: "content" | "loading
   return (
     <Screen tab="home">
       <SearchField />
+      <Button label="Quản lý trạm (tạm thời)" tone="ghost" onPress={() => router.push("/desk/stations")} />
+      <Button label="Tiếp nhận (tạm thời)" tone="ghost" onPress={() => router.push("/desk/intake")} />
+      <Button label="Nhân sự (tạm thời)" tone="ghost" onPress={() => router.push("/routes/workforce")} />
       <View style={{ flexDirection: "row", gap: 10, alignItems: "stretch" }}>
         <Card style={{ flex: 1, backgroundColor: colors.primary, justifyContent: "space-between" }}>
           <Text style={{ fontFamily: fonts.semibold, color: colors.onPrimary, fontSize: 13 }}>Bạn có đồ dư?</Text>
