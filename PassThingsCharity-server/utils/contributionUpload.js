@@ -19,10 +19,9 @@ function configuration(target = 'contributions') {
   const secret = process.env.CLOUDINARY_API_SECRET;
   const folder = target === 'personal'
     ? (process.env.CLOUDINARY_PERSONAL_FOLDER || 'PassThingsCharity/avatars')
-    : target === 'contributions' ? process.env.CLOUDINARY_BE3_FOLDER
-    : (process.env[`CLOUDINARY_${target.toUpperCase().replace(/-/g, '_')}_FOLDER`] || `PassThingsCharity/${target}`);
+    : process.env.CLOUDINARY_BE3_FOLDER;
   if (!cloud || !key || !secret || !folder || !/^[a-zA-Z0-9_-]+$/.test(cloud)) {
-    throw Object.assign(new Error('Cloudinary upload is not configured. Check credentials and the destination folder.'), { status: 503 });
+    throw Object.assign(new Error('Cloudinary BE3 upload is not configured. Set credentials and CLOUDINARY_BE3_FOLDER.'), { status: 503 });
   }
   return { cloud, key, secret, folder };
 }
@@ -91,4 +90,5 @@ function createUploadHandler(target) {
 }
 
 const uploadContributionImages = createUploadHandler('contributions');
-module.exports = { createUploadHandler, uploadContributionImages, imageType, uploadImage, configuration };
+const uploadPersonalImages = createUploadHandler('personal');
+module.exports = { uploadContributionImages, uploadPersonalImages, imageType, uploadImage };

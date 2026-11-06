@@ -1,8 +1,6 @@
 const mongoose = require('mongoose')
 const stationSchema = new mongoose.Schema(
   {
-    imageUrl: { type: String, trim: true, default: null },
-    imagePublicId: { type: String, default: null },
     organizationId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Organization',
@@ -36,7 +34,7 @@ const stationSchema = new mongoose.Schema(
     closingTime: {
       type: String,
       trim: true,
-      default: '20:00',
+      default: '17:00',
     },
     isActive: {
       type: Boolean,

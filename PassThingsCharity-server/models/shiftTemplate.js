@@ -4,7 +4,7 @@ const shiftTemplateSchema = new mongoose.Schema(
     stationId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Station',
-      default: null, // null: shared catalog; existing station templates remain readable.
+      required: [true, 'Trạm tiếp nhận (stationId) là bắt buộc.'],
       index: true,
     },
     name: {
@@ -39,7 +39,7 @@ const shiftTemplateSchema = new mongoose.Schema(
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      default: null, // System-created shared templates have no user creator.
+      required: true,
     },
   },
   {

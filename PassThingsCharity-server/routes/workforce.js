@@ -16,7 +16,6 @@ const {
   assignTask,
   checkInTask,
   checkOutTask,
-  markAssignmentAbsent,
   getMyAssignedTasks,
 } = require('../controller/workforce');
 const checkBearerToken = require('../middleware/checkBearerToken');
@@ -120,11 +119,5 @@ router.post('/tasks/check-in', checkBearerToken, checkInTask);
 
 // Điểm danh kết thúc ca, ghi nhận giờ làm và tự động cộng điểm thưởng
 router.post('/tasks/check-out', checkBearerToken, checkOutTask);
-router.patch(
-  '/tasks/assignments/:assignmentId/absent',
-  checkBearerToken,
-  checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF']),
-  markAssignmentAbsent
-);
 
 module.exports = router;

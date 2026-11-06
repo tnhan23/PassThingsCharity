@@ -8,23 +8,12 @@ const {
 } = require('../controller/campaignTransfer');
 const checkBearerToken = require('../middleware/checkBearerToken');
 const checkRole = require('../middleware/checkRole');
-const handover = require('../controller/transferHandover');
-
-router.get('/shipments/me', checkBearerToken, handover.myShipments);
-router.patch('/:id/approval', checkBearerToken, checkRole(['ADMIN', 'STATION_MANAGER']), handover.approveTransfer);
-router.patch('/:id/responsibilities', checkBearerToken, checkRole(['ADMIN', 'STATION_MANAGER']), handover.assignResponsibilities);
-router.post('/:id/shipments', checkBearerToken, checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF']), handover.allocateShipment);
-router.delete('/:id/shipments/:shipmentId', checkBearerToken, checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF']), handover.removeShipment);
-router.post('/:id/shipments/:shipmentId/evidence/:stage', checkBearerToken, checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF', 'USER']), handover.uploadEvidence);
-router.post('/:id/shipments/:shipmentId/dispatch', checkBearerToken, checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF']), handover.dispatchShipment);
-router.post('/:id/shipments/:shipmentId/report', checkBearerToken, checkRole(['USER', 'STAFF', 'STATION_MANAGER', 'ADMIN']), handover.reportShipment);
-router.post('/:id/shipments/:shipmentId/receive', checkBearerToken, checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF']), handover.receiveShipment);
 
 // Tạo phiếu điều phối giữa các trạm
 router.post(
   '/',
   checkBearerToken,
-  checkRole(['STATION_MANAGER', 'STAFF']),
+  checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF']),
   createTransfer
 );
 
@@ -40,7 +29,7 @@ router.get(
 router.get(
   '/:id',
   checkBearerToken,
-  checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF', 'USER']),
+  checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF']),
   getTransferById
 );
 

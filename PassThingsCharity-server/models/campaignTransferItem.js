@@ -6,8 +6,6 @@ const mongoose = require('mongoose');
  */
 const campaignTransferItemSchema = new mongoose.Schema(
   {
-    dispatchedQuantity: { type: Number, default: 0, min: 0 },
-    receivedQuantity: { type: Number, default: 0, min: 0 },
     transferId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'CampaignTransfer',

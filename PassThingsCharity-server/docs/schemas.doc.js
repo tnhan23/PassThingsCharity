@@ -1,15 +1,4 @@
 module.exports = {
-  TaskSlots: {
-    type: 'object',
-    required: ['total', 'approved', 'pending', 'remaining', 'isFull'],
-    properties: {
-      total: { type: 'integer', minimum: 0, example: 5 },
-      approved: { type: 'integer', minimum: 0, example: 1, description: 'Assigned USER participants; completed participants still occupy a place. STAFF, absent and cancelled assignments are excluded.' },
-      pending: { type: 'integer', minimum: 0, example: 2, description: 'Pending applications do not reserve places.' },
-      remaining: { type: 'integer', minimum: 0, example: 4 },
-      isFull: { type: 'boolean', example: false },
-    },
-  },
   ErrorResponse: {
     type: 'object',
     properties: {
@@ -26,7 +15,6 @@ module.exports = {
   },
   RegisterRequest: {
     type: 'object',
-    description: 'Đăng ký không cần ảnh. Avatar mặc định null; thêm hoặc đổi sau khi đăng nhập qua màn hình cập nhật hồ sơ.',
     required: ['email', 'username', 'password', 'fullname', 'phone'],
     properties: {
       email: { type: 'string', example: 'user02@example.com' },
@@ -67,7 +55,6 @@ module.exports = {
     type: 'object',
     required: ['name', 'code', 'address'],
     properties: {
-      logoUrl: { type: 'string', format: 'uri', nullable: true, description: 'URL HTTPS trả từ POST /uploads/organizations/image. Không bắt buộc.' },
       name: { type: 'string', example: 'Quỹ Từ Thiện Ánh Sáng' },
       code: { type: 'string', example: 'ORG-LIGHT-01' },
       address: { type: 'string', example: '123 Đường Nguyễn Huệ, Q1, TP.HCM' },
@@ -78,19 +65,10 @@ module.exports = {
       idCardNumber: { type: 'string', example: '079123456789' },
     },
   },
-  OrganizationUpdateRequest: {
-    type: 'object', minProperties: 1,
-    properties: {
-      name: { type: 'string' }, code: { type: 'string' }, address: { type: 'string' },
-      phone: { type: 'string' }, email: { type: 'string', format: 'email' },
-      logoUrl: { type: 'string', format: 'uri', nullable: true },
-    },
-  },
   CreateStationManagerRequest: {
     type: 'object',
     required: ['email', 'username', 'password', 'fullName', 'phone'],
     properties: {
-      avatarUrl: { type: 'string', format: 'uri', nullable: true, description: 'Avatar tùy chọn, URL HTTPS.' },
       email: { type: 'string', format: 'email', example: 'manager_thuduc@gmail.com' },
       username: { type: 'string', example: 'manager_thuduc' },
       password: { type: 'string', format: 'password', example: 'Password123!' },
@@ -109,27 +87,25 @@ module.exports = {
     type: 'object',
     required: ['name', 'address', 'latitude', 'longitude'],
     properties: {
-      imageUrl: { type: 'string', format: 'uri', nullable: true, description: 'URL HTTPS trả từ POST /uploads/stations/image. Không bắt buộc.' },
       name: { type: 'string', example: 'Trạm Tiếp Nhận Quận 1' },
       address: { type: 'string', example: 'Số 1 Đinh Tiên Hoàng, Q1, TP.HCM' },
       organizationId: { type: 'string', example: '671000000000000000000001' },
       latitude: { type: 'string', example: '10.776889', description: 'Vĩ độ (Latitude)' },
       longitude: { type: 'string', example: '106.700806', description: 'Kinh độ (Longitude)' },
       openingTime: { type: 'string', example: '08:00', description: 'Giờ mở cửa' },
-      closingTime: { type: 'string', example: '20:00', description: 'Giờ đóng cửa' },
+      closingTime: { type: 'string', example: '17:00', description: 'Giờ đóng cửa' },
     },
   },
   StationUpdateRequest: {
     type: 'object',
     minProperties: 1,
     properties: {
-      imageUrl: { type: 'string', format: 'uri', nullable: true },
       name: { type: 'string', example: 'Trạm Tiếp Nhận Quận 1' },
       address: { type: 'string', example: 'Số 1 Đinh Tiên Hoàng, Q1, TP.HCM' },
       latitude: { type: 'string', example: '10.776889', description: 'Vĩ độ (Latitude)' },
       longitude: { type: 'string', example: '106.700806', description: 'Kinh độ (Longitude)' },
       openingTime: { type: 'string', example: '08:00', description: 'Giờ mở cửa' },
-      closingTime: { type: 'string', example: '20:00', description: 'Giờ đóng cửa' },
+      closingTime: { type: 'string', example: '17:00', description: 'Giờ đóng cửa' },
       isActive: { type: 'boolean', example: true },
     },
   },
@@ -138,7 +114,6 @@ module.exports = {
     type: 'object',
     required: ['name'],
     properties: {
-      imageUrl: { type: 'string', format: 'uri', nullable: true, description: 'URL HTTPS trả từ POST /uploads/item-categories/image. Không bắt buộc.' },
       name: { type: 'string', example: 'Thực phẩm' },
       description: { type: 'string', example: 'Các loại thực phẩm, đồ khô, đồ hộp cứu trợ' },
     },
@@ -147,7 +122,6 @@ module.exports = {
     type: 'object',
     minProperties: 1,
     properties: {
-      imageUrl: { type: 'string', format: 'uri', nullable: true },
       name: { type: 'string', example: 'Thực phẩm' },
       description: { type: 'string', example: 'Các loại thực phẩm, đồ khô, đồ hộp cứu trợ' },
       isActive: { type: 'boolean', example: true },
@@ -157,11 +131,9 @@ module.exports = {
     type: 'object',
     required: ['categoryId', 'name', 'unit'],
     properties: {
-      imageUrl: { type: 'string', format: 'uri', nullable: true, description: 'URL HTTPS trả từ POST /uploads/item-types/image. Không bắt buộc.' },
       categoryId: { type: 'string', example: '6523456789abcdef00000101' },
       name: { type: 'string', example: 'Mì gói' },
-      unit: { type: 'string', enum: ['KG', 'PAIR', 'BOX', 'PACK', 'PIECE'], example: 'BOX' },
-      pointsPerUnit: { type: 'integer', minimum: 0, example: 5, description: 'Điểm cộng trên mỗi đơn vị chuẩn; 0 nếu chưa cấu hình. Chỉ áp dụng khi phiếu được tiếp nhận; điểm từng dòng được làm tròn về số nguyên gần nhất.' },
+      unit: { type: 'string', enum: ['KG', 'PAIR', 'BOX', 'PACK'], example: 'BOX' },
       description: { type: 'string', example: 'Thùng mì gói các loại' },
     },
   },
@@ -169,11 +141,9 @@ module.exports = {
     type: 'object',
     minProperties: 1,
     properties: {
-      imageUrl: { type: 'string', format: 'uri', nullable: true },
       categoryId: { type: 'string', example: '6523456789abcdef00000101' },
       name: { type: 'string', example: 'Mì gói' },
-      unit: { type: 'string', enum: ['KG', 'PAIR', 'BOX', 'PACK', 'PIECE'], example: 'BOX' },
-      pointsPerUnit: { type: 'integer', minimum: 0, example: 5, description: 'Điểm cộng trên mỗi đơn vị chuẩn; điểm từng dòng được làm tròn về số nguyên gần nhất.' },
+      unit: { type: 'string', enum: ['KG', 'PAIR', 'BOX', 'PACK'], example: 'BOX' },
       description: { type: 'string', example: 'Thùng mì gói các loại' },
       isActive: { type: 'boolean', example: true },
     },
@@ -183,7 +153,6 @@ module.exports = {
     description: 'Campaign duration must be between 120 and 168 hours.',
     required: ['title', 'startDate', 'endDate', 'organizationId'],
     properties: {
-      imageUrl: { type: 'string', format: 'uri', nullable: true, description: 'URL HTTPS trả từ POST /uploads/campaigns/image. Không bắt buộc.' },
       title: { type: 'string', example: 'Cứu trợ lũ lụt Miền Trung 2026' },
       description: { type: 'string', example: 'Chiến dịch quyên góp vật phẩm cứu trợ bà con vùng lũ' },
       startDate: { type: 'string', format: 'date-time', example: '2026-10-15T00:00:00.000Z' },
@@ -196,7 +165,6 @@ module.exports = {
     description: 'If either date is changed, the resulting campaign duration must be between 120 and 168 hours.',
     minProperties: 1,
     properties: {
-      imageUrl: { type: 'string', format: 'uri', nullable: true },
       title: { type: 'string', example: 'Cứu trợ lũ lụt Miền Trung 2026' },
       description: { type: 'string', example: 'Chiến dịch quyên góp vật phẩm cứu trợ bà con vùng lũ' },
       startDate: { type: 'string', format: 'date-time', example: '2026-10-15T00:00:00.000Z' },
@@ -219,7 +187,7 @@ module.exports = {
     properties: {
       userId: { type: 'string', example: '6ac7b15a501de8a3e18592ca' },
       points: { type: 'integer', minimum: 1, example: 50 },
-      type: { type: 'string', enum: ['DONATION', 'VOLUNTEER_TASK', 'BONUS', 'SYSTEM', 'NO_SHOW_PENALTY'], example: 'DONATION' },
+      type: { type: 'string', enum: ['DONATION', 'VOLUNTEER_TASK', 'BONUS', 'SYSTEM'], example: 'DONATION' },
       sourceId: { type: 'string', example: '6523456789abcdef00000601' },
       description: { type: 'string', example: 'Thưởng điểm quyên góp 10 KG quần áo' },
     },
@@ -304,7 +272,7 @@ module.exports = {
       campaignId: { type: 'string', example: '6acdef2e9fc3bf0d61d9d00b' },
       fromStationId: { type: 'string', example: '671000000000000000000011' },
       toStationId: { type: 'string', example: '671000000000000000000012' },
-      responsibleUserId: { type: 'string', example: '6acbbb6a7faf5d01bb5261e4', description: 'Responsible person at station A; defaults to creator. Station B assigns its receivedBy separately.' },
+      responsibleUserId: { type: 'string', example: '6acbbb6a7faf5d01bb5261e4' },
       transportMethod: { type: 'string', example: 'Xe tải 2.5 tấn' },
       transportNote: { type: 'string', example: 'Chuyển hàng sang trạm trung tâm bằng xe tải 2 tấn' },
       items: {
@@ -328,12 +296,12 @@ module.exports = {
       status: {
         type: 'string',
         enum: ['PENDING', 'PREPARING', 'IN_TRANSIT', 'RECEIVED', 'COMPLETED', 'CANCELLED'],
-        example: 'COMPLETED',
+        example: 'IN_TRANSIT',
       },
       transportMethod: { type: 'string', example: 'Xe tải 2.5 tấn' },
-      transportNote: { type: 'string', description: 'New transfers use approval and per-shipment dispatch/report/receive; this endpoint only cancels before dispatch or completes after full receipt.', example: 'Xe đang di chuyển trên quốc lộ 1A' },
-      responsibleUserId: { type: 'string', example: '6acbbb6a7faf5d01bb5261e4', description: 'Responsible person at station A; defaults to creator. Station B assigns its receivedBy separately.' },
-      receivedBy: { type: 'string', example: '6ac7b15a501de8a3e18592c9', description: 'Use PATCH /transfers/{id}/responsibilities to assign the receiver at station B. Not editable through status updates.' },
+      transportNote: { type: 'string', example: 'Xe đang di chuyển trên quốc lộ 1A' },
+      responsibleUserId: { type: 'string', example: '6acbbb6a7faf5d01bb5261e4' },
+      receivedBy: { type: 'string', example: '6ac7b15a501de8a3e18592c9' },
     },
   },
   ReliefDistributionRequest: {
@@ -347,7 +315,6 @@ module.exports = {
       recipientPhone: { type: 'string', example: '0988776655' },
       recipientAddress: { type: 'string', example: 'UBND Xã Lộc An, Huyện Phú Lộc, Thừa Thiên Huế' },
       distributionDate: { type: 'string', format: 'date-time', example: '2026-10-20T10:00:00.000Z' },
-      completedAt: { type: 'string', format: 'date-time', description: 'Ngày giờ thực tế hoàn tất giao hàng cho người dân/đại diện. Chỉ gửi khi status COMPLETED, không được ở tương lai. Bỏ trống thì tự ghi giờ hoàn tất hiện tại.' },
       status: { type: 'string', enum: ['PLANNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'], example: 'PLANNED' },
       notes: { type: 'string', example: 'Bàn giao đợt 1 gồm 100 thùng mì và 50 KG quần áo ấm' },
       items: {
@@ -371,7 +338,6 @@ module.exports = {
     properties: {
       status: { type: 'string', enum: ['PLANNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'], example: 'COMPLETED' },
       notes: { type: 'string', example: 'Đã hoàn tất bàn giao đầy đủ cho địa phương' },
-      completedAt: { type: 'string', format: 'date-time', description: 'Ngày giờ hoàn tất bàn giao thực tế, ISO có múi giờ. Chuyển sang COMPLETED tự ghi giờ hiện tại nếu không gửi. Không sửa lại ngày đã ghi; phiếu cũ chưa ghi nhận ngày trả null.' },
       closeCampaign: { type: 'boolean', example: true },
     },
   },
@@ -393,19 +359,19 @@ module.exports = {
   },
   TaskRequest: {
     type: 'object',
-    required: ['stationId', 'title', 'startTime', 'endTime', 'requiredVolunteers'],
+    required: ['campaignId', 'stationId', 'title'],
     properties: {
-      campaignId: { type: 'string', nullable: true, description: 'Optional campaign. A schedule can belong to a station alone.' },
+      campaignId: { type: 'string', example: '6acdef2e9fc3bf0d61d9d00b' },
       stationId: { type: 'string', example: '671000000000000000000011' },
       transferId: { type: 'string', example: '6523456789abcdef00000d01' },
       title: { type: 'string', example: 'Bốc xếp và chuyển hàng lên xe tải' },
       description: { type: 'string', example: 'Hỗ trợ tài xế bốc 50 thùng mì và 20 kiện đồ' },
-      startTime: { type: 'string', format: 'date-time', example: '2026-11-10T08:00:00+07:00' },
-      endTime: { type: 'string', format: 'date-time', example: '2026-11-10T12:00:00+07:00' },
+      startTime: { type: 'string', format: 'date-time', example: '2026-10-16T08:00:00.000Z' },
+      endTime: { type: 'string', format: 'date-time', example: '2026-10-16T12:00:00.000Z' },
       recruitmentStatus: { type: 'string', enum: ['NOT_OPEN', 'OPEN', 'FILLED', 'CLOSED'], example: 'OPEN' },
-      requiredVolunteers: { type: 'integer', minimum: 1, example: 5, description: 'Number of USER participants to approve.' },
-      volunteerDeadline: { type: 'string', format: 'date-time', example: '2026-11-09T20:00:00+07:00' },
-      rewardPoints: { type: 'integer', minimum: 0, example: 50, description: 'Điểm thưởng cố định khi User hoàn thành; 0/bỏ trống thì tính 25 điểm/giờ, tối thiểu 25.' },
+      requiredVolunteers: { type: 'integer', example: 5 },
+      volunteerDeadline: { type: 'string', format: 'date-time', example: '2026-10-16T07:00:00.000Z' },
+      rewardPoints: { type: 'integer', example: 50 },
     },
   },
   TaskUpdateRequest: {
@@ -418,9 +384,9 @@ module.exports = {
       endTime: { type: 'string', format: 'date-time' },
       status: { type: 'string', enum: ['PENDING', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'], example: 'IN_PROGRESS' },
       recruitmentStatus: { type: 'string', enum: ['NOT_OPEN', 'OPEN', 'FILLED', 'CLOSED'], example: 'OPEN' },
-      requiredVolunteers: { type: 'integer', minimum: 1, example: 5, description: 'Number of USER participants to approve.' },
+      requiredVolunteers: { type: 'integer', example: 5 },
       volunteerDeadline: { type: 'string', format: 'date-time' },
-      rewardPoints: { type: 'integer', minimum: 0, example: 50, description: 'Điểm thưởng cố định khi User hoàn thành; 0 thì dùng quy tắc mặc định 25 điểm/giờ.' },
+      rewardPoints: { type: 'integer', example: 50 },
     },
   },
   TaskApplicationRequest: {
@@ -443,7 +409,7 @@ module.exports = {
     properties: {
       taskId: { type: 'string', example: '6523456789abcdef00000901' },
       assigneeId: { type: 'string', example: '6acbbb6a7faf5d01bb5261e6' },
-      assigneeType: { type: 'string', enum: ['STAFF', 'VOLUNTEER'], example: 'VOLUNTEER', description: 'Loại tham gia nhiệm vụ, không phải role tài khoản. USER đăng ký nhận việc được phân công theo loại VOLUNTEER.' },
+      assigneeType: { type: 'string', enum: ['STAFF', 'VOLUNTEER'], example: 'VOLUNTEER' },
     },
   },
   TaskCheckInRequest: {
@@ -456,16 +422,10 @@ module.exports = {
   TaskCheckOutRequest: {
     type: 'object',
     required: ['assignmentId'],
-    description: 'Thời lượng do server tự tính từ check-in đến check-out, không nhận số giờ từ client. RewardPoints của task được cộng một lần khi người dùng hoàn thành.',
     properties: {
       assignmentId: { type: 'string', example: '6523456789abcdef00000911' },
+      hoursSpent: { type: 'number', minimum: 0.1, example: 4 },
       completionNote: { type: 'string', example: 'Đã hoàn tất phân loại 20 thùng quần áo' },
-    },
-  },
-  TaskAbsenceRequest: {
-    type: 'object',
-    properties: {
-      reason: { type: 'string', example: 'Không có mặt sau thời gian kết thúc ca' },
     },
   },
 };

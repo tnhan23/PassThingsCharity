@@ -3,7 +3,7 @@ module.exports = {
     post: {
       tags: ['Notifications (Chuông Thông Báo)'],
       summary: 'Admin phát thông báo mới (Broadcast toàn hệ thống hoặc gửi đích danh)',
-      description: 'Cho phép Admin tạo thông báo gửi tới toàn bộ người dùng (targetRole: ALL), tới 1 vai trò cụ thể (VD: USER, STAFF), hoặc đích danh 1 tài khoản (userId).',
+      description: 'Cho phép Admin tạo thông báo gửi tới toàn bộ người dùng (targetRole: ALL), tới 1 vai trò cụ thể (VD: VOLUNTEER, STAFF), hoặc đích danh 1 tài khoản (userId).',
       requestBody: {
         required: true,
         content: {
@@ -16,7 +16,7 @@ module.exports = {
                 content: { type: 'string', example: 'Kêu gọi các trạm mở cửa tiếp nhận áo ấm và đồ dùng thiết yếu.', description: 'Nội dung chi tiết thông báo' },
                 targetRole: {
                   type: 'string',
-                  enum: ['ALL', 'ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'STAFF', 'USER'],
+                  enum: ['ALL', 'ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'STAFF', 'VOLUNTEER', 'USER'],
                   default: 'ALL',
                   description: 'Nhóm người nhận theo vai trò (mặc định: ALL)',
                 },

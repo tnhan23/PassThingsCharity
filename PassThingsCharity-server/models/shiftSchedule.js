@@ -6,7 +6,6 @@ const mongoose = require('mongoose');
  */
 const shiftScheduleSchema = new mongoose.Schema(
     {
-        requiredStaff: { type: Number, min: 1, default: 1 },
         stationId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'Station',
@@ -65,10 +64,9 @@ shiftScheduleSchema.index(
     { staffId: 1, date: 1, templateId: 1 },
     {
         unique: true,
-        name: 'staff_date_template_active_v2',
         partialFilterExpression: {
             staffId: { $type: 'objectId' },
-            status: { $in: ['SCHEDULED', 'IN_PROGRESS', 'COMPLETED', 'ABSENT'] },
+            status: { $ne: 'CANCELLED' },
         },
     }
 );

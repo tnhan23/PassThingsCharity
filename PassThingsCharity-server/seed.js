@@ -49,6 +49,7 @@ const rolesData = [
   { _id: new mongoose.Types.ObjectId("6523456789abcdef00000006"), name: "ORG_MANAGER", description: "Quản lý tổ chức từ thiện" },
   { _id: new mongoose.Types.ObjectId("6523456789abcdef00000002"), name: "STATION_MANAGER", description: "Quản lý trạm tiếp nhận quyên góp" },
   { _id: new mongoose.Types.ObjectId("6523456789abcdef00000003"), name: "STAFF", description: "Nhân viên điều phối và xác nhận" },
+  { _id: new mongoose.Types.ObjectId("6523456789abcdef00000004"), name: "VOLUNTEER", description: "Tình nguyện viên nhận nhiệm vụ" },
   { _id: new mongoose.Types.ObjectId("6523456789abcdef00000005"), name: "USER", description: "Người dùng đăng tải đồ quyên góp" }
 ];
 
@@ -90,7 +91,7 @@ const usersData = [
     username: "volunteer_test_01",
     password: TEST_PASSWORD_HASH,
     fullName: "Tình Nguyện Viên Test",
-    role: new mongoose.Types.ObjectId("6523456789abcdef00000005"),
+    role: new mongoose.Types.ObjectId("6523456789abcdef00000004"),
     status: "active",
     phone: "0912345679"
   },
@@ -130,7 +131,7 @@ const stationsData = [
     latitude: "10.776889",
     longitude: "106.700806",
     openingTime: "08:00",
-    closingTime: "20:00",
+    closingTime: "17:00",
     isActive: true
   },
   {
@@ -141,7 +142,7 @@ const stationsData = [
     latitude: "10.758889",
     longitude: "106.666806",
     openingTime: "08:00",
-    closingTime: "20:00",
+    closingTime: "17:00",
     isActive: true
   },
   {
@@ -152,7 +153,7 @@ const stationsData = [
     latitude: "10.787800",
     longitude: "106.688100",
     openingTime: "08:00",
-    closingTime: "20:00",
+    closingTime: "17:00",
     isActive: true
   },
   {
@@ -163,7 +164,7 @@ const stationsData = [
     latitude: "10.729800",
     longitude: "106.702200",
     openingTime: "08:00",
-    closingTime: "20:00",
+    closingTime: "17:00",
     isActive: true
   },
   {
@@ -174,7 +175,7 @@ const stationsData = [
     latitude: "10.803800",
     longitude: "106.711800",
     openingTime: "08:00",
-    closingTime: "20:00",
+    closingTime: "17:00",
     isActive: true
   },
   {
@@ -185,7 +186,7 @@ const stationsData = [
     latitude: "10.822200",
     longitude: "106.687200",
     openingTime: "08:00",
-    closingTime: "20:00",
+    closingTime: "17:00",
     isActive: true
   }
 ];
@@ -563,7 +564,6 @@ async function seedAll() {
 
     console.log('[Seed] 1/25 Roles...');
     for (const item of rolesData) await upsertDoc(Role, { name: item.name }, item);
-    await require('./services/retireVolunteerRole')();
 
     console.log('[Seed] 2/25 Users...');
     for (const item of usersData) await upsertDoc(User, { username: item.username }, item);

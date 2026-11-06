@@ -17,11 +17,6 @@ const uploadDocs = require('../docs/upload.doc');
 const shiftDocs = require('../docs/shift.doc');
 const notificationDocs = require('../docs/notification.doc');
 
-// Hide campaign registration from Swagger only; backend endpoints stay enabled.
-const visibleOperationsDocs = Object.fromEntries(
-  Object.entries(operationsDocs).filter(([path]) => !path.startsWith('/workforce/volunteers/'))
-);
-
 const createSwaggerDocument = (port = process.env.PORT || 8080) => ({
   openapi: '3.0.0',
   info: {
@@ -31,8 +26,8 @@ const createSwaggerDocument = (port = process.env.PORT || 8080) => ({
   },
   servers: [
     {
-      url: '/',
-      description: 'Current Server',
+      url: `http://localhost:${port}`,
+      description: 'Local Development Server',
     },
   ],
   components: {
@@ -61,8 +56,7 @@ const createSwaggerDocument = (port = process.env.PORT || 8080) => ({
     ...itemCatalogDocs,
     ...campaignDocs,
     ...gamificationDocs,
-    ...visibleOperationsDocs,
-    ...require('../docs/inventory.doc'),
+    ...operationsDocs,
     ...uploadDocs,
     ...shiftDocs,
     ...notificationDocs,

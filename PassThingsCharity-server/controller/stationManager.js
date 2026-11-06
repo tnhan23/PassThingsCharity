@@ -37,55 +37,58 @@ async function managerCanUseStation(userId, stationId) {
 async function createStaff(req, res, next) {
   try {
     const { stationId } = req.params;
-    const body = req.body || {};
-    const fields = ['userId', 'email', 'phone', 'identifier'];
-    const supplied = fields.filter(field => body[field] !== undefined);
-    if (!mongoose.isValidObjectId(stationId) || supplied.length !== 1 || Object.keys(body).some(field => !fields.includes(field))) {
-      return res.status(400).json({ error: 'ID trạm phải hợp lệ và chỉ gửi một trong các trường userId, email, phone hoặc identifier. Không gửi thông tin tạo tài khoản.' });
-    }
-    const field = supplied[0];
-    if (typeof body[field] !== 'string' || !body[field].trim()) {
-      return res.status(400).json({ error: 'ID người dùng, email hoặc số điện thoại phải là chuỗi không để trống.' });
-    }
-    const value = body[field].trim();
-    let filter;
-    if (field === 'userId' || (field === 'identifier' && mongoose.isValidObjectId(value))) {
-      if (!mongoose.isValidObjectId(value)) return res.status(400).json({ error: 'ID người dùng không hợp lệ.' });
-      filter = { _id: value };
-    } else if (field === 'email' || (field === 'identifier' && value.includes('@'))) {
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return res.status(400).json({ error: 'Email không hợp lệ.' });
-      filter = { email: value.toLowerCase() };
-    } else {
-      if (!/^\d{10}$/.test(value)) return res.status(400).json({ error: 'Số điện thoại phải gồm đúng 10 chữ số.' });
-      filter = { phone: value };
+    const { email, username, password, fullName, phone } = req.body || {};
+    if (
+      !mongoose.isValidObjectId(stationId) ||
+      typeof email !== 'string' || !email.trim() ||
+      typeof username !== 'string' || !username.trim() ||
+      typeof password !== 'string' || !password ||
+      typeof fullName !== 'string' || !fullName.trim() ||
+      typeof phone !== 'string' || !/^\d{10}$/.test(phone.trim())
+    ) {
+      return res.status(400).json({
+        error: 'Thông tin không hợp lệ; phone phải gồm đúng 10 chữ số.',
+      })
     }
     const access = await managerCanUseStation(req.user._id, stationId);
-    if (access.error) return res.status(403).json({ error: access.error });
-    let response;
-    await mongoose.connection.transaction(async session => {
-      const accounts = await User.find(filter).limit(2).session(session).populate('role', 'name');
-      if (!accounts.length) throw Object.assign(new Error('Không tìm thấy tài khoản. Người dùng cần đăng ký tài khoản trước.'), { status: 404 });
-      if (accounts.length > 1) throw Object.assign(new Error('Có nhiều tài khoản dùng số điện thoại này. Vui lòng tìm bằng ID người dùng hoặc email.'), { status: 409 });
-      const staff = accounts[0];
-      if (staff.status !== 'active') throw Object.assign(new Error('Chỉ có thể thêm tài khoản đang hoạt động vào trạm.'), { status: 409 });
-      if (!['USER', 'STAFF'].includes(staff.role?.name)) throw Object.assign(new Error('Chỉ có thể thêm tài khoản có role USER hoặc STAFF. Không thể đổi role tài khoản quản lý bằng API này.'), { status: 409 });
-      const existing = await StationStaff.findOne({ stationId: access.station._id, userId: staff._id }).session(session);
-      if (existing) throw Object.assign(new Error('Nhân viên này đã thuộc trạm.'), { status: 409 });
-      const staffRole = await Role.findOne({ name: 'STAFF' }).session(session);
-      if (!staffRole) throw Object.assign(new Error('Chưa cấu hình role STAFF trong hệ thống.'), { status: 500 });
-      if (staff.role.name === 'USER') {
-        staff.role = staffRole._id;
-        await staff.save({ session });
-      }
-      await StationStaff.create([{ stationId: access.station._id, userId: staff._id }], { session });
-      response = { message: 'Đã thêm vào trạm thành công.', user: {
-        id: staff._id, username: staff.username, fullName: staff.fullName, email: staff.email,
-        phone: staff.phone, role: 'STAFF', stationId: access.station._id,
-      } };
+    if (access.error) {
+      return res.status(403).json({ error: access.error });
+    }
+
+    const staffRole = await Role.findOne({ name: 'STAFF' });
+    if (!staffRole) {
+      return res.status(500).json({
+        error: 'Chưa có role STAFF trong collection roles.',
+      });
+    }
+    const staff = await User.create({
+      email: email.trim().toLowerCase(),
+      username: username.trim(),
+      password: await bcrypt.hash(password, 12),
+      fullName: fullName.trim(),
+      phone: phone.trim(),
+      role: staffRole._id,
     });
-    return res.status(201).json(response);
+    await StationStaff.create({
+      stationId: access.station._id,
+      userId: staff._id,
+    });
+    return res.status(201).json({
+      message: 'Đã tạo tài khoản STAFF.',
+      user: {
+        id: staff._id,
+        username: staff.username,
+        fullName: staff.fullName,
+        role: 'STAFF',
+        stationId: access.station._id,
+      },
+    });
   } catch (error) {
-    if (error.code === 11000) return res.status(409).json({ error: 'Nhân viên này đã thuộc trạm.' });
+    if (error.code === 11000) {
+      return res.status(409).json({
+        error: 'Email hoặc username đã được sử dụng.',
+      });
+    }
     return next(error);
   }
 }

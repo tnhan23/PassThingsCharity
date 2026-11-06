@@ -2,60 +2,15 @@ const User=require('../models/user');
 const Role=require('../models/role');
 const mongoose  = require('mongoose');
 const bcrypt = require('bcryptjs');
-const resourceImageFields = require('../utils/resourceImageFields');
-const PointTransaction = require('../models/pointTransaction');
-const UserAchievement = require('../models/userAchievement');
-const Certificate = require('../models/certificate');
-async function getMyProfile(req, res, next) {
-  // checkBearerToken has already loaded this account and populated its role.
-  // Explicitly list public profile fields instead of serializing the account.
-  try {
-    const user = req.user;
-    const [transactions, achievements, certificates] = await Promise.all([
-      PointTransaction.find({ userId: user._id }).sort({ createdAt: -1 }),
-      UserAchievement.find({ userId: user._id }).populate('achievementId').sort({ unlockedAt: -1 }),
-      Certificate.find({ userId: user._id }).populate('campaignId', 'title').sort({ issueDate: -1 }),
-    ]);
-
-    return res.status(200).json({
-      user: {
-        id: user._id,
-        email: user.email,
-        username: user.username,
-        fullName: user.fullName,
-        phone: user.phone || null,
-        avatarUrl: user.avatarUrl || null,
-        role: user.role?.name,
-        status: user.status || null,
-      },
-      gamification: {
-        totalPoints: transactions.reduce((total, transaction) => total + transaction.points, 0),
-        pointTransactions: transactions,
-        unlockedAchievements: achievements,
-        certificates: certificates.map((certificate) => ({
-          ...certificate.toObject(),
-          ...(certificate.certificateType === 'MILESTONE'
-            ? { pdfDownloadUrl: `/gamification/certificates/${certificate._id}/pdf` }
-            : {}),
-        })),
-      },
-    });
-  } catch (error) {
-    return next(error);
-  }
-}
-
 async function updateMyProfile(req, res, next) {
   try {
-    const { email, username, fullName, phone, avatarUrl } = req.body || {};
-    const imageFields = resourceImageFields(req.body || {}, 'avatarUrl');
+    const { email, username, fullName, phone } = req.body || {};
 
     if (
       email === undefined &&
       username === undefined &&
       fullName === undefined &&
-      phone === undefined &&
-      avatarUrl === undefined
+      phone === undefined
     ) {
       return res.status(400).json({
         error: 'Cần gửi ít nhất một thông tin hồ sơ cần cập nhật.',
@@ -102,11 +57,6 @@ async function updateMyProfile(req, res, next) {
     if (phone !== undefined) {
       user.phone = phone.trim();
     }
-    if (avatarUrl !== undefined) {
-      user.avatarUrl = imageFields.avatarUrl;
-      // A URL supplied with the form has no verified Cloudinary public ID.
-      if (user.isModified('avatarUrl')) user.imagePublicId = null;
-    }
 
     await user.save();
     await user.populate('role', 'name');
@@ -119,7 +69,6 @@ async function updateMyProfile(req, res, next) {
         username: user.username,
         fullName: user.fullName,
         phone: user.phone,
-        avatarUrl: user.avatarUrl,
         role: user.role?.name,
         status: user.status,
       },
@@ -176,7 +125,7 @@ async function deleteMyAccount(req, res, next) {
   }
 }
 module.exports={
-  getMyProfile,
   updateMyProfile,
-  deleteMyAccount,
+  deleteMyAccount
+ 
 };
