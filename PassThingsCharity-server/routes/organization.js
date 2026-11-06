@@ -11,8 +11,15 @@ const {
 const { createStation } = require('../controller/station');
 const checkBearerToken = require('../middleware/checkBearerToken');
 const checkRole = require('../middleware/checkRole');
+const { createUploadHandler } = require('../utils/contributionUpload');
 
 router.use(checkBearerToken);
+
+router.post(
+  '/upload-evidence',
+  checkRole(['ADMIN', 'ORG_MANAGER', 'USER']),
+  createUploadHandler('organization-evidence')
+);
 
 router.get(
   '/',

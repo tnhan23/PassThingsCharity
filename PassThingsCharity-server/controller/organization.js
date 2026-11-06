@@ -62,6 +62,41 @@ async function getOrganization(req, res, next) {
   }
 }
 
+function parseEvidenceImageUrls(value, required = true) {
+  if (value === undefined || value === null) {
+    if (required) {
+      throw Object.assign(
+        new Error('Vui lòng đính kèm ít nhất 1 hình ảnh bằng chứng xác minh tổ chức (evidenceImageUrls).'),
+        { status: 400 }
+      );
+    }
+    return [];
+  }
+
+  if (
+    !Array.isArray(value) ||
+    (required && value.length === 0) ||
+    value.length > 10 ||
+    new Set(value).size !== value.length ||
+    value.some((url) => {
+      if (typeof url !== 'string') return true;
+      try {
+        const parsed = new URL(url.trim());
+        return parsed.protocol !== 'https:' || parsed.hostname !== 'res.cloudinary.com';
+      } catch {
+        return true;
+      }
+    })
+  ) {
+    throw Object.assign(
+      new Error('evidenceImageUrls phải là mảng từ 1 đến 10 URL ảnh Cloudinary (HTTPS) hợp lệ, không trùng lặp.'),
+      { status: 400 }
+    );
+  }
+
+  return value.map((url) => url.trim());
+}
+
 async function createOrganization(req, res, next) {
   try {
     const body = req.body || {};
@@ -83,6 +118,7 @@ async function createOrganization(req, res, next) {
       });
     }
     const isAdmin = req.user.role.name === 'ADMIN';
+    const evidenceImageUrls = parseEvidenceImageUrls(body.evidenceImageUrls, !isAdmin);
     const organization = await Organization.create({
       ...imageFields,
       name: body.name.trim(),
@@ -93,6 +129,7 @@ async function createOrganization(req, res, next) {
       description: typeof body.description === 'string' ? body.description.trim() : '',
       operatingArea: typeof body.operatingArea === 'string' ? body.operatingArea.trim() : '',
       idCardNumber: typeof body.idCardNumber === 'string' ? body.idCardNumber.trim() : '',
+      evidenceImageUrls,
       submittedBy: req.user._id,
       status: isAdmin ? 'APPROVED' : 'PENDING',
       isVerified: isAdmin,
@@ -166,6 +203,9 @@ async function updateOrganization(req, res, next) {
     }
     if (typeof body.email === 'string') {
       organization.email = body.email.trim();
+    }
+    if ('evidenceImageUrls' in body) {
+      organization.evidenceImageUrls = parseEvidenceImageUrls(body.evidenceImageUrls, !isAdmin);
     }
 
     if (!isAdmin) {
