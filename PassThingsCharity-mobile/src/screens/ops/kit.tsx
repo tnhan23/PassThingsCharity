@@ -6,7 +6,7 @@ import { resultText } from "@/api/backend";
 import { isOperator, useSession } from "@/api/session";
 import { Screen } from "@/components/chrome";
 import { Field } from "@/components/form";
-import { Body, Button, Card, Tap, Title } from "@/components/ui";
+import { Badge, Body, Button, Card, Icon, Pill, Tap, Title } from "@/components/ui";
 import { colors, fonts } from "@/theme";
 
 export type Row = {
@@ -21,8 +21,14 @@ export type Row = {
   unit?: string;
   fullName?: string;
   username?: string;
+  role?: string;
   ownerId?: string;
   phone?: string;
+  email?: string;
+  description?: string;
+  operatingArea?: string;
+  idCardNumber?: string;
+  rejectionReason?: string;
   recipientName?: string;
   recruitmentStatus?: string;
   campaignId?: { title?: string; _id?: string } | string;
@@ -51,6 +57,21 @@ export function can(role: string, allowed: string[]) {
   return role !== "" && allowed.includes(role);
 }
 
+export const deskAccess = {
+  orgs: ["ADMIN", "ORG_MANAGER", "STATION_MANAGER"],
+  stations: ["ADMIN", "ORG_MANAGER", "STATION_MANAGER"],
+  catalog: ["ADMIN", "ORG_MANAGER", "STATION_MANAGER"],
+  campaigns: ["ADMIN", "ORG_MANAGER", "STATION_MANAGER"],
+  intake: ["STATION_MANAGER", "STAFF"],
+  users: ["ADMIN"],
+  alerts: ["ADMIN"],
+  transfers: ["ADMIN", "STATION_MANAGER", "STAFF"],
+  relief: ["ADMIN", "STATION_MANAGER", "STAFF"],
+  crew: ["ADMIN", "STATION_MANAGER", "STAFF"],
+  rewards: ["ADMIN", "ORG_MANAGER", "STATION_MANAGER", "STAFF"],
+  stock: ["ADMIN", "STATION_MANAGER", "STAFF"],
+} as const;
+
 const campaignNext: Record<string, string[]> = {
   DRAFT: ["PUBLISHED", "CANCELLED"],
   PUBLISHED: ["ACTIVE", "CANCELLED"],
@@ -64,9 +85,7 @@ export function nextCampaignStatuses(status: string) {
 }
 
 export function RoleNote() {
-  const role = useRole();
-  if (role) return <Body muted>{`Vai trò đang đăng nhập: ${role}. Nút ghi dữ liệu chỉ hiện khi server cho phép vai trò này.`}</Body>;
-  return <Body>Đăng nhập lại để app nhận vai trò. Nút ghi dữ liệu sẽ hiện theo quyền server sau lần đăng nhập đó.</Body>;
+  return null;
 }
 
 export function OpsGate({ children }: { children: ReactNode }) {
@@ -155,9 +174,50 @@ export function useJob() {
 
 export function Note({ text }: { text: string }) {
   if (!text) return null;
+  const isErr = /không|lỗi|chưa|từ chối|thiếu|sai/i.test(text);
   return (
-    <Card>
-      <Body>{text}</Body>
+    <Card
+      style={{
+        backgroundColor: isErr ? colors.errorSoft : colors.primarySoft,
+        borderColor: isErr ? "#f3b8b3" : colors.hairline,
+      }}
+    >
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+        <Icon name={isErr ? "error-outline" : "check-circle"} size={20} color={isErr ? colors.error : colors.primary} />
+        <Text
+          style={{
+            flex: 1,
+            fontFamily: fonts.medium,
+            fontSize: 14,
+            lineHeight: 20,
+            color: isErr ? colors.error : colors.primary,
+          }}
+        >
+          {text}
+        </Text>
+      </View>
+    </Card>
+  );
+}
+
+export function Fold({ title, children }: { title: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Card style={open ? { borderColor: colors.primary, borderWidth: 1.5 } : undefined}>
+      <Tap onPress={() => setOpen((value) => !value)} accessibilityLabel={title}>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 38, gap: 10 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+            <Icon name={open ? "remove-circle-outline" : "add-circle-outline"} size={20} color={colors.primary} />
+            <Text style={{ flex: 1, fontFamily: fonts.bold, fontSize: 16, color: colors.ink }}>{title}</Text>
+          </View>
+          <Badge label={open ? "Thu gọn" : "Mở"} tone={open ? "primary" : "neutral"} />
+        </View>
+      </Tap>
+      {open ? (
+        <View style={{ gap: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.hairline }}>
+          {children}
+        </View>
+      ) : null}
     </Card>
   );
 }
@@ -167,11 +227,13 @@ export function PickList({
   selected,
   onPick,
   detail,
+  panel,
 }: {
   rows: Row[] | null;
   selected: string;
   onPick: (id: string) => void;
   detail: (row: Row) => string;
+  panel?: (row: Row) => ReactNode;
 }) {
   if (!rows) {
     return (
@@ -181,17 +243,49 @@ export function PickList({
       </Card>
     );
   }
-  if (rows.length === 0) return <Body>Chưa có dòng nào cho tài khoản này.</Body>;
+  if (rows.length === 0) {
+    return (
+      <Card>
+        <Body muted>Chưa có dòng nào cho tài khoản này.</Body>
+      </Card>
+    );
+  }
   return (
-    <View style={{ gap: 8 }}>
-      {rows.map((row) => (
-        <Tap key={row._id} onPress={() => onPick(row._id)}>
-          <Card style={selected === row._id ? { borderWidth: 1.5, borderColor: colors.primary } : undefined}>
-            <Text style={{ fontFamily: fonts.semibold, fontSize: 16, color: colors.ink }}>{labelOf(row)}</Text>
-            <Body muted>{detail(row)}</Body>
+    <View style={{ gap: 10 }}>
+      {rows.map((row) => {
+        const open = selected === row._id;
+        const subtitle = detail(row);
+        return (
+          <Card key={row._id} style={open ? { borderWidth: 1.5, borderColor: colors.primary } : undefined}>
+            <Tap onPress={() => onPick(open ? "" : row._id)} accessibilityLabel={labelOf(row)}>
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                <View style={{ flex: 1, gap: 4 }}>
+                  <Text style={{ fontFamily: fonts.bold, fontSize: 16, color: colors.ink }}>{labelOf(row)}</Text>
+                  {subtitle ? (
+                    <Text
+                      style={{
+                        fontFamily: fonts.regular,
+                        fontSize: 13,
+                        lineHeight: 18,
+                        color: colors.muted,
+                        fontVariant: ["tabular-nums"],
+                      }}
+                    >
+                      {subtitle}
+                    </Text>
+                  ) : null}
+                </View>
+                <Icon name={open ? "expand-less" : "expand-more"} size={22} color={colors.primary} />
+              </View>
+            </Tap>
+            {open && panel ? (
+              <View style={{ gap: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.hairline }}>
+                {panel(row)}
+              </View>
+            ) : null}
           </Card>
-        </Tap>
-      ))}
+        );
+      })}
     </View>
   );
 }
@@ -200,7 +294,7 @@ export function Units({ value, onChange }: { value: string; onChange: (unit: str
   return (
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
       {["KG", "PAIR", "BOX", "PACK", "PIECE"].map((unit) => (
-        <Button key={unit} label={unit} tone={value === unit ? "primary" : "ghost"} onPress={() => onChange(unit)} />
+        <Pill key={unit} label={unit} active={value === unit} onPress={() => onChange(unit)} />
       ))}
     </View>
   );

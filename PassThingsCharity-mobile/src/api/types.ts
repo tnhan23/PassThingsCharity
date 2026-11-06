@@ -6,6 +6,7 @@ export type SessionUser = {
   fullName?: string;
   avatarUrl?: string;
   role?: string;
+  stations?: StationRow[];
 };
 
 export type ShiftScheduleRow = {
@@ -30,6 +31,12 @@ export type NoticeRow = {
 
 export type OrgRef = { name?: string; code?: string; address?: string; phone?: string } | string;
 
+export type CampaignProgress = {
+  totalItemTypes: number;
+  fulfilledItemTypes: number;
+  isFulfilled: boolean;
+};
+
 export type CampaignSummary = {
   _id: string;
   title: string;
@@ -38,6 +45,8 @@ export type CampaignSummary = {
   endDate: string;
   status: string;
   organizationId: OrgRef;
+  items?: { itemTypeId?: { _id?: string; name?: string } | string; progressPercent?: number }[];
+  progress?: CampaignProgress;
 };
 
 export type ItemTypeRef = { name?: string; unit?: string } | string;
@@ -66,16 +75,33 @@ export type StationRow = {
   longitude?: string;
   openingTime?: string;
   closingTime?: string;
+  distanceKm?: number | null;
+  formattedDistance?: string | null;
 };
 
 export type NamedRef = { _id?: string; name?: string; title?: string; address?: string } | string | null;
+
+export type ContributionItemRow = {
+  itemTypeId?: { _id?: string; name?: string; unit?: string } | string;
+  quantity: number;
+  unit: string;
+  note?: string;
+};
 
 export type ContributionRow = {
   _id: string;
   code: string;
   status: string;
+  createdAt?: string;
+  notes?: string;
   campaignId?: NamedRef;
   stationId?: NamedRef;
+};
+
+export type ContributionDetail = {
+  contribution: ContributionRow;
+  items: ContributionItemRow[];
+  images: { imageUrl?: string }[];
 };
 
 export type TransferRow = {
@@ -120,7 +146,22 @@ export type AssignmentRow = {
   taskId?: { title?: string } | string | null;
 };
 
+export type OrgApplication = {
+  _id: string;
+  name: string;
+  code?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  description?: string;
+  operatingArea?: string;
+  idCardNumber?: string;
+  status?: string;
+  isVerified?: boolean;
+  rejectionReason?: string;
+};
+
 export type PointsPayload = {
   totalPoints: number;
-  transactions: { _id: string; points: number; type: string; description?: string; createdAt?: string }[];
+  transactions: { _id: string; points: number; type: string; sourceId?: string; description?: string; createdAt?: string }[];
 };

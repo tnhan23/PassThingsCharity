@@ -1,4 +1,3 @@
-import { Platform } from "react-native";
 import { attestationHeaders, resetAttestation } from "@/api/attest";
 import { apiBaseUrl } from "@/api/base";
 import { signatureHeaders } from "@/api/sign";
@@ -43,7 +42,7 @@ export async function api<T>(
   }
 
   const text = await response.text();
-  let data: { error?: unknown } = {};
+  let data: { error?: unknown; code?: unknown } = {};
   if (text) {
     try {
       data = JSON.parse(text) as { error?: unknown; code?: unknown };
@@ -66,17 +65,29 @@ export async function api<T>(
   return data as T;
 }
 
-export type UploadFile = { uri: string; name: string; type: string };
+export type UploadFile = { uri: string; name: string; type: string; base64?: string };
 
-export async function uploadImages<T>(path: string, token: string, files: UploadFile[], retried = false): Promise<T> {
+function imagePart(file: UploadFile) {
+  if (!file.base64) return null;
+  const binary = atob(file.base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return { name: file.name, type: file.type, bytes: () => bytes };
+}
+
+export async function uploadImages<T>(path: string, token: string, files: UploadFile[], field = "images", retried = false): Promise<T> {
+  if (files.length !== 1) {
+    throw new ApiError(0, "Mỗi lần chỉ tải được một ảnh.");
+  }
   const body = new FormData();
   for (const file of files) {
-    if (Platform.OS === "web") {
-      const blob = await fetch(file.uri).then((response) => response.blob());
-      body.append("images", blob, file.name);
-    } else {
-      body.append("images", { uri: file.uri, name: file.name, type: file.type } as unknown as Blob);
+    const part = imagePart(file);
+    if (part) {
+      body.append(field, part as unknown as Blob);
+      continue;
     }
+    const blob = await fetch(file.uri).then((response) => response.blob());
+    body.append(field, blob, file.name);
   }
   const fileMark = files.map((file) => `${encodeURIComponent(file.name)}:${encodeURIComponent(file.type)}`).join(",");
   let response: Response;
@@ -96,7 +107,7 @@ export async function uploadImages<T>(path: string, token: string, files: Upload
     throw new ApiError(0, "Không kết nối được máy chủ.");
   }
   const text = await response.text();
-  let data: { error?: unknown } = {};
+  let data: { error?: unknown; code?: unknown } = {};
   if (text) {
     try {
       data = JSON.parse(text) as { error?: unknown; code?: unknown };
@@ -108,7 +119,7 @@ export async function uploadImages<T>(path: string, token: string, files: Upload
     const code = typeof data.code === "string" ? data.code : "";
     if (!retried && code === "app_attest_unknown") {
       await resetAttestation();
-      return uploadImages(path, token, files, true);
+      return uploadImages(path, token, files, field, true);
     }
     const message = typeof data.error === "string" ? data.error : "Không tải được ảnh.";
     throw new ApiError(response.status, message, code);

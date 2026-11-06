@@ -4,14 +4,11 @@ import { ActivityIndicator, ScrollView, Text, TextInput, View } from "react-nati
 import * as Location from "expo-location";
 import { backend } from "@/api/backend";
 import { ApiError } from "@/api/client";
-import { formatDay, itemName, itemUnit, orgName, statusLabel } from "@/api/labels";
+import { campaignPhase, donorLabel, formatDay, itemName, itemUnit, orgName } from "@/api/labels";
 import type { CampaignDetail, CampaignSummary } from "@/api/types";
 import { Screen } from "@/components/chrome";
-import { ReliefNumbers } from "@/components/server-flow";
-import { Body, Button, Card, Eyebrow, Icon, Meter, Photo, Pill, Tap, Title } from "@/components/ui";
+import { Badge, Body, Button, Card, Eyebrow, Icon, Meter, Photo, Pill, StatRow, Tap, Title } from "@/components/ui";
 import { colors, fonts, photos } from "@/theme";
-
-const chips = ["Tất cả", "Áo ấm", "Sách vở", "Đồ gia dụng", "Y tế", "Đồ chơi"];
 
 const urgent = [
   { title: "Áo len trẻ em", meta: "Size 4–10 tuổi, còn tốt", gap: "Thiếu 45 kg", photo: photos.child, href: "/campaign" as const },
@@ -91,16 +88,6 @@ export function HomeScreen({ state = "content" }: { state?: "content" | "loading
   return (
     <Screen tab="home">
       <SearchField />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-        {chips.map((chip, index) => (
-          <Pill
-            key={chip}
-            label={chip}
-            active={index === 0}
-            onPress={() => router.push(index === 0 ? "/" : "/home/empty")}
-          />
-        ))}
-      </ScrollView>
       <View style={{ flexDirection: "row", gap: 10, alignItems: "stretch" }}>
         <Card style={{ flex: 1, backgroundColor: colors.primary, justifyContent: "space-between" }}>
           <Text style={{ fontFamily: fonts.semibold, color: colors.onPrimary, fontSize: 13 }}>Bạn có đồ dư?</Text>
@@ -113,11 +100,41 @@ export function HomeScreen({ state = "content" }: { state?: "content" | "loading
         <Card style={{ flex: 1, justifyContent: "space-between" }}>
           <Text style={{ fontFamily: fonts.semibold, color: colors.secondary, fontSize: 13 }}>Đồng hành</Text>
           <Text style={{ fontFamily: fonts.bold, color: colors.ink, fontSize: 18 }}>Tham gia TNV</Text>
-          <Body muted>Phân loại, đóng gói, vận chuyển.</Body>
-          <Button label="Đăng ký TNV" tone="ghost" onPress={() => router.push("/volunteer/form")} />
+          <Body muted>Phân loại, đóng gói, vận chuyển tại trạm.</Body>
+          <Button label="Việc đang tuyển" tone="ghost" onPress={() => router.push("/jobs")} />
         </Card>
       </View>
-      <Body muted>Mọi kiện được kiểm định tại trạm trước khi ghi nhận và trao đi.</Body>
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        {[
+          { label: "Trạm gần bạn", icon: "place" as const, href: "/stations/map" as const },
+          { label: "Việc tại trạm", icon: "volunteer-activism" as const, href: "/jobs" as const },
+          { label: "Hồ sơ & Điểm", icon: "card-membership" as const, href: "/profile/full" as const },
+        ].map((shortcut) => (
+          <Tap
+            key={shortcut.label}
+            onPress={() => router.push(shortcut.href)}
+            style={{
+              flex: 1,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 6,
+              minHeight: 42,
+              paddingHorizontal: 10,
+              paddingVertical: 10,
+              borderRadius: 12,
+              backgroundColor: colors.card,
+              borderWidth: 1,
+              borderColor: colors.hairline,
+            }}
+          >
+            <Icon name={shortcut.icon} size={16} color={colors.primary} />
+            <Text style={{ fontFamily: fonts.semibold, fontSize: 12, color: colors.ink }} numberOfLines={1}>
+              {shortcut.label}
+            </Text>
+          </Tap>
+        ))}
+      </View>
       <FeaturedCampaigns />
     </Screen>
   );
@@ -138,7 +155,7 @@ export function SearchScreen({ mode = "ready" }: { mode?: "ready" | "loading" | 
     let cancelled = false;
     backend.listCampaigns({ search: query })
       .then((data) => {
-        if (!cancelled) setFound(data.campaigns);
+        if (!cancelled) setFound(data.campaigns.filter((campaign) => !campaign.title.startsWith("[Mẫu]")));
       })
       .catch((caught) => {
         if (!cancelled) setProblem(caught instanceof ApiError ? caught.message : "Không tìm được.");
@@ -177,22 +194,11 @@ export function SearchScreen({ mode = "ready" }: { mode?: "ready" | "loading" | 
         <Tap key={campaign._id} onPress={() => router.push(`/campaign?id=${campaign._id}`)}>
           <Card>
             <Text style={{ fontFamily: fonts.semibold, fontSize: 16, color: colors.ink }}>{campaign.title}</Text>
-            <Body muted>{`${statusLabel(campaign.status)} · ${orgName(campaign.organizationId)}`}</Body>
+            <Body muted>{`${donorLabel(campaign)} · ${orgName(campaign.organizationId)}`}</Body>
           </Card>
         </Tap>
       ))}
       {found && found.length === 0 ? <Body>Không có chiến dịch khớp từ khóa này.</Body> : null}
-      {urgent.slice(0, 2).map((item) => (
-        <Tap key={item.title} onPress={() => router.push("/campaign")}>
-          <Card>
-            <Text style={{ fontFamily: fonts.semibold, fontSize: 16, color: colors.ink }}>{item.title}</Text>
-            <Body muted>{item.meta}</Body>
-          </Card>
-        </Tap>
-      ))}
-      <Button label="Không có kết quả" tone="ghost" onPress={() => router.push("/home/empty")} />
-      <Button label="Đang tìm" tone="ghost" onPress={() => router.push("/search/loading")} />
-      <Button label="Tìm bị lỗi" tone="ghost" onPress={() => router.push("/search/error")} />
     </Screen>
   );
 }
@@ -225,9 +231,6 @@ function SearchField({ autoFocus }: { autoFocus?: boolean }) {
         }}
         style={{ flex: 1, fontFamily: fonts.regular, fontSize: 15, color: colors.ink, paddingVertical: 10 }}
       />
-      <Tap onPress={() => router.push("/home/empty")} accessibilityLabel="Bộ lọc">
-        <Icon name="tune" size={20} color={colors.primary} />
-      </Tap>
     </View>
   );
 }
@@ -266,7 +269,6 @@ export function CampaignScreen({ mode = "content" }: { mode?: "content" | "loadi
   return (
     <Screen tab="give">
       <CampaignLive />
-      <Button label="Tôi sẽ mang đồ tới trạm" onPress={() => router.push("/stations/map")} />
     </Screen>
   );
 }
@@ -274,6 +276,7 @@ export function CampaignScreen({ mode = "content" }: { mode?: "content" | "loadi
 function FeaturedCampaigns() {
   const [campaigns, setCampaigns] = useState<CampaignSummary[] | null>(null);
   const [problem, setProblem] = useState("");
+  const [phase, setPhase] = useState<"open" | "soon" | "closed">("open");
 
   useEffect(() => {
     let cancelled = false;
@@ -304,34 +307,93 @@ function FeaturedCampaigns() {
       <Card>
         <Title>Chưa đọc được chiến dịch từ máy chủ</Title>
         <Body>{problem || "Máy chủ không trả danh sách."}</Body>
-        <Body muted>Bản minh họa Áo ấm Hà Giang vẫn mở ở mục Tặng đồ khi bạn cần xem bố cục.</Body>
-        <Button label="Mở màn minh họa" tone="ghost" onPress={() => router.push("/campaign")} />
       </Card>
     );
   }
 
-  if (campaigns.length === 0) {
-    return (
-      <Card>
-        <Title>Chưa có chiến dịch đang mở</Title>
-        <Body>Máy chủ không có chiến dịch đã phát hành. Bản nháp không hiện trên trang này.</Body>
-      </Card>
-    );
-  }
+  const listed = campaigns.filter((campaign) => !campaign.title.startsWith("[Mẫu]"));
+  const counts = {
+    open: listed.filter((campaign) => campaignPhase(campaign) === "open").length,
+    soon: listed.filter((campaign) => campaignPhase(campaign) === "soon").length,
+    closed: listed.filter((campaign) => campaignPhase(campaign) === "closed").length,
+  };
+  const visible = listed.filter((campaign) => campaignPhase(campaign) === phase);
+  const emptyCopy = {
+    open: "Chưa có chiến dịch nào máy chủ đang để ở trạng thái nhận đồ.",
+    soon: "Chưa có chiến dịch đã phát hành nhưng chưa tới ngày bắt đầu.",
+    closed: "Chưa có chiến dịch đã kết thúc hoặc đã hủy.",
+  }[phase];
 
   return (
     <View style={{ gap: 14 }}>
-      <Eyebrow>Chiến dịch từ máy chủ</Eyebrow>
-      {campaigns.map((campaign) => (
-        <Tap key={campaign._id} onPress={() => router.push(`/campaign?id=${campaign._id}`)}>
-          <Card>
-            <Eyebrow>{`${statusLabel(campaign.status)} · ${formatDay(campaign.startDate)} đến ${formatDay(campaign.endDate)}`}</Eyebrow>
-            <Title>{campaign.title}</Title>
-            <Body muted>{orgName(campaign.organizationId)}</Body>
-            {campaign.description ? <Body>{campaign.description}</Body> : null}
-          </Card>
-        </Tap>
-      ))}
+      <Title>{phase === "open" ? "Chiến dịch đang diễn ra" : phase === "soon" ? "Sắp mở" : "Đã kết thúc"}</Title>
+      <StatRow
+        items={[
+          { label: "Đang nhận", value: counts.open, unit: "đợt", tone: "primary" },
+          { label: "Sắp mở", value: counts.soon, unit: "đợt", tone: "coral" },
+          { label: "Đã kết thúc", value: counts.closed, unit: "đợt", tone: "ink" },
+        ]}
+      />
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+        <Pill label={`Đang nhận (${counts.open})`} active={phase === "open"} onPress={() => setPhase("open")} />
+        <Pill label={`Sắp mở (${counts.soon})`} active={phase === "soon"} onPress={() => setPhase("soon")} />
+        <Pill label={`Đã xong (${counts.closed})`} active={phase === "closed"} onPress={() => setPhase("closed")} />
+      </ScrollView>
+      {visible.length === 0 ? (
+        <Card>
+          <Title>Không có chiến dịch ở mục này</Title>
+          <Body>{emptyCopy}</Body>
+        </Card>
+      ) : null}
+      {visible.map((campaign) => {
+        const currentPhase = campaignPhase(campaign);
+        return (
+          <Tap
+            key={campaign._id}
+            onPress={() => {
+              router.navigate(`/campaign?id=${campaign._id}`);
+            }}
+          >
+            <Card>
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                <Badge
+                  label={donorLabel(campaign)}
+                  tone={currentPhase === "open" ? "primary" : currentPhase === "soon" ? "warning" : "neutral"}
+                />
+                <Text style={{ fontFamily: fonts.medium, fontSize: 12, color: colors.muted, fontVariant: ["tabular-nums"] }}>
+                  {`${formatDay(campaign.startDate)} – ${formatDay(campaign.endDate)}`}
+                </Text>
+              </View>
+              <Title>{campaign.title}</Title>
+              <Body muted>{orgName(campaign.organizationId)}</Body>
+              {campaign.progress && campaign.progress.totalItemTypes > 0 ? (
+                <Meter
+                  value={campaign.progress.fulfilledItemTypes}
+                  max={campaign.progress.totalItemTypes}
+                  unit="loại"
+                  label={`Đã đủ ${campaign.progress.fulfilledItemTypes} trên ${campaign.progress.totalItemTypes} loại đồ cần nhận.`}
+                />
+              ) : null}
+              {campaign.description ? <Body numberOfLines={2}>{campaign.description}</Body> : null}
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  paddingTop: 8,
+                  borderTopWidth: 1,
+                  borderTopColor: colors.hairline,
+                }}
+              >
+                <Text style={{ fontFamily: fonts.semibold, fontSize: 13, color: colors.primary }}>
+                  Xem chi tiết & trạm tiếp nhận
+                </Text>
+                <Icon name="chevron-right" size={18} color={colors.primary} />
+              </View>
+            </Card>
+          </Tap>
+        );
+      })}
     </View>
   );
 }
@@ -349,10 +411,12 @@ function CampaignLive() {
         let id = requestedId;
         if (!id) {
           const list = await backend.listCampaigns();
-          id = list.campaigns[0]?._id ?? "";
+          id = list.campaigns.find((campaign) => campaignPhase(campaign) === "open")?._id
+            ?? list.campaigns.find((campaign) => campaignPhase(campaign) === "soon")?._id
+            ?? "";
         }
         if (!id) {
-          if (!cancelled) setProblem("Chưa có chiến dịch đã phát hành.");
+          if (!cancelled) setProblem("Chưa có chiến dịch đang nhận đồ.");
           return;
         }
         const next = await backend.getCampaign(id);
@@ -394,51 +458,118 @@ function CampaignLive() {
       <Card>
         <Title>Không mở được chiến dịch trên máy chủ</Title>
         <Body>{problem || "Không có dữ liệu."}</Body>
-        <Body muted>Sổ ba cột và số 340 kg là bản minh họa, bấm các nút bên dưới.</Body>
       </Card>
     );
   }
 
   const { campaign, items, stations } = detail;
+  const phase = campaignPhase(campaign);
+  const open = phase === "open";
+  const mapHref = `/stations/map?campaign=${campaign._id}`;
+  const validStations = stations.filter((station) => station && station.name);
+  const fulfilledCount = items.filter((item) => {
+    const current = Number(item.currentQuantity) || 0;
+    const target = Number(item.targetQuantity) || 0;
+    return target > 0 && current >= target;
+  }).length;
+
   return (
     <View style={{ gap: 14 }}>
       <Photo uri={photos.coats} height={210} radius={18} />
-      <Eyebrow>{`${statusLabel(campaign.status)} · ${orgName(campaign.organizationId)}`}</Eyebrow>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+        <Badge
+          label={donorLabel(campaign)}
+          tone={open ? "primary" : phase === "soon" ? "warning" : "neutral"}
+        />
+        <Text style={{ fontFamily: fonts.medium, fontSize: 12, color: colors.muted, fontVariant: ["tabular-nums"] }}>
+          {`${formatDay(campaign.startDate)} – ${formatDay(campaign.endDate)}`}
+        </Text>
+      </View>
       <Title>{campaign.title}</Title>
-      <Body>{campaign.description || "Mang đồ tới trạm. Nhân viên cân và quyết định phần được nhận."}</Body>
-      <Body muted>{`${formatDay(campaign.startDate)} đến ${formatDay(campaign.endDate)}`}</Body>
+      <Body muted>{orgName(campaign.organizationId)}</Body>
+      <Body>
+        {open
+          ? (campaign.description || "Mang đồ tới trạm. Nhân viên cân và quyết định phần được nhận.")
+          : phase === "soon"
+            ? "Chiến dịch chưa tới ngày bắt đầu. Trạm chưa nhận đồ."
+            : "Chiến dịch này đã kết thúc. Trạm không còn nhận đồ cho chiến dịch này."}
+      </Body>
+      <StatRow
+        items={[
+          { label: "Loại vật phẩm", value: items.length, unit: "mục", tone: "ink" },
+          { label: "Đạt mục tiêu", value: `${fulfilledCount}/${items.length}`, unit: "loại", tone: "primary" },
+          { label: "Trạm tiếp nhận", value: validStations.length, unit: "trạm", tone: "coral" },
+        ]}
+      />
+      <Title>Nhu cầu vật phẩm</Title>
       {items.length === 0 ? <Body>Chiến dịch chưa khai báo loại đồ.</Body> : null}
       {items.map((item) => {
         const current = Number(item.currentQuantity) || 0;
         const target = Number(item.targetQuantity) || 0;
+        const remaining = Math.max(0, target - current);
         const unit = itemUnit(item);
+        const done = target > 0 && current >= target;
         return (
           <Card key={item._id}>
-            <Eyebrow>{itemName(item)}</Eyebrow>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              <Text style={{ flex: 1, fontFamily: fonts.bold, fontSize: 17, color: colors.ink }}>
+                {itemName(item)}
+              </Text>
+              <Badge
+                label={done ? "Đã đủ chỉ tiêu" : `Còn cần ${remaining} ${unit}`}
+                tone={done ? "primary" : "coral"}
+              />
+            </View>
             <Meter
               value={current}
               max={Math.max(target, current, 1)}
               unit={unit}
-              label={`Đã ghi nhận ${current} ${unit}. Mục tiêu ${target} ${unit}. Máy chủ đang lưu một cột số lượng.`}
+              label={`Đã ghi nhận ${current} ${unit} / mục tiêu ${target} ${unit}.`}
             />
           </Card>
         );
       })}
-      <Card>
-        <Eyebrow>Trạm tham gia</Eyebrow>
-        {stations.filter((station) => station && station.name).length === 0 ? <Body>Chưa gán trạm.</Body> : null}
-        {stations.map((station, index) =>
-          station?.name ? (
-            <Body key={station._id ?? `${station.name}-${index}`}>
-              {typeof station.distanceKm === "number"
-                ? `${station.name}. ${station.address ?? ""} Cách ${station.distanceKm.toFixed(1)} km.`
-                : `${station.name}. ${station.address ?? ""} Chưa có khoảng cách vì chưa có vị trí.`}
-            </Body>
-          ) : null,
-        )}
-        <Button label="Xem danh sách trạm" tone="ghost" onPress={() => router.push("/stations/list")} />
-      </Card>
-      <ReliefNumbers campaignId={campaign._id} />
+      <Title>Trạm của chiến dịch</Title>
+      {validStations.length === 0 ? <Body>Chưa gán trạm.</Body> : null}
+      {validStations.map((station, index) =>
+        station?.name ? (
+          <Tap
+            key={station._id ?? `${station.name}-${index}`}
+            onPress={() => {
+              if (!station._id) return;
+              router.push(`/stations/map?campaign=${campaign._id}&station=${station._id}`);
+            }}
+          >
+            <Card>
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                <Text style={{ flex: 1, fontFamily: fonts.bold, fontSize: 17, color: colors.ink }}>{station.name}</Text>
+                {typeof station.distanceKm === "number" ? (
+                  <Badge label={`Cách ${station.distanceKm.toFixed(1)} km`} tone="primary" />
+                ) : null}
+              </View>
+              {station.address ? <Body muted>{station.address}</Body> : null}
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  paddingTop: 6,
+                  borderTopWidth: 1,
+                  borderTopColor: colors.hairline,
+                }}
+              >
+                <Text style={{ fontFamily: fonts.semibold, fontSize: 13, color: colors.primary }}>
+                  {open ? "Xem trạm trên bản đồ để mang đồ" : "Xem vị trí trạm trên bản đồ"}
+                </Text>
+                <Icon name="chevron-right" size={18} color={colors.primary} />
+              </View>
+            </Card>
+          </Tap>
+        ) : null,
+      )}
+      {validStations.length > 0 ? (
+        <Button label="Xem mọi trạm trên bản đồ" tone="ghost" onPress={() => router.push(mapHref)} />
+      ) : null}
     </View>
   );
 }

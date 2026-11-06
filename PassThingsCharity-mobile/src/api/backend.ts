@@ -3,6 +3,7 @@ import type {
   AssignmentRow,
   CampaignDetail,
   CampaignSummary,
+  ContributionDetail,
   ContributionRow,
   PointsPayload,
   ReliefRow,
@@ -12,6 +13,7 @@ import type {
   TransferRow,
   ShiftScheduleRow,
   NoticeRow,
+  OrgApplication,
 } from "@/api/types";
 
 type Token = string;
@@ -31,7 +33,7 @@ export function resultText(data: unknown) {
 
 export const backend = {
   login(username: string, password: string) {
-    return api<{ token: string; user: { id: unknown; username: string; phone?: string | null; email?: string | null; fullName?: string | null; avatarUrl?: string | null; role?: string } }>("/auth/login", {
+    return api<{ token: string; user: { id: unknown; username: string; phone?: string | null; email?: string | null; fullName?: string | null; avatarUrl?: string | null; role?: string; stations?: StationRow[] } }>("/auth/login", {
       method: "POST",
       body: { username, password },
     });
@@ -48,7 +50,7 @@ export const backend = {
 
   listUsers(token: Token, role?: string) {
     const query = role ? `?role=${encodeURIComponent(role)}` : "";
-    return api<{ data: { _id: string; username: string; fullName?: string; phone?: string; status?: string }[] }>(
+    return api<{ data: { _id: string; username: string; fullName?: string; phone?: string; email?: string; status?: string; role?: string }[] }>(
       `/users${query}`,
       { token },
     );
@@ -62,6 +64,12 @@ export const backend = {
   createUser(token: Token, body: Body) {
     return api<{ message: string }>("/users", withToken(token, "POST", body));
   },
+  myProfile(token: Token) {
+    return api<{ user: { id?: string; username: string; phone?: string | null; email?: string | null; fullName?: string | null; avatarUrl?: string | null; role?: string | { name?: string } } }>(
+      "/users/me/profile",
+      { token },
+    );
+  },
   updateProfile(token: Token, body: Body) {
     return api<{ message: string; user: { username: string; phone: string; email?: string; fullName?: string; avatarUrl?: string; role?: string } }>(
       "/users/me/profile",
@@ -73,13 +81,13 @@ export const backend = {
   },
 
   listOrganizations(token: Token) {
-    return api<{ data: { _id: string; name: string; code?: string; isVerified?: boolean }[] }>("/organizations", { token });
+    return api<{ data: { _id: string; name: string; code?: string; isVerified?: boolean; status?: string }[] }>("/organizations", { token });
   },
   getOrganization(token: Token, id: string) {
-    return api<{ organization: { name: string; code?: string; address?: string } }>(`/organizations/${id}`, { token });
+    return api<{ organization: OrgApplication }>(`/organizations/${id}`, { token });
   },
   createOrganization(token: Token, body: Body) {
-    return api<{ message: string }>("/organizations", withToken(token, "POST", body));
+    return api<{ message: string; organization: OrgApplication }>("/organizations", withToken(token, "POST", body));
   },
   updateOrganization(token: Token, id: string, body: Body) {
     return api<{ message: string }>(`/organizations/${id}`, withToken(token, "PATCH", body));
@@ -93,6 +101,13 @@ export const backend = {
 
   listStations(token: Token) {
     return api<{ data: StationRow[] }>("/stations", { token });
+  },
+  nearbyStations(token: Token | null, lat?: number, lng?: number) {
+    const params = new URLSearchParams();
+    if (typeof lat === "number") params.set("lat", String(lat));
+    if (typeof lng === "number") params.set("lng", String(lng));
+    const query = params.toString();
+    return api<{ data: StationRow[] }>(`/stations/nearby${query ? `?${query}` : ""}`, token ? { token } : {});
   },
   getStation(token: Token, id: string) {
     return api<{ station: StationRow }>(`/stations/${id}`, { token });
@@ -142,8 +157,9 @@ export const backend = {
   deleteCategory(token: Token, id: string) {
     return api<{ message: string }>(`/catalog/categories/${id}`, withToken(token, "DELETE"));
   },
-  listItemTypes() {
-    return api<{ itemTypes: { _id: string; name: string; unit?: string }[] }>("/catalog/items");
+  listItemTypes(activeOnly = false) {
+    const query = activeOnly ? "?activeOnly=true" : "";
+    return api<{ itemTypes: { _id: string; name: string; unit?: string; pointsPerUnit?: number; categoryId?: { name?: string } | string }[] }>(`/catalog/items${query}`);
   },
   createItemType(token: Token, body: Body) {
     return api<{ message: string }>("/catalog/items", withToken(token, "POST", body));
@@ -189,7 +205,7 @@ export const backend = {
   },
   campaignStations(campaignId: string, coords?: { userLat: string; userLng: string }) {
     const query = coords ? `?userLat=${encodeURIComponent(coords.userLat)}&userLng=${encodeURIComponent(coords.userLng)}` : "";
-    return api<{ totalStations: number; stations: { _id?: string; name?: string; address?: string; distanceKm?: number }[] }>(
+    return api<{ totalStations: number; stations: { _id?: string; name?: string; address?: string; isActive?: boolean; latitude?: string; longitude?: string; openingTime?: string; closingTime?: string; distanceKm?: number }[] }>(
       `/campaigns/${campaignId}/stations${query}`,
     );
   },
@@ -204,6 +220,12 @@ export const backend = {
   },
   reliefSummary(token: Token, campaignId: string) {
     return api<{ totalDistributionBatches: number; itemsSummary: ReliefSummaryItem[] }>(`/relief/summary/${campaignId}`, { token });
+  },
+  listOpenTasks(token: Token) {
+    return api<{ data: { _id: string; title?: string; description?: string; rewardPoints?: number; startTime?: string; endTime?: string; recruitmentStatus?: string; slots?: { remaining?: number; total?: number }; stationId?: { name?: string; address?: string } | string }[] }>(
+      "/workforce/tasks?limit=100&recruitmentStatus=OPEN",
+      { token },
+    );
   },
   listTasks(token: Token, stationId?: string) {
     const station = stationId ? `&stationId=${encodeURIComponent(stationId)}` : "";
@@ -246,16 +268,27 @@ export const backend = {
     return api<{ message: string }>(`/stationmanager/${stationId}/staff/${staffId}`, withToken(token, "PATCH", body));
   },
   lookupDonor(token: Token, q: string) {
-    return api<{ data: { _id: string; fullName?: string; phone?: string; username?: string }[] }>(
+    return api<{ data: { _id: string; fullName?: string; email?: string; phone?: string; username?: string }[] }>(
       `/contributions/lookup?q=${encodeURIComponent(q)}`,
       { token },
     );
   },
+  listMyContributions(token: Token, userId: string) {
+    return api<{ data: ContributionRow[] }>(
+      `/contributions?userId=${encodeURIComponent(userId)}&page=1&limit=20`,
+      { token },
+    );
+  },
   createContribution(token: Token, body: Body) {
-    return api<{ message: string }>("/contributions", withToken(token, "POST", body));
+    return api<{
+      message: string;
+      contribution: { _id: string; code: string; status: string };
+      items: unknown[];
+      gamification?: { pointsAwarded?: number };
+    }>("/contributions", withToken(token, "POST", body));
   },
   getContribution(token: Token, id: string) {
-    return api<unknown>(`/contributions/${id}`, { token });
+    return api<ContributionDetail>(`/contributions/${id}`, { token });
   },
   updateContributionStatus(token: Token, id: string, body: Body) {
     return api<{ message: string }>(`/contributions/${id}/status`, withToken(token, "PATCH", body));
@@ -266,8 +299,8 @@ export const backend = {
   uploadContributionImages(token: Token, files: UploadFile[]) {
     return uploadImages<{ imageUrls: string[] }>("/contributions/upload-images", token, files);
   },
-  uploadPersonalImages(token: Token, files: UploadFile[]) {
-    return uploadImages<{ imageUrls: string[] }>("/uploads/images", token, files);
+  uploadAvatar(token: Token, file: UploadFile) {
+    return uploadImages<{ avatarUrl: string }>("/uploads/users/image", token, [file], "image");
   },
   createTransfer(token: Token, body: Body) {
     return api<{ message: string }>("/transfers", withToken(token, "POST", body));
@@ -318,14 +351,18 @@ export const backend = {
     return api<{ message: string }>("/workforce/tasks/assign", withToken(token, "POST", body));
   },
 
-  listShiftTemplates(token: Token, stationId: string) {
-    return api<{ data: { _id: string; name: string; startTime: string; endTime: string; requiredStaff?: number; description?: string }[] }>(
-      `/shiftstations/${stationId}/shift-templates`,
+  listShiftTemplates(token: Token) {
+    return api<{ data: { _id: string; name: string; startTime: string; endTime: string; description?: string }[] }>(
+      "/shiftstations/shift-templates",
       { token },
     );
   },
-  createShiftTemplate(token: Token, stationId: string, body: Body) {
-    return api<{ message: string }>(`/shiftstations/${stationId}/shift-templates`, withToken(token, "POST", body));
+  listInventory(token: Token, stationId?: string) {
+    const query = stationId ? `?stationId=${encodeURIComponent(stationId)}&limit=100` : "?limit=100";
+    return api<{ data: { _id: string; quantity: number; reservedQuantity?: number; availableQuantity?: number; unit: string; stationId?: { _id?: string; name?: string; address?: string } | string; itemTypeId?: { _id?: string; name?: string } | string }[] }>(
+      `/inventory${query}`,
+      { token },
+    );
   },
   listShiftSchedules(token: Token, stationId: string, date?: string) {
     const query = date ? `?date=${encodeURIComponent(date)}` : "";

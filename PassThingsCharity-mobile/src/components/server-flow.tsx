@@ -4,7 +4,7 @@ import { ActivityIndicator, View } from "react-native";
 import { backend } from "@/api/backend";
 import { ApiError } from "@/api/client";
 import { useSession } from "@/api/session";
-import type { NamedRef, ReliefSummaryItem } from "@/api/types";
+import type { NamedRef } from "@/api/types";
 import { Body, Button, Card, Title } from "@/components/ui";
 import { colors } from "@/theme";
 
@@ -106,7 +106,7 @@ export function ServerReceipts() {
   return (
     <Card>
       <Title>Phiếu tiếp nhận trên máy chủ</Title>
-      <Body muted>Phiếu mới được ghi nhận ngay. Điểm là 20 cho cả phiếu, mỗi dòng thêm tối đa 50. Từ chối trừ số lượng, không trừ điểm.</Body>
+      <Body muted>Phiếu mới được ghi nhận ngay. Điểm là 20 cho mỗi phiếu, cộng thêm số lượng nhân điểm mỗi đơn vị. Từ chối trừ số lượng, không trừ điểm.</Body>
       {rows.length === 0 ? <Body>Chưa có phiếu.</Body> : null}
       {rows.slice(0, 5).map((row) => (
         <Body key={row._id}>{`${row.code} · ${row.status} · ${refTitle(row.campaignId) || "Chưa gắn chiến dịch"}`}</Body>
@@ -140,59 +140,6 @@ export function ServerRelief() {
       {rows.length === 0 ? <Body>Chưa có đợt giao.</Body> : null}
       {rows.slice(0, 5).map((row) => (
         <Body key={row._id}>{`${row.code} · ${row.status} · ${row.recipientName || "Chưa ghi người nhận"}`}</Body>
-      ))}
-    </Card>
-  );
-}
-
-export function ReliefNumbers({ campaignId }: { campaignId: string }) {
-  const { token } = useSession();
-  const [items, setItems] = useState<ReliefSummaryItem[] | null>(null);
-  const [batches, setBatches] = useState(0);
-  const [problem, setProblem] = useState("");
-
-  useEffect(() => {
-    if (!token || !campaignId) return;
-    let cancelled = false;
-    backend.reliefSummary(token, campaignId)
-      .then((data) => {
-        if (cancelled) return;
-        setItems(data.itemsSummary ?? []);
-        setBatches(data.totalDistributionBatches ?? 0);
-      })
-      .catch((caught) => {
-        if (!cancelled) setProblem(caught instanceof ApiError ? caught.message : "Không đọc được phép tính giao hàng.");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [token, campaignId]);
-
-  if (!token) return null;
-  if (problem) {
-    return (
-      <Card>
-        <Body>{problem}</Body>
-      </Card>
-    );
-  }
-  if (!items) {
-    return (
-      <Card>
-        <ActivityIndicator color={colors.primary} />
-        <Body muted>Đang tính phần đã ghi trong các đợt giao.</Body>
-      </Card>
-    );
-  }
-  return (
-    <Card>
-      <Title>Phép tính giao hàng</Title>
-      <Body muted>{`${batches} đợt, gồm cả đợt đang lên kế hoạch và đợt đã hủy. Số còn lại không được ghi thành cột kho.`}</Body>
-      {items.length === 0 ? <Body>Chiến dịch chưa có mục tiêu hàng.</Body> : null}
-      {items.map((item) => (
-        <Body key={`${item.itemName}-${item.collectedQuantity}`}>
-          {`${item.itemName || "Hàng"}: ghi nhận ${item.collectedQuantity}, trong các đợt giao ${item.distributedQuantity}, còn lại theo phép tính ${item.remainingInStock}.`}
-        </Body>
       ))}
     </Card>
   );
@@ -261,8 +208,8 @@ export function ServerTasks() {
         return (
           <View key={row._id} style={{ gap: 8 }}>
             <Body>{`${title || "Việc được giao"} · ${row.status}`}</Body>
-            {token ? <Button label="Check-in" onPress={() => void run(() => backend.checkInTask(token, row._id))} /> : null}
-            {token ? <Button label="Check-out và cộng điểm" tone="ghost" onPress={() => void run(() => backend.checkOutTask(token, row._id))} /> : null}
+            {token && row.status === "ASSIGNED" ? <Button label="Bắt đầu làm" onPress={() => void run(() => backend.checkInTask(token, row._id))} /> : null}
+            {token && row.status === "IN_PROGRESS" ? <Button label="Hoàn thành công việc" tone="ghost" onPress={() => void run(() => backend.checkOutTask(token, row._id))} /> : null}
           </View>
         );
       })}
