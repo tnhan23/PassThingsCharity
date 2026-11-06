@@ -199,12 +199,12 @@ const paths = {
   '/transfers/{id}': {
     get: {
       tags: ['BE3 - Inter-Station Transfers'],
-      summary: 'Xem chi tiết lệnh điều phối kèm danh sách vật phẩm',
+      summary: 'Xem chi tiết lệnh điều phối, người vận chuyển và phân bổ từng mặt hàng',
       parameters: [
         { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
       ],
       responses: {
-        200: { description: 'Chi tiết lệnh điều phối' },
+        200: { description: 'Chi tiết phiếu gồm danh sách shipment; mỗi shipment có carrierId và số lượng giao cho tài xế theo từng transferItemId. Đơn vị (ví dụ KG) nằm trong items của phiếu.' },
         404: { description: 'Không tìm thấy' },
       },
     },
