@@ -1,8 +1,9 @@
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { backend } from "@/api/backend";
-import { pickImages } from "@/api/images";
+import { pickImage } from "@/api/images";
 import { ApiError } from "@/api/client";
+import { useGuest } from "@/api/guest";
 import { useSession } from "@/api/session";
 import { Screen } from "@/components/chrome";
 import { Field } from "@/components/form";
@@ -10,6 +11,7 @@ import { Body, Button, Card, Photo, Title } from "@/components/ui";
 
 export default function AccountPage() {
   const { token, user, patchUser, logout } = useSession();
+  const { leaveGuest } = useGuest();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [email, setEmail] = useState("");
@@ -19,7 +21,7 @@ export default function AccountPage() {
   const [deletePassword, setDeletePassword] = useState("");
   const [message, setMessage] = useState("");
   const [task, setTask] = useState("");
-  const [photos, setPhotos] = useState<string[]>(user?.avatarUrl ? [user.avatarUrl] : []);
+  const [avatar, setAvatar] = useState(user?.avatarUrl ?? "");
 
   useEffect(() => {
     if (!user) return;
@@ -102,27 +104,24 @@ export default function AccountPage() {
       </Card>
       <Card>
         <Title>Ảnh hồ sơ</Title>
-        <Body muted>Ảnh đầu tiên được lưu làm ảnh tài khoản. Các ảnh sau vẫn hiện ở đây.</Body>
-        {photos.length === 0 ? <Body muted>Chưa có ảnh. Lần tải trước chưa được lưu vào hồ sơ, hãy chọn lại.</Body> : null}
-        {photos.map((uri) => (
-          <Photo key={uri} uri={uri} height={180} radius={16} />
-        ))}
+        <Body muted>Chọn một ảnh JPEG, PNG hoặc WebP. Ảnh được tải lên trước, rồi mới lưu vào hồ sơ.</Body>
+        {avatar ? <Photo uri={avatar} height={96} width={96} radius={48} /> : <Body muted>Chưa có ảnh hồ sơ.</Body>}
         <Button
           disabled={task !== ""}
-          label={task === "photo" ? "Đang gửi" : "Tải ảnh hồ sơ"}
+          label={task === "photo" ? "Đang gửi" : "Đổi ảnh hồ sơ"}
           onPress={() => {
             if (task) return;
             setTask("photo");
             setMessage("");
             void (async () => {
-              const files = await pickImages();
-              if (!files.length) return "Chưa chọn ảnh.";
-              const uploaded = await backend.uploadPersonalImages(token, files);
-              const urls = uploaded.imageUrls ?? [];
-              if (!urls.length) return "Cloudinary không trả đường dẫn.";
-              const saved = await backend.updateProfile(token, { avatarUrl: urls[0] });
-              patchUser({ avatarUrl: saved.user.avatarUrl || urls[0] });
-              setPhotos(urls);
+              const file = await pickImage();
+              if (!file) return "Chưa chọn ảnh.";
+              const uploaded = await backend.uploadAvatar(token, file);
+              if (!uploaded.avatarUrl) return "Máy chủ không trả đường dẫn ảnh.";
+              const saved = await backend.updateProfile(token, { avatarUrl: uploaded.avatarUrl });
+              const next = saved.user.avatarUrl || uploaded.avatarUrl;
+              patchUser({ avatarUrl: next });
+              setAvatar(next);
               return "Đã lưu ảnh hồ sơ.";
             })()
               .then((text) => setMessage(text))
@@ -146,6 +145,7 @@ export default function AccountPage() {
             void backend
               .deleteAccount(token, user.id, deletePassword)
               .then(async () => {
+                leaveGuest();
                 await logout();
                 router.replace("/login");
               })

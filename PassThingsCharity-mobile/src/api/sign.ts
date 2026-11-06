@@ -10,7 +10,7 @@ export function shouldSignRequest() {
   return !apiBaseUrl.includes("localhost") && !apiBaseUrl.includes("127.0.0.1");
 }
 
-export function signatureHeaders(method: string, path: string, body: string) {
+export function signatureHeaders(method: string, path: string, body: string): Record<string, string> {
   if (!shouldSignRequest()) return {};
   const time = Date.now().toString();
   const bodyHash = sha256(body);
