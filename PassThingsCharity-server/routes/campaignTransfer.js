@@ -24,7 +24,7 @@ router.post('/:id/shipments/:shipmentId/receive', checkBearerToken, checkRole(['
 router.post(
   '/',
   checkBearerToken,
-  checkRole(['STATION_MANAGER', 'STAFF']),
+  checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF']),
   createTransfer
 );
 

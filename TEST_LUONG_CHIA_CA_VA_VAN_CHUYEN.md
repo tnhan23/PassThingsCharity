@@ -162,8 +162,10 @@ Tài liệu ghi nhận nhật ký kiểm thử thực tế từ **Swagger UI** h
 ---
 
 ### 6. Admin duyệt phiếu vận chuyển
-* **Thao tác:** Admin duyệt kế hoạch vận chuyển. Hệ thống tự động khóa giữ chỗ (reserve) 50 thùng mì tại Trạm A.
+* **Điều kiện trước khi duyệt:** Trạm B phải có trưởng trạm đang hoạt động được gán vào `managerId`. Nếu chưa có, API trả `409`; gán trưởng trạm B trước rồi mới duyệt để hệ thống có người nhận thông báo.
+* **Thao tác:** Admin hoặc Trưởng Trạm A duyệt kế hoạch vận chuyển. Hệ thống tự động khóa giữ chỗ (reserve) 50 thùng mì tại Trạm A và tạo thông báo đích danh cho trưởng trạm B.
 * **API Endpoint:** `PATCH /transfers/6aec8bf8e8b2871fa170463f/approval`
+* **Trưởng trạm B nhận phiếu:** Đăng nhập bằng tài khoản trưởng trạm B rồi gọi `GET /notifications/me` để kiểm tra thông báo `ASSIGN_TRANSFER_RECEIVER`, hoặc lấy trực tiếp danh sách phiếu tại `GET /transfers?toStationId={stationBId}&status=PREPARING`. API danh sách chỉ trả phiếu thuộc trạm mà tài khoản quản lý/được phân công. Mở phiếu bằng `GET /transfers/{transferId}`.
 * **Kết quả trả về:**
 ```json
 {
@@ -218,6 +220,7 @@ Tài liệu ghi nhận nhật ký kiểm thử thực tế từ **Swagger UI** h
 ### 7. Trưởng Trạm B (Gò Vấp) gán người phụ trách nhận hàng
 * **Thao tác:** Trưởng Trạm Gò Vấp (`manager_govap`) tự gán trách nhiệm phụ trách tiếp nhận lô hàng tại Trạm B.
 * **API Endpoint:** `PATCH /transfers/6aec8bf8e8b2871fa170463f/responsibilities`
+* **Body:** `{"receivedBy":"<userId nhân viên hoặc trưởng trạm tại B>"}`. Sau khi gán, người phụ trách B có thể xác nhận nhận kho ở bước RECEIVE sau khi tài xế báo giao.
 * **Kết quả trả về:**
 ```json
 {

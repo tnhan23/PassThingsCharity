@@ -44,11 +44,19 @@ async function validateResponsible(stationId, userId) {
   return person;
 }
 
-async function notifyDestination(transfer, actor) {
+async function getDestinationManager(transfer) {
   const station = await Station.findById(transfer.toStationId);
-  if (!station?.managerId) return;
+  if (!station?.managerId) fail(409, 'Assign an active station manager to the destination station before approving this transfer.');
+  const manager = await User.findById(station.managerId).populate('role', 'name');
+  if (!manager || manager.status !== 'active' || !['STATION_MANAGER', 'ADMIN'].includes(manager.role?.name)) {
+    fail(409, 'The destination station must have an active station manager before approving this transfer.');
+  }
+  return manager;
+}
+
+async function notifyDestination(transfer, actor, manager) {
   await Notification.create({
-    userId: station.managerId, targetRole: 'STATION_MANAGER', type: 'STATION',
+    userId: manager._id, targetRole: manager.role.name, type: 'STATION',
     title: 'Có phiếu vận chuyển cần bố trí người nhận',
     content: `Phiếu ${transfer.code} đã được duyệt. Vui lòng phân công người phụ trách nhận hàng tại trạm.`,
     metadata: { transferId: transfer._id, stationId: transfer.toStationId, action: 'ASSIGN_TRANSFER_RECEIVER' },
@@ -159,13 +167,14 @@ async function approve(transfer, body, user) {
   await stationAccess(transfer.fromStationId, user, true);
   if (transfer.approvalStatus !== 'PENDING' || transfer.status !== 'PENDING') fail(409, 'Transfer has already been reviewed.');
   if (!['APPROVED', 'REJECTED'].includes(body.decision)) fail(400, 'decision must be APPROVED or REJECTED.');
+  const destinationManager = body.decision === 'APPROVED' ? await getDestinationManager(transfer) : null;
   transfer.approvalStatus = body.decision;
   transfer.approvedBy = user._id;
   transfer.approvedAt = new Date();
   transfer.approvalNote = typeof body.note === 'string' ? body.note.trim() : '';
   transfer.status = body.decision === 'APPROVED' ? 'PREPARING' : 'CANCELLED';
   await transfer.save();
-  if (body.decision === 'APPROVED') await notifyDestination(transfer, user);
+  if (destinationManager) await notifyDestination(transfer, user, destinationManager);
   return transfer;
 }
 
