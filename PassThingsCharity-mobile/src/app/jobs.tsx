@@ -64,7 +64,8 @@ export default function JobsPage() {
     );
   }
 
-  const totalOpenSlots = (posts ?? []).reduce((sum, post) => sum + (post.slots?.remaining ?? 0), 0);
+  const availablePosts = (posts ?? []).filter((post) => post.slots?.remaining !== 0);
+  const totalOpenSlots = availablePosts.reduce((sum, post) => sum + (post.slots?.remaining ?? 0), 0);
 
   return (
     <Screen tab="profile">
@@ -73,14 +74,14 @@ export default function JobsPage() {
       {posts ? (
         <StatRow
           items={[
-            { label: "Tin đang mở", value: posts.length, unit: "việc", tone: "primary" },
+            { label: "Tin còn chỗ", value: availablePosts.length, unit: "việc", tone: "primary" },
             { label: "Tổng chỗ trống", value: totalOpenSlots, unit: "chỗ", tone: "coral" },
           ]}
         />
       ) : null}
       {note ? <Body>{note}</Body> : null}
-      {posts && posts.length === 0 ? <Body muted>Hiện chưa có tin nào đang mở.</Body> : null}
-      {posts?.map((post) => {
+      {posts && availablePosts.length === 0 ? <Body muted>Hiện không có tin tuyển nào còn chỗ.</Body> : null}
+      {availablePosts.map((post) => {
         const remaining = post.slots?.remaining;
         const total = post.slots?.total;
         return (

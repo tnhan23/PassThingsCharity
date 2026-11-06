@@ -58,7 +58,15 @@ export type CampaignItemRow = {
   itemTypeId: ItemTypeRef;
 };
 
-export type StationRef = { _id?: string; name?: string; address?: string; isActive?: boolean; distanceKm?: number } | null;
+export type StationRef = {
+  _id?: string;
+  name?: string;
+  address?: string;
+  isActive?: boolean;
+  latitude?: string | number;
+  longitude?: string | number;
+  distanceKm?: number;
+} | null;
 
 export type CampaignDetail = {
   campaign: CampaignSummary;
@@ -71,8 +79,8 @@ export type StationRow = {
   name: string;
   address: string;
   isActive: boolean;
-  latitude?: string;
-  longitude?: string;
+  latitude?: string | number;
+  longitude?: string | number;
   openingTime?: string;
   closingTime?: string;
   distanceKm?: number | null;

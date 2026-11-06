@@ -1,7 +1,7 @@
 import { useLocalSearchParams } from "expo-router";
 import { StationsScreen } from "@/screens/more";
 
-const allowed = ["list", "map", "overload", "closed", "loading", "error", "denied"] as const;
+const allowed = ["list", "map", "overload", "closed", "loading", "error"] as const;
 type State = (typeof allowed)[number];
 
 export default function Page() {

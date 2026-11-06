@@ -8,6 +8,7 @@ import type {
   PointsPayload,
   ReliefRow,
   ReliefSummaryItem,
+  StationRef,
   StationRow,
   TaskRow,
   TransferRow,
@@ -205,7 +206,7 @@ export const backend = {
   },
   campaignStations(campaignId: string, coords?: { userLat: string; userLng: string }) {
     const query = coords ? `?userLat=${encodeURIComponent(coords.userLat)}&userLng=${encodeURIComponent(coords.userLng)}` : "";
-    return api<{ totalStations: number; stations: { _id?: string; name?: string; address?: string; isActive?: boolean; latitude?: string; longitude?: string; openingTime?: string; closingTime?: string; distanceKm?: number }[] }>(
+    return api<{ totalStations: number; stations: (NonNullable<StationRef> & { openingTime?: string; closingTime?: string; distanceKm?: number })[] }>(
       `/campaigns/${campaignId}/stations${query}`,
     );
   },

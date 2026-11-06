@@ -417,12 +417,11 @@ const atlas: { title: string; tab: TabKey; items: [string, string][] }[] = [
     tab: "stations",
     items: [
       ["/stations/list", "Danh sách trạm"],
+      ["/stations/map", "Bản đồ trạm"],
       ["/stations/closed", "Ngoài giờ"],
       ["/stations/overload", "Gần đầy"],
       ["/stations/loading", "Đang tải trạm"],
       ["/stations/error", "Không tải được trạm"],
-      ["/stations/denied", "Không có quyền vị trí"],
-      ["/stations/map", "Bản đồ trạm"],
       ["/transfer/create", "Tạo lệnh chuyển"],
       ["/transfer/empty", "Chưa có lệnh"],
       ["/transfer/loading", "Đang tải lệnh"],

@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { backend } from "@/api/backend";
 import { ApiError } from "@/api/client";
-import { Body, Button, Card, Pill, Title } from "@/components/ui";
-import { can, nextCampaignStatuses, Note, OpsGate, PickList, RoleNote, TextField, Units, useJob, useRole, useRows, type Row } from "@/screens/ops/kit";
+import { donorLabel } from "@/api/labels";
+import { Body, Button, Card, Pill, StatRow, Title } from "@/components/ui";
+import { can, Fold, nextCampaignStatuses, Note, OpsGate, PickList, RoleNote, TextField, Units, useJob, useRole, useRows, type Row } from "@/screens/ops/kit";
 
 function orgState(row: Row) {
   if (row.status === "REJECTED") return "Bị từ chối";
@@ -115,8 +116,6 @@ export function StationScreen() {
   const [orgId, setOrgId] = useState("");
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
-  const [latitude, setLatitude] = useState("");
-  const [longitude, setLongitude] = useState("");
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -228,17 +227,11 @@ export function StationScreen() {
           <PickList rows={orgs.rows} selected={orgId} onPick={setOrgId} detail={orgDetail} />
           <TextField label="Tên trạm" value={name} onChangeText={setName} />
           <TextField label="Địa chỉ" value={address} onChangeText={setAddress} />
-          {AppleMaps ? <Body muted>Chạm bản đồ để đặt vị trí trạm.</Body> : null}
-          {AppleMaps ? <StationPlaceMap latitude={latitude} longitude={longitude} onPick={(lat, lng) => { setLatitude(lat); setLongitude(lng); }} /> : null}
-          <TextField label="Vĩ độ" value={latitude} onChangeText={setLatitude} />
-          <TextField label="Kinh độ" value={longitude} onChangeText={setLongitude} />
           <Button
             label="Tạo trạm"
             onPress={() => void job.run((token) => backend.createStationForOrganization(token, orgId, {
               name: name.trim(),
               address: address.trim(),
-              latitude: latitude.trim(),
-              longitude: longitude.trim(),
             })).then((ok) => ok && stations.reload())}
           />
         </View>

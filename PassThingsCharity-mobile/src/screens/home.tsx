@@ -88,9 +88,6 @@ export function HomeScreen({ state = "content" }: { state?: "content" | "loading
   return (
     <Screen tab="home">
       <SearchField />
-      <Button label="Quản lý trạm (tạm thời)" tone="ghost" onPress={() => router.push("/desk/stations")} />
-      <Button label="Tiếp nhận (tạm thời)" tone="ghost" onPress={() => router.push("/desk/intake")} />
-      <Button label="Nhân sự (tạm thời)" tone="ghost" onPress={() => router.push("/routes/workforce")} />
       <View style={{ flexDirection: "row", gap: 10, alignItems: "stretch" }}>
         <Card style={{ flex: 1, backgroundColor: colors.primary, justifyContent: "space-between" }}>
           <Text style={{ fontFamily: fonts.semibold, color: colors.onPrimary, fontSize: 13 }}>Bạn có đồ dư?</Text>
@@ -109,7 +106,7 @@ export function HomeScreen({ state = "content" }: { state?: "content" | "loading
       </View>
       <View style={{ flexDirection: "row", gap: 8 }}>
         {[
-          { label: "Trạm gần bạn", icon: "place" as const, href: "/stations/map" as const },
+          { label: "Danh sách trạm", icon: "place" as const, href: "/stations/list" as const },
           { label: "Việc tại trạm", icon: "volunteer-activism" as const, href: "/jobs" as const },
           { label: "Hồ sơ & Điểm", icon: "card-membership" as const, href: "/profile/full" as const },
         ].map((shortcut) => (
@@ -505,7 +502,7 @@ function CampaignLive() {
   const { campaign, items, stations } = detail;
   const phase = campaignPhase(campaign);
   const open = phase === "open";
-  const mapHref = `/stations/map?campaign=${campaign._id}`;
+  const stationsHref = `/stations/list?campaign=${campaign._id}`;
   const validStations = stations.filter((station) => station && station.name);
   const fulfilledCount = items.filter((item) => {
     const current = Number(item.currentQuantity) || 0;
@@ -577,7 +574,7 @@ function CampaignLive() {
             key={station._id ?? `${station.name}-${index}`}
             onPress={() => {
               if (!station._id) return;
-              router.push(`/stations/map?campaign=${campaign._id}&station=${station._id}`);
+              router.push(`/station/${station._id}`);
             }}
           >
             <Card>
@@ -599,7 +596,7 @@ function CampaignLive() {
                 }}
               >
                 <Text style={{ fontFamily: fonts.semibold, fontSize: 13, color: colors.primary }}>
-                  {open ? "Xem trạm trên bản đồ để mang đồ" : "Xem vị trí trạm trên bản đồ"}
+                  {open ? "Xem thông tin trạm để mang đồ" : "Xem thông tin trạm"}
                 </Text>
                 <Icon name="chevron-right" size={18} color={colors.primary} />
               </View>
@@ -608,7 +605,7 @@ function CampaignLive() {
         ) : null,
       )}
       {validStations.length > 0 ? (
-        <Button label="Xem mọi trạm trên bản đồ" tone="ghost" onPress={() => router.push(mapHref)} />
+        <Button label="Xem danh sách trạm" tone="ghost" onPress={() => router.push(stationsHref)} />
       ) : null}
     </View>
   );
