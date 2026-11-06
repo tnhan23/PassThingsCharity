@@ -16,7 +16,7 @@ const notificationSchema = new mongoose.Schema(
     // Đối tượng nhận thông báo theo vai trò (ALL = Tất cả người dùng)
     targetRole: {
       type: String,
-      enum: ['ALL', 'ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'STAFF', 'VOLUNTEER', 'USER'],
+      enum: ['ALL', 'ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'STAFF', 'USER'],
       default: 'ALL',
       index: true,
     },

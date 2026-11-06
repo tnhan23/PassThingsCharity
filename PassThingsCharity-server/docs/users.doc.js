@@ -1,5 +1,44 @@
 module.exports = {
   '/users/me/profile': {
+    get: {
+      tags: ['Users'],
+      summary: 'Lấy hồ sơ tài khoản, điểm thưởng và chứng nhận của người đang đăng nhập',
+      description: 'Yêu cầu Bearer token. Không cần ID hoặc body; backend xác định tài khoản qua token. Chỉ trả thông tin hồ sơ, không trả password, resetPasswordToken hoặc resetPasswordExpires. FE dùng user để điền form PATCH cùng đường dẫn. Áp dụng cho mọi role đã đăng nhập; tài khoản Admin riêng có thể không có avatar/status (trả null).',
+      responses: {
+        200: {
+          description: 'Thông tin tài khoản hiện tại',
+          content: { 'application/json': { schema: {
+            type: 'object',
+            properties: { user: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                email: { type: 'string', format: 'email' },
+                username: { type: 'string' },
+                fullName: { type: 'string' },
+                phone: { type: 'string', nullable: true },
+                avatarUrl: { type: 'string', nullable: true },
+                role: { type: 'string' },
+                status: { type: 'string', nullable: true },
+              },
+            },
+            gamification: {
+              type: 'object',
+              description: 'Thông tin điểm, giao dịch, thành tích đã mở khóa và chứng nhận của chính tài khoản.',
+              properties: {
+                totalPoints: { type: 'integer', example: 520 },
+                pointTransactions: { type: 'array', items: { type: 'object' } },
+                unlockedAchievements: { type: 'array', items: { type: 'object' } },
+                certificates: { type: 'array', items: { type: 'object' } },
+              },
+            },
+            },
+          } } },
+        },
+        401: { description: 'Thiếu token, token không hợp lệ/hết hạn hoặc tài khoản không hoạt động/không tồn tại' },
+        500: { description: 'Lỗi server' },
+      },
+    },
     patch: {
       tags: ['Users'],
       summary: 'User cập nhật hồ sơ của chính mình',
@@ -16,6 +55,7 @@ module.exports = {
                 username: { type: 'string' },
                 fullName: { type: 'string' },
                 phone: { type: 'string' },
+                avatarUrl: { type: 'string', format: 'uri', nullable: true, example: 'https://res.cloudinary.com/your-cloud/image/upload/avatar.jpg' },
               },
             },
           },

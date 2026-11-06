@@ -8,6 +8,7 @@ const mongoose = require('mongoose');
  */
 async function createCategory(req, res, next) {
   try {
+    const imageFields = require('../utils/resourceImageFields')(req.body || {});
     const { name, description } = req.body || {};
 
     if (typeof name !== 'string' || !name.trim()) {
@@ -20,6 +21,8 @@ async function createCategory(req, res, next) {
     }
 
     const category = await ItemCategory.create({
+      createdBy: req.user._id,
+      ...imageFields,
       name: name.trim(),
       description: typeof description === 'string' ? description.trim() : '',
     });
@@ -71,6 +74,7 @@ async function updateCategory(req, res, next) {
     if (name !== undefined && (typeof name !== 'string' || !name.trim())) {
       return res.status(400).json({ error: 'Category name must be a non-empty string.' });
     }
+    await require('../utils/resourceImageAccess').applyImageFromForm(category, req.body || {}, 'item-categories', req.user);
     if (name !== undefined) {
       const duplicate = await ItemCategory.findOne({ name: name.trim(), _id: { $ne: id } });
       if (duplicate) {
@@ -137,7 +141,8 @@ async function deleteCategory(req, res, next) {
  */
 async function createItemType(req, res, next) {
   try {
-    const { categoryId, name, unit, description } = req.body || {};
+    const imageFields = require('../utils/resourceImageFields')(req.body || {});
+    const { categoryId, name, unit, description, pointsPerUnit } = req.body || {};
 
     if (!mongoose.isValidObjectId(categoryId)) {
       return res.status(400).json({ error: 'Valid Category ID is required.' });
@@ -147,12 +152,20 @@ async function createItemType(req, res, next) {
       return res.status(400).json({ error: 'Item type name is required.' });
     }
 
-    const validUnits = ['KG', 'PAIR', 'BOX', 'PACK'];
+    const validUnits = ['KG', 'PAIR', 'BOX', 'PACK', 'PIECE'];
     const formattedUnit = typeof unit === 'string' ? unit.trim().toUpperCase() : '';
     if (!validUnits.includes(formattedUnit)) {
       return res.status(400).json({
         error: `Unit must be one of: ${validUnits.join(', ')}.`,
       });
+    }
+
+    const points = pointsPerUnit === undefined ? 0 : Number(pointsPerUnit);
+    if (pointsPerUnit === null || typeof pointsPerUnit === 'boolean' || pointsPerUnit === '') {
+      return res.status(400).json({ error: 'Điểm trên mỗi đơn vị phải là số nguyên không âm.' });
+    }
+    if (!Number.isInteger(points) || points < 0) {
+      return res.status(400).json({ error: 'Điểm trên mỗi đơn vị phải là số nguyên không âm.' });
     }
 
     const categoryExists = await ItemCategory.findById(categoryId);
@@ -161,9 +174,12 @@ async function createItemType(req, res, next) {
     }
 
     const itemType = await ItemType.create({
+      createdBy: req.user._id,
+      ...imageFields,
       categoryId,
       name: name.trim(),
       unit: formattedUnit,
+      pointsPerUnit: points,
       description: typeof description === 'string' ? description.trim() : '',
     });
 
@@ -213,7 +229,7 @@ async function getItemTypes(req, res, next) {
 async function updateItemType(req, res, next) {
   try {
     const { id } = req.params;
-    const { categoryId, name, unit, description, isActive } = req.body || {};
+    const { categoryId, name, unit, description, isActive, pointsPerUnit } = req.body || {};
 
     if (!mongoose.isValidObjectId(id)) {
       return res.status(400).json({ error: 'Invalid Item Type ID.' });
@@ -235,6 +251,7 @@ async function updateItemType(req, res, next) {
       itemType.categoryId = categoryId;
     }
 
+    await require('../utils/resourceImageAccess').applyImageFromForm(itemType, req.body || {}, 'item-types', req.user);
     if (name !== undefined && (typeof name !== 'string' || !name.trim())) {
       return res.status(400).json({ error: 'Item type name must be a non-empty string.' });
     }
@@ -246,12 +263,20 @@ async function updateItemType(req, res, next) {
       return res.status(400).json({ error: 'Unit must be a non-empty string.' });
     }
     if (unit !== undefined) {
-      const validUnits = ['KG', 'PAIR', 'BOX', 'PACK'];
+      const validUnits = ['KG', 'PAIR', 'BOX', 'PACK', 'PIECE'];
       const formattedUnit = unit.trim().toUpperCase();
       if (!validUnits.includes(formattedUnit)) {
         return res.status(400).json({ error: `Unit must be one of: ${validUnits.join(', ')}.` });
       }
       itemType.unit = formattedUnit;
+    }
+
+    if (pointsPerUnit !== undefined) {
+      const points = Number(pointsPerUnit);
+      if (pointsPerUnit === null || typeof pointsPerUnit === 'boolean' || pointsPerUnit === '' || !Number.isInteger(points) || points < 0) {
+        return res.status(400).json({ error: 'Điểm trên mỗi đơn vị phải là số nguyên không âm.' });
+      }
+      itemType.pointsPerUnit = points;
     }
 
     if (description !== undefined && typeof description !== 'string') {

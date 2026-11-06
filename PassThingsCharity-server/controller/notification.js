@@ -6,7 +6,7 @@ const Role = require('../models/role');
 /**
  * 1. Admin gửi thông báo
  * - Có thể gửi cho 1 cá nhân (userId)
- * - Hoặc phát thông báo cho 1 nhóm vai trò (targetRole: 'USER', 'VOLUNTEER', 'STAFF'...)
+ * - Hoặc phát thông báo cho 1 nhóm vai trò (targetRole: 'USER', 'STAFF'...)
  * - Hoặc phát thông báo toàn hệ thống (targetRole: 'ALL')
  */
 async function sendNotification(req, res, next) {
@@ -32,7 +32,7 @@ async function sendNotification(req, res, next) {
       targetUserId = existingUser._id;
     }
 
-    const validRoles = ['ALL', 'ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'STAFF', 'VOLUNTEER', 'USER'];
+    const validRoles = ['ALL', 'ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'STAFF', 'USER'];
     const formattedTargetRole = String(targetRole).toUpperCase();
     if (!validRoles.includes(formattedTargetRole)) {
       return res.status(400).json({ error: `targetRole không hợp lệ. Cho phép: ${validRoles.join(', ')}` });

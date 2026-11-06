@@ -6,6 +6,9 @@ const mongoose = require('mongoose');
  */
 const itemTypeSchema = new mongoose.Schema(
   {
+    imageUrl: { type: String, trim: true, default: null },
+    imagePublicId: { type: String, default: null },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, immutable: true },
     categoryId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'ItemCategory',
@@ -19,8 +22,14 @@ const itemTypeSchema = new mongoose.Schema(
     unit: {
       type: String,
       required: true,
-      enum: ['KG', 'PAIR', 'BOX', 'PACK'],
+      enum: ['KG', 'PAIR', 'BOX', 'PACK', 'PIECE'],
       uppercase: true,
+    },
+    pointsPerUnit: {
+      type: Number,
+      default: 0,
+      min: 0,
+      validate: Number.isInteger,
     },
     description: {
       type: String,
