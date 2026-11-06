@@ -221,6 +221,12 @@ export const backend = {
   reliefSummary(token: Token, campaignId: string) {
     return api<{ totalDistributionBatches: number; itemsSummary: ReliefSummaryItem[] }>(`/relief/summary/${campaignId}`, { token });
   },
+  listOpenTasks(token: Token) {
+    return api<{ data: { _id: string; title?: string; description?: string; rewardPoints?: number; startTime?: string; endTime?: string; recruitmentStatus?: string; slots?: { remaining?: number; total?: number }; stationId?: { name?: string; address?: string } | string }[] }>(
+      "/workforce/tasks?limit=100&recruitmentStatus=OPEN",
+      { token },
+    );
+  },
   listTasks(token: Token, stationId?: string) {
     const station = stationId ? `&stationId=${encodeURIComponent(stationId)}` : "";
     return api<{ data: TaskRow[] }>(`/workforce/tasks?limit=100${station}`, { token });
@@ -293,8 +299,8 @@ export const backend = {
   uploadContributionImages(token: Token, files: UploadFile[]) {
     return uploadImages<{ imageUrls: string[] }>("/contributions/upload-images", token, files);
   },
-  uploadPersonalImages(token: Token, files: UploadFile[]) {
-    return uploadImages<{ imageUrls: string[] }>("/uploads/images", token, files);
+  uploadAvatar(token: Token, file: UploadFile) {
+    return uploadImages<{ avatarUrl: string }>("/uploads/users/image", token, [file], "image");
   },
   createTransfer(token: Token, body: Body) {
     return api<{ message: string }>("/transfers", withToken(token, "POST", body));
@@ -345,14 +351,18 @@ export const backend = {
     return api<{ message: string }>("/workforce/tasks/assign", withToken(token, "POST", body));
   },
 
-  listShiftTemplates(token: Token, stationId: string) {
-    return api<{ data: { _id: string; name: string; startTime: string; endTime: string; requiredStaff?: number; description?: string }[] }>(
-      `/shiftstations/${stationId}/shift-templates`,
+  listShiftTemplates(token: Token) {
+    return api<{ data: { _id: string; name: string; startTime: string; endTime: string; description?: string }[] }>(
+      "/shiftstations/shift-templates",
       { token },
     );
   },
-  createShiftTemplate(token: Token, stationId: string, body: Body) {
-    return api<{ message: string }>(`/shiftstations/${stationId}/shift-templates`, withToken(token, "POST", body));
+  listInventory(token: Token, stationId?: string) {
+    const query = stationId ? `?stationId=${encodeURIComponent(stationId)}&limit=100` : "?limit=100";
+    return api<{ data: { _id: string; quantity: number; reservedQuantity?: number; availableQuantity?: number; unit: string; stationId?: { _id?: string; name?: string; address?: string } | string; itemTypeId?: { _id?: string; name?: string } | string }[] }>(
+      `/inventory${query}`,
+      { token },
+    );
   },
   listShiftSchedules(token: Token, stationId: string, date?: string) {
     const query = date ? `?date=${encodeURIComponent(date)}` : "";
