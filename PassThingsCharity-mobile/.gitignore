@@ -38,4 +38,4 @@ yarn-error.*
 
 # generated native folders
 /ios
-# The android project is tracked on this branch.
+/android

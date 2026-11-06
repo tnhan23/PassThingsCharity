@@ -1,6 +1,5 @@
 require('dotenv').config();
 const express = require('express');
-const cors = require('cors');
 const passport = require('passport');
 require('./config/passport');
 
@@ -24,14 +23,14 @@ const shiftRouter = require('./routes/shift');
 const notificationRouter = require('./routes/notification');
 const swaggerUi = require('swagger-ui-express');
 const createSwaggerDocument = require('./config/swagger');
+const cors = require('cors');
 const app = express();
 const mongoose = require('mongoose');
-
-app.use(cors());
 
 const DEFAULT_PORT = Number(process.env.PORT) || 8080;
 const swaggerDocument = createSwaggerDocument(DEFAULT_PORT);
 
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(passport.initialize());
@@ -61,6 +60,7 @@ app.use('/gamification', gamificationRouter);
 // BE3 Route Middlewares
 app.use('/contributions', contributionsRouter);
 app.use('/transfers', transfersRouter);
+app.use('/inventory', require('./routes/inventory'));
 app.use('/relief', reliefRouter);
 app.use('/workforce', workforceRouter);
 app.use('/notifications', notificationRouter);
@@ -99,8 +99,10 @@ const startServer = (port) => {
 
 mongoose
   .connect(process.env.MONGODB_URI)
-  .then(() => {
+  .then(async () => {
     console.log('Đã kết nối MongoDB');
+    await require('./services/shiftTemplates').initializeShiftTemplates();
+    await require('./services/inventory').initializeInventory();
     startServer(DEFAULT_PORT);
   })
   .catch((error) => {
