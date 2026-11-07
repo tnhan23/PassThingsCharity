@@ -840,8 +840,8 @@ export function StationsScreen({
   );
   if (state === "map") {
     return (
-      <Screen tab="stations" scroll={false}>
-        <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 12, gap: 10 }}>
+      <Screen tab="stations" nestedScrollEnabled>
+        <View style={{ gap: 10 }}>
           {chrome}
           {loaded.needsLogin ? <Body>Đăng nhập để xem mọi trạm, hoặc chọn một chiến dịch trong bộ lọc.</Body> : null}
           <StationMap

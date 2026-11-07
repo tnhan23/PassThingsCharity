@@ -499,6 +499,7 @@ export function CrewWork() {
   const job = useJob();
   const createTaskJob = useJob();
   const role = useRole();
+  const { user } = useSession();
   const canTask = can(role, ["ADMIN", "STATION_MANAGER", "STAFF"]);
   const canCreateTask = can(role, ["ADMIN", "STATION_MANAGER", "STAFF"]);
   const canApproveJoin = can(role, ["ADMIN", "STATION_MANAGER"]);
@@ -525,6 +526,11 @@ export function CrewWork() {
   const [applicantsError, setApplicantsError] = useState("");
   const [joinStamp, setJoinStamp] = useState(0);
   const [applyStamp, setApplyStamp] = useState(0);
+  const profileStationId = user?.stations?.[0]?._id ?? "";
+
+  useEffect(() => {
+    if (!stationId && profileStationId) setStationId(profileStationId);
+  }, [profileStationId, stationId]);
 
   const scheduleValues: Record<ScheduleField, Date | null> = {
     startDate,
@@ -822,7 +828,7 @@ export function CrewWork() {
             disabled={Boolean(startDateError || endDateError || neededError || createTaskJob.busy)}
             onPress={() => {
               if (startDateError || endDateError || neededError) return;
-              void createTaskJob.run((token) => backend.createTask(token, {
+              const payload = {
                 ...(campaignId ? { campaignId } : {}),
                 stationId,
                 title: title.trim(),
@@ -833,7 +839,16 @@ export function CrewWork() {
                 ...(taskDateTime(deadlineDate, deadlineTime) ? { volunteerDeadline: taskDateTime(deadlineDate, deadlineTime) } : {}),
                 recruitmentStatus: "OPEN",
                 rewardPoints: Number(points) || 0,
-              })).then((ok) => ok && tasks.reload());
+              };
+              console.info("[Đăng tin tuyển] Submitting task", payload);
+              void createTaskJob.run((token) => backend.createTask(token, payload)).then((ok) => {
+                if (ok) {
+                  console.info("[Đăng tin tuyển] Task created successfully", { stationId, title: payload.title, requiredVolunteers: payload.requiredVolunteers });
+                  tasks.reload();
+                  return;
+                }
+                console.error("[Đăng tin tuyển] Task creation failed", { stationId, title: payload.title, requiredVolunteers: payload.requiredVolunteers });
+              });
             }}
           />
           <Note text={createTaskJob.note} />

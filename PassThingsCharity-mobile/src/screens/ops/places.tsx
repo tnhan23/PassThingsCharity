@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform, ScrollView, View } from "react-native";
+import * as Location from "expo-location";
 import { backend } from "@/api/backend";
 import { donorLabel } from "@/api/labels";
 import { ApiError } from "@/api/client";
@@ -8,6 +10,44 @@ import { colors } from "@/theme";
 import { can, Fold, nextCampaignStatuses, Note, OpsGate, PickList, RoleNote, TextField, Units, useJob, useRole, useRows, type Row } from "@/screens/ops/kit";
 
 const AppleMaps = Platform.OS === "ios" ? (require("expo-maps") as typeof import("expo-maps")).AppleMaps : null;
+const NativeWebView = Platform.OS === "android"
+  ? (require("react-native-webview") as typeof import("react-native-webview")).WebView
+  : null;
+
+function stationPlaceMapHtml(latitude: number | null, longitude: number | null) {
+  const center = latitude !== null && longitude !== null ? [latitude, longitude] : [10.7769, 106.7009];
+  const zoom = latitude !== null && longitude !== null ? 16 : 13;
+  const initialMarker = latitude !== null && longitude !== null
+    ? `L.marker(${JSON.stringify(center)}).addTo(map);`
+    : "";
+  return `<!doctype html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>html,body,#map{height:100%;width:100%;margin:0}</style>
+</head>
+<body>
+  <div id="map"></div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map("map").setView(${JSON.stringify(center)}, ${zoom});
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
+    }).addTo(map);
+    let marker = null;
+    ${initialMarker.replace("L.marker(", "marker = L.marker(")}
+    map.on("click", (event) => {
+      const { lat, lng } = event.latlng;
+      if (marker) marker.setLatLng(event.latlng);
+      else marker = L.marker(event.latlng).addTo(map);
+      window.ReactNativeWebView.postMessage(JSON.stringify({ latitude: lat, longitude: lng }));
+    });
+  </script>
+</body>
+</html>`;
+}
 
 function StationPlaceMap({
   latitude,
@@ -18,11 +58,39 @@ function StationPlaceMap({
   longitude: string;
   onPick: (latitude: string, longitude: string) => void;
 }) {
+  const hasCoordinates = Boolean(latitude.trim() && longitude.trim());
+  const lat = hasCoordinates ? Number(latitude) : null;
+  const lng = hasCoordinates ? Number(longitude) : null;
+  const picked = lat !== null && lng !== null && Number.isFinite(lat) && Number.isFinite(lng);
+  const androidMapHtml = useRef(stationPlaceMapHtml(picked ? lat : null, picked ? lng : null)).current;
   const camera = useRef({ coordinates: { latitude: 10.7769, longitude: 106.7009 }, zoom: 13 }).current;
+
+  if (Platform.OS === "android" && NativeWebView) {
+    return (
+      <View style={{ height: 220, borderRadius: 14, overflow: "hidden" }}>
+        <NativeWebView
+          originWhitelist={["*"]}
+          source={{ html: androidMapHtml }}
+          javaScriptEnabled
+          scrollEnabled={false}
+          onMessage={(event) => {
+            try {
+              const point: unknown = JSON.parse(event.nativeEvent.data);
+              if (!point || typeof point !== "object" || !("latitude" in point) || !("longitude" in point)) return;
+              if (typeof point.latitude !== "number" || typeof point.longitude !== "number") return;
+              if (!Number.isFinite(point.latitude) || !Number.isFinite(point.longitude)) return;
+              onPick(point.latitude.toFixed(6), point.longitude.toFixed(6));
+            } catch {
+              return;
+            }
+          }}
+          style={{ flex: 1, backgroundColor: colors.surfaceContainer }}
+        />
+      </View>
+    );
+  }
+
   if (!AppleMaps) return null;
-  const lat = Number(latitude);
-  const lng = Number(longitude);
-  const picked = Number.isFinite(lat) && Number.isFinite(lng);
   return (
     <View style={{ height: 220, borderRadius: 14, overflow: "hidden" }}>
       <AppleMaps.View
@@ -155,7 +223,10 @@ export function StationScreen() {
   const stations = useRows((token) => backend.listStations(token).then((data) => data.data as Row[]));
   const orgs = useRows((token) => backend.listOrganizations(token).then((data) => data.data as Row[]));
   const job = useJob();
+  const approveStationJob = useJob();
+  const createStationJob = useJob();
   const role = useRole();
+  const hasFocused = useRef(false);
   const [picked, setPicked] = useState("");
   const [staffError, setStaffError] = useState("");
   const [orgId, setOrgId] = useState("");
@@ -163,6 +234,9 @@ export function StationScreen() {
   const [address, setAddress] = useState("");
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
+  const [geocoding, setGeocoding] = useState(false);
+  const [geocodeMessage, setGeocodeMessage] = useState("");
+  const [mapFocusKey, setMapFocusKey] = useState(0);
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -171,6 +245,15 @@ export function StationScreen() {
   const [identifier, setIdentifier] = useState("");
   const [staff, setStaff] = useState<Row[] | null>(null);
   const [staffId, setStaffId] = useState("");
+
+  useFocusEffect(useCallback(() => {
+    if (role !== "ADMIN") return;
+    if (!hasFocused.current) {
+      hasFocused.current = true;
+      return;
+    }
+    stations.reload();
+  }, [role, stations.reload]));
 
   useEffect(() => {
     if (!job.token || !picked) return;
@@ -196,10 +279,43 @@ export function StationScreen() {
     };
   }, [job.token, picked, job.note, role]);
 
+  async function findStationCoordinates() {
+    const query = address.trim();
+    if (!query || geocoding) return;
+
+    setGeocoding(true);
+    setGeocodeMessage("");
+    try {
+      if (Platform.OS === "android") {
+        const permission = await Location.requestForegroundPermissionsAsync();
+        if (!permission.granted) {
+          setGeocodeMessage("Cần quyền vị trí để tra cứu địa chỉ trên Android.");
+          return;
+        }
+      }
+
+      const results = await Location.geocodeAsync(query);
+      const match = results[0];
+      if (!match) {
+        setGeocodeMessage("Không tìm thấy vị trí. Hãy nhập địa chỉ cụ thể hơn.");
+        return;
+      }
+
+      setLatitude(match.latitude.toFixed(6));
+      setLongitude(match.longitude.toFixed(6));
+      setMapFocusKey((key) => key + 1);
+      setGeocodeMessage("Đã tìm thấy vị trí. Bạn có thể chỉnh lại bằng cách chạm vào bản đồ.");
+    } catch (caught) {
+      setGeocodeMessage(caught instanceof Error ? `Không tra được địa chỉ: ${caught.message}` : "Không tra được địa chỉ.");
+    } finally {
+      setGeocoding(false);
+    }
+  }
+
   return (
     <OpsGate>
       <Title>Trạm</Title>
-      <Note text={stations.error || orgs.error || staffError || job.note} />
+      <Note text={stations.error || orgs.error || staffError || (role === "ADMIN" ? "" : job.note)} />
       {stations.rows ? (
         <StatRow
           items={[
@@ -213,7 +329,7 @@ export function StationScreen() {
       {picked ? (
         <View style={{ gap: 8 }}>
           {can(role, ["ADMIN"]) && stations.rows?.find((row) => row._id === picked)?.isActive ? <Body>Trạm này đã được duyệt.</Body> : null}
-          {can(role, ["ADMIN"]) && !stations.rows?.find((row) => row._id === picked)?.isActive ? <Button label={job.busy ? "Đang gửi" : "Duyệt trạm"} onPress={() => void job.run((token) => backend.approveStation(token, picked)).then((ok) => ok && stations.reload())} /> : null}
+          {can(role, ["ADMIN"]) && !stations.rows?.find((row) => row._id === picked)?.isActive ? <Button label={approveStationJob.busy ? "Đang gửi" : "Duyệt trạm"} onPress={() => void approveStationJob.run((token) => backend.approveStation(token, picked)).then((ok) => ok && stations.reload())} /> : null}
           {role === "ORG_MANAGER" && stations.rows?.find((row) => row._id === picked)?.isActive ? (
             <View style={{ gap: 8 }}>
               <TextField label="Email hoặc điện thoại của trưởng trạm có sẵn" value={identifier} onChangeText={setIdentifier} />
@@ -268,26 +384,60 @@ export function StationScreen() {
         </View>
       ) : null}
       {role === "ORG_MANAGER" ? (
-        <View style={{ gap: 8 }}>
-          <Title>Trạm mới</Title>
-          <Body muted>Chọn tổ chức sở hữu trạm.</Body>
-          <PickList rows={orgs.rows} selected={orgId} onPick={setOrgId} detail={orgDetail} />
-          <TextField label="Tên trạm" value={name} onChangeText={setName} />
-          <TextField label="Địa chỉ" value={address} onChangeText={setAddress} />
-          {AppleMaps ? <Body muted>Chạm bản đồ để đặt vị trí trạm.</Body> : null}
-          {AppleMaps ? <StationPlaceMap latitude={latitude} longitude={longitude} onPick={(lat, lng) => { setLatitude(lat); setLongitude(lng); }} /> : null}
-          <TextField label="Vĩ độ" value={latitude} onChangeText={setLatitude} />
-          <TextField label="Kinh độ" value={longitude} onChangeText={setLongitude} />
-          <Button
-            label="Tạo trạm"
-            onPress={() => void job.run((token) => backend.createStationForOrganization(token, orgId, {
-              name: name.trim(),
-              address: address.trim(),
-              latitude: latitude.trim(),
-              longitude: longitude.trim(),
-            })).then((ok) => ok && stations.reload())}
-          />
-        </View>
+        <>
+          <View style={{ gap: 8 }}>
+            <Title>Trạm mới</Title>
+            <Body muted>Chọn tổ chức sở hữu trạm.</Body>
+            <PickList rows={orgs.rows} selected={orgId} onPick={setOrgId} detail={orgDetail} />
+            <TextField label="Tên trạm" value={name} onChangeText={setName} />
+            <TextField
+              label="Địa chỉ"
+              value={address}
+              onChangeText={(value) => {
+                setAddress(value);
+                if (Platform.OS === "android") {
+                  if (latitude || longitude) setMapFocusKey((key) => key + 1);
+                  setLatitude("");
+                  setLongitude("");
+                  setGeocodeMessage("");
+                }
+              }}
+            />
+            {Platform.OS === "android" ? (
+              <Button
+                label={geocoding ? "Đang tìm vị trí..." : "Tìm tọa độ từ địa chỉ"}
+                tone="ghost"
+                disabled={!address.trim() || geocoding}
+                onPress={() => void findStationCoordinates()}
+              />
+            ) : null}
+            {Platform.OS === "android" && geocodeMessage ? <Body muted>{geocodeMessage}</Body> : null}
+            {Platform.OS === "android" || AppleMaps ? <Body muted>Chạm bản đồ để đặt vị trí trạm.</Body> : null}
+            {Platform.OS === "android" || AppleMaps ? (
+              <StationPlaceMap
+                key={mapFocusKey}
+                latitude={latitude}
+                longitude={longitude}
+                onPick={(lat, lng) => {
+                  setLatitude(lat);
+                  setLongitude(lng);
+                }}
+              />
+            ) : null}
+            <TextField label="Vĩ độ" value={latitude} onChangeText={setLatitude} />
+            <TextField label="Kinh độ" value={longitude} onChangeText={setLongitude} />
+            <Button
+              label="Tạo trạm"
+              onPress={() => void createStationJob.run((token) => backend.createStationForOrganization(token, orgId, {
+                name: name.trim(),
+                address: address.trim(),
+                latitude: latitude.trim(),
+                longitude: longitude.trim(),
+              })).then((ok) => ok && stations.reload())}
+            />
+          </View>
+          <Note text={createStationJob.note} />
+        </>
       ) : role === "ADMIN" ? null : <Body muted>Vai trò này không tạo trạm.</Body>}
     </OpsGate>
   );

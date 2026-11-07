@@ -394,6 +394,7 @@ export function StationMap({
                     source={{ html }}
                     javaScriptEnabled
                     scrollEnabled={false}
+                    nestedScrollEnabled={Platform.OS === "android"}
                     onLoadEnd={() => setMapReady(true)}
                     onMessage={(event) => {
                       let message: unknown;

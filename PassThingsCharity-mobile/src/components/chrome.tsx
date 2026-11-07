@@ -36,10 +36,12 @@ export function Screen({
   children,
   tab,
   scroll = true,
+  nestedScrollEnabled = false,
 }: {
   children: ReactNode;
   tab: TabKey;
   scroll?: boolean;
+  nestedScrollEnabled?: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const path = usePathname();
@@ -58,6 +60,7 @@ export function Screen({
           <ScrollView
             contentInsetAdjustmentBehavior="automatic"
             keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled={nestedScrollEnabled}
             contentContainerStyle={{
               paddingHorizontal: 16,
               paddingTop: 12,

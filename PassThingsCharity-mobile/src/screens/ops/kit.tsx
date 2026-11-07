@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import { ApiError } from "@/api/client";
 import { resultText } from "@/api/backend";
@@ -120,6 +120,7 @@ export function useRows(load: (token: string) => Promise<Row[]>) {
   const [stamp, setStamp] = useState(0);
   const loadRef = useRef(load);
   loadRef.current = load;
+  const reload = useCallback(() => setStamp((value) => value + 1), []);
 
   useEffect(() => {
     if (!token) return;
@@ -140,7 +141,7 @@ export function useRows(load: (token: string) => Promise<Row[]>) {
     };
   }, [token, stamp]);
 
-  return { token, rows, error, reload: () => setStamp((value) => value + 1) };
+  return { token, rows, error, reload };
 }
 
 export function useJob() {
