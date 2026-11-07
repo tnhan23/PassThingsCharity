@@ -148,4 +148,8 @@ MMA_Documentation.md
 MMA_DATABASE_SCHEMA.pdf
 *.pdf
 
+# IDE
+.idea/
+
+
 

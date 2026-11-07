@@ -33,7 +33,28 @@ module.exports = {
         },
       },
       responses: {
-        200: { description: 'Đăng nhập thành công, trả về token' },
+        200: {
+          description: 'Login returns a token and user.stations. STATION_MANAGER: assigned stations by managerId. STAFF: stations linked through StationStaff. Empty array if unassigned or another role. Includes inactive stations.',
+          content: { 'application/json': { schema: {
+            type: 'object',
+            properties: {
+              token: { type: 'string' }, tokenType: { type: 'string', example: 'Bearer' },
+              expiresIn: { type: 'integer', example: 3600 },
+              user: { type: 'object', properties: {
+                id: { type: 'string' }, username: { type: 'string' },
+                avatarUrl: { type: 'string', nullable: true }, phone: { type: 'string', nullable: true },
+                role: { type: 'string', description: 'Existing role ID, or ADMIN for an admin account.' },
+                stations: { type: 'array', items: { type: 'object', properties: {
+                  _id: { type: 'string' }, name: { type: 'string' }, address: { type: 'string' },
+                  organizationId: { type: 'string' }, managerId: { type: 'string', nullable: true },
+                  imageUrl: { type: 'string', nullable: true }, isActive: { type: 'boolean' },
+                  latitude: { type: 'string' }, longitude: { type: 'string' },
+                  openingTime: { type: 'string' }, closingTime: { type: 'string' },
+                } } },
+              } },
+            },
+          } } },
+        },
         401: { description: 'Sai tài khoản hoặc mật khẩu' },
       },
     },

@@ -1,3 +1,4 @@
+const workflow = require('../services/transferWorkflow');
 const mongoose = require('mongoose');
 const CampaignTransfer = require('../models/campaignTransfer');
 const CampaignTransferItem = require('../models/campaignTransferItem');
@@ -52,11 +53,9 @@ async function createTransfer(req, res, next) {
     }
 
     // Verify campaign & stations exist
-    const [campaign, fromStation, toStation] = await Promise.all([
-      Campaign.findById(campaignId),
-      Station.findById(fromStationId),
-      Station.findById(toStationId),
-    ]);
+    const campaign = await Campaign.findById(campaignId);
+    const fromStation = await Station.findById(fromStationId);
+    const toStation = await Station.findById(toStationId);
 
     if (!campaign) {
       return res.status(404).json({ error: 'Không tìm thấy chiến dịch.' });
@@ -68,6 +67,16 @@ async function createTransfer(req, res, next) {
       return res.status(404).json({ error: 'Không tìm thấy trạm nhận hàng (toStationId).' });
     }
 
+    await workflow.stationAccess(fromStationId, req.user);
+    await workflow.requireOnDuty(fromStationId, req.user);
+    if (responsibleUserId && String(responsibleUserId) !== String(req.user._id)) {
+      await workflow.stationAccess(fromStationId, req.user, true);
+      await workflow.validateResponsible(fromStationId, responsibleUserId);
+    }
+    if (req.body.receivedBy !== undefined && req.body.receivedBy !== null) {
+      return res.status(400).json({ error: 'Station B assigns receivedBy through /transfers/{id}/responsibilities.' });
+    }
+    const seenItems = new Set();
     // Validate items
     const validUnits = ['KG', 'PAIR', 'BOX', 'PACK', 'PIECE'];
     const validatedItems = [];
@@ -92,6 +101,12 @@ async function createTransfer(req, res, next) {
         return res.status(404).json({ error: `Không tìm thấy loại vật phẩm ID: ${it.itemTypeId}` });
       }
 
+      if (unit !== itemType.unit) {
+        return res.status(400).json({ error: `Vật phẩm thứ ${i + 1}: đơn vị phải là ${itemType.unit}.` });
+      }
+      const key = String(it.itemTypeId) + ':' + unit;
+      if (seenItems.has(key)) return res.status(400).json({ error: 'Duplicate itemTypeId and unit.' });
+      seenItems.add(key);
       validatedItems.push({
         itemTypeId: it.itemTypeId,
         quantity: qty,
@@ -110,8 +125,12 @@ async function createTransfer(req, res, next) {
       fromStationId,
       toStationId,
       status: 'PENDING',
+      workflowVersion: 2,
+      sourceAssignedAt: new Date(),
+      approvalStatus: 'PENDING',
       createdBy: req.user._id,
-      responsibleUserId: responsibleUserId || null,
+      responsibleUserId: responsibleUserId || req.user._id,
+      receivedBy: null,
       transportMethod: typeof transportMethod === 'string' ? transportMethod.trim() : '',
       transportNote: typeof transportNote === 'string' ? transportNote.trim() : '',
     });
@@ -144,6 +163,13 @@ async function getAllTransfers(req, res, next) {
   try {
     const { campaignId, fromStationId, toStationId, status, page = 1, limit = 20 } = req.query;
     const filter = {};
+    if (req.user.role?.name !== 'ADMIN') {
+      const StationStaff = require('../models/stationstaff');
+      const managed = await Station.find({ managerId: req.user._id }).select('_id');
+      const assigned = await StationStaff.distinct('stationId', { userId: req.user._id });
+      const ids = [...managed.map(station => station._id), ...assigned];
+      filter.$or = [{ fromStationId: { $in: ids } }, { toStationId: { $in: ids } }];
+    }
 
     if (campaignId) {
       if (!mongoose.isValidObjectId(campaignId)) {
@@ -184,6 +210,7 @@ async function getAllTransfers(req, res, next) {
         .populate('toStationId', 'name address')
         .populate('createdBy', 'fullName username')
         .populate('responsibleUserId', 'fullName username phone')
+        .populate('approvedBy', 'fullName username')
         .populate('receivedBy', 'fullName username phone')
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -217,18 +244,19 @@ async function getTransferById(req, res, next) {
       .populate('toStationId', 'name address phone')
       .populate('createdBy', 'fullName username email phone')
       .populate('responsibleUserId', 'fullName username email phone')
+      .populate('approvedBy', 'fullName username')
       .populate('receivedBy', 'fullName username email phone');
 
     if (!transfer) {
       return res.status(404).json({ error: 'Không tìm thấy lệnh điều phối.' });
     }
 
-    const items = await CampaignTransferItem.find({ transferId: id }).populate('itemTypeId', 'name unit categoryId');
-
-    return res.status(200).json({
-      transfer,
-      items,
-    });
+    await workflow.requireRead(transfer, req.user);
+    const details = await workflow.summary(transfer);
+    if (req.user.role?.name === 'USER') {
+      details.shipments = details.shipments.filter(shipment => String(shipment.carrierId._id) === String(req.user._id));
+    }
+    return res.status(200).json({ transfer, ...details });
   } catch (error) {
     return next(error);
   }
@@ -257,6 +285,34 @@ async function updateTransferStatus(req, res, next) {
       return res.status(404).json({ error: 'Không tìm thấy lệnh điều phối.' });
     }
 
+    if (transfer.workflowVersion === 2) {
+      if (!['CANCELLED', 'COMPLETED'].includes(newStatus)) {
+        return res.status(409).json({ error: 'Use approval and individual dispatch/report/receive endpoints for this transfer.' });
+      }
+      if (newStatus === 'CANCELLED') {
+        await workflow.stationAccess(transfer.fromStationId, req.user, true);
+        const items = await CampaignTransferItem.find({ transferId: transfer._id });
+        if (items.some(item => item.dispatchedQuantity > 0)) return res.status(409).json({ error: 'Cannot cancel after physical dispatch.' });
+      } else {
+        await workflow.stationAccess(transfer.toStationId, req.user);
+        if (transfer.status !== 'RECEIVED') return res.status(409).json({ error: 'All shipments must be fully received before completion.' });
+      }
+      if (responsibleUserId !== undefined || receivedBy !== undefined) return res.status(400).json({ error: 'Handover actors are recorded by the individual handover endpoints.' });
+    } else {
+      if (['IN_TRANSIT', 'PREPARING'].includes(newStatus) && newStatus !== transfer.status) return res.status(409).json({ error: 'Create a new transfer to use the approval workflow.' });
+      await workflow.stationAccess(['RECEIVED', 'COMPLETED'].includes(newStatus) ? transfer.toStationId : transfer.fromStationId, req.user);
+    }
+    const transitions = {
+      PENDING: ['PREPARING', 'CANCELLED'],
+      PREPARING: ['IN_TRANSIT', 'CANCELLED'],
+      IN_TRANSIT: ['RECEIVED'],
+      RECEIVED: ['COMPLETED'],
+      COMPLETED: [],
+      CANCELLED: [],
+    };
+    if (newStatus !== transfer.status && !transitions[transfer.status].includes(newStatus)) {
+      return res.status(409).json({ error: `Không thể chuyển từ ${transfer.status} sang ${newStatus}.` });
+    }
     transfer.status = newStatus;
     if (typeof transportNote === 'string') {
       transfer.transportNote = transportNote.trim();
@@ -285,9 +341,10 @@ async function updateTransferStatus(req, res, next) {
   }
 }
 
+const { inventoryTransaction } = require('../services/inventory');
 module.exports = {
-  createTransfer,
+  createTransfer: inventoryTransaction(createTransfer, 'TRANSFER'),
   getAllTransfers,
   getTransferById,
-  updateTransferStatus,
+  updateTransferStatus: inventoryTransaction(updateTransferStatus, 'TRANSFER'),
 };

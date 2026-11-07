@@ -53,25 +53,25 @@ export function Screen({
   return (
     <View style={styles.frame}>
       <View style={styles.root}>
-      <Header />
-      {scroll ? (
-        <ScrollView
-          contentInsetAdjustmentBehavior="automatic"
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{
-            paddingHorizontal: 16,
-            paddingTop: 12,
-            paddingBottom: insets.bottom + (desk ? 58 : 112),
-            gap: 14,
-          }}
-        >
-          {children}
-        </ScrollView>
-      ) : (
-        <View style={{ flex: 1, paddingBottom: insets.bottom + 88, overflow: "hidden" }}>{children}</View>
-      )}
-      <TabBar active={active} desk={desk} sheet={sheet} onCreate={onCreate} />
-      {desk ? null : <CreateSheet open={sheet} onClose={() => setSheet(false)} />}
+        <Header />
+        {scroll ? (
+          <ScrollView
+            contentInsetAdjustmentBehavior="automatic"
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{
+              paddingHorizontal: 16,
+              paddingTop: 12,
+              paddingBottom: insets.bottom + (desk ? 58 : 112),
+              gap: 14,
+            }}
+          >
+            {children}
+          </ScrollView>
+        ) : (
+          <View style={{ flex: 1, paddingBottom: insets.bottom + 88, overflow: "hidden" }}>{children}</View>
+        )}
+        <TabBar active={active} desk={desk} sheet={sheet} onCreate={onCreate} />
+        {desk ? null : <CreateSheet open={sheet} onClose={() => setSheet(false)} />}
       </View>
     </View>
   );
@@ -347,7 +347,7 @@ const actions: { label: string; href: Href; tone?: "ghost"; roles?: string[] }[]
   { label: "Đăng ký tổ chức", href: "/organization", tone: "ghost", roles: ["USER"] },
   { label: "Việc tình nguyện", href: "/jobs", tone: "ghost" },
   { label: "Ca trực", href: "/shifts", tone: "ghost", roles: ["STATION_MANAGER", "ORG_MANAGER", "STAFF"] },
-  { label: "Vận hành", href: "/desk", tone: "ghost" },
+  { label: "Vận hành", href: "/desk", tone: "ghost", roles: ["ADMIN", "ORG_MANAGER", "STATION_MANAGER", "STAFF"] },
 ];
 
 function MemberCard({ onClose }: { onClose: () => void }) {

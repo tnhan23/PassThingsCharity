@@ -11,18 +11,25 @@ const {
 const { createStation } = require('../controller/station');
 const checkBearerToken = require('../middleware/checkBearerToken');
 const checkRole = require('../middleware/checkRole');
+const { createUploadHandler } = require('../utils/contributionUpload');
 
 router.use(checkBearerToken);
 
+router.post(
+  '/upload-evidence',
+  checkRole(['ADMIN', 'ORG_MANAGER', 'USER']),
+  createUploadHandler('organization-evidence')
+);
+
 router.get(
   '/',
-  checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF', 'VOLUNTEER', 'USER']),
+  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'STAFF', 'USER']),
   listOrganizations
 );
 
 router.get(
   '/:id',
-  checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF', 'VOLUNTEER', 'USER']),
+  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'STAFF', 'USER']),
   getOrganization
 );
 
@@ -34,7 +41,7 @@ router.post(
 
 router.patch(
   '/:id',
-  checkRole(['ADMIN', 'STATION_MANAGER']),
+  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'USER']),
   updateOrganization
 );
 

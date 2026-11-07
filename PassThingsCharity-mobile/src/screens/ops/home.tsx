@@ -582,6 +582,7 @@ export function StaffHome() {
           { label: "Phiếu đã lập", icon: "receipt-long" as const, href: "/desk/intake" as const },
           { label: "Kho trạm", icon: "inventory" as const, href: "/desk/stock" as const },
           { label: "Điều chuyển", icon: "swap-horiz" as const, href: "/desk/transfers" as const },
+          { label: "Giao hàng", icon: "local-shipping" as const, href: "/desk/relief" as const },
           { label: "Nhân sự & Việc", icon: "groups" as const, href: "/desk/crew" as const },
           { label: "Điểm & Chứng nhận", icon: "stars" as const, href: "/desk/rewards" as const },
         ].map((item) => (

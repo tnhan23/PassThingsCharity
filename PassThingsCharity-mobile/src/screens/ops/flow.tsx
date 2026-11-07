@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import { Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import { backend } from "@/api/backend";
 import { ApiError } from "@/api/client";
 import { donorLabel, unitSpoken } from "@/api/labels";
@@ -14,11 +14,14 @@ function line(itemId: string, quantity: string, unit: string) {
   return [{ itemTypeId: itemId, quantity: Number(quantity), unit }];
 }
 
-function asPerson(row: Row & { userId?: { _id?: string; fullName?: string; username?: string } | string }): Row {
+function asPerson(row: Row & { userId?: { _id?: string; fullName?: string; username?: string; phone?: string; email?: string } | string }): Row {
   const person = row.userId && typeof row.userId === "object" ? row.userId : undefined;
   return {
     ...row,
     fullName: row.fullName || person?.fullName || person?.username || "Người dùng",
+    username: row.username || person?.username,
+    phone: row.phone || person?.phone,
+    email: row.email || person?.email,
     ownerId: person?._id || (typeof row.userId === "string" ? row.userId : ""),
   };
 }
@@ -56,8 +59,8 @@ export function IntakeWork() {
   const receipts = useRows((token) => backend.listContributions(token).then((data) => data.data as Row[]));
   const job = useJob();
   const role = useRole();
-  const canWrite = can(role, ["STATION_MANAGER", "STAFF"]);
-  const canJudge = role === "STATION_MANAGER";
+  const canWrite = can(role, ["ADMIN", "STATION_MANAGER", "STAFF"]);
+  const canJudge = can(role, ["ADMIN", "STATION_MANAGER"]);
   const [picked, setPicked] = useState("");
   const [detail, setDetail] = useState<ContributionDetail | null>(null);
   const [stamp, setStamp] = useState(0);
@@ -447,6 +450,23 @@ export function ReliefWork() {
   );
 }
 
+function appStatusLabel(status?: string) {
+  if (status === "APPROVED") return "Đã duyệt & giao việc";
+  if (status === "REJECTED") return "Đã từ chối";
+  if (status === "CANCELLED") return "Đã hủy";
+  return "Chờ duyệt";
+}
+
+function stationTitleOf(value: Row["stationId"]) {
+  if (!value || typeof value === "string") return "";
+  return value.name || "";
+}
+
+function stationIdOf(value: Row["stationId"]) {
+  if (!value) return "";
+  return typeof value === "string" ? value : value._id || "";
+}
+
 export function CrewWork() {
   const tasks = useRows((token) => backend.listTasks(token).then((data) => data.data as Row[]));
   const campaigns = useRows(async () => (await backend.listCampaigns()).campaigns as Row[]);
@@ -457,6 +477,8 @@ export function CrewWork() {
   const canCreateTask = can(role, ["ADMIN", "STATION_MANAGER", "STAFF"]);
   const canApproveJoin = can(role, ["ADMIN", "STATION_MANAGER"]);
   const [taskId, setTaskId] = useState("");
+  const [filterStationId, setFilterStationId] = useState("");
+  const [onlyPending, setOnlyPending] = useState(false);
   const [campaignId, setCampaignId] = useState("");
   const [stationId, setStationId] = useState("");
   const [title, setTitle] = useState("");
@@ -470,16 +492,20 @@ export function CrewWork() {
   const [peopleError, setPeopleError] = useState("");
   const [registrationId, setRegistrationId] = useState("");
   const [applicants, setApplicants] = useState<Row[] | null>(null);
-  const [applicationId, setApplicationId] = useState("");
+  const [applicantsError, setApplicantsError] = useState("");
   const [joinStamp, setJoinStamp] = useState(0);
   const [applyStamp, setApplyStamp] = useState(0);
 
   useEffect(() => {
-    if (!job.token || !campaignId) return;
+    if (!job.token || !campaignId) {
+      setPeople(null);
+      return;
+    }
     let cancelled = false;
+    setPeopleError("");
     backend.campaignVolunteers(job.token, campaignId)
       .then((data) => {
-        const payload = data as { data?: Array<Row & { userId?: { _id?: string; fullName?: string; username?: string } | string }> };
+        const payload = data as { data?: Array<Row & { userId?: { _id?: string; fullName?: string; username?: string; phone?: string; email?: string } | string }> };
         if (!cancelled) setPeople((payload.data || []).map(asPerson));
       })
       .catch((caught) => {
@@ -494,36 +520,138 @@ export function CrewWork() {
   }, [job.token, campaignId, joinStamp]);
 
   useEffect(() => {
-    if (!job.token || !taskId) return;
+    if (!job.token || !taskId) {
+      setApplicants(null);
+      setApplicantsError("");
+      return;
+    }
     let cancelled = false;
+    setApplicants(null);
+    setApplicantsError("");
     backend.taskApplications(job.token, taskId)
       .then((data) => {
-        const payload = data as { data?: Array<Row & { userId?: { _id?: string; fullName?: string; username?: string } | string }> };
+        const payload = data as { data?: Array<Row & { userId?: { _id?: string; fullName?: string; username?: string; phone?: string; email?: string } | string }> };
         if (!cancelled) setApplicants((payload.data || []).map(asPerson));
       })
-      .catch(() => {
-        if (!cancelled) setApplicants([]);
+      .catch((caught) => {
+        if (!cancelled) {
+          setApplicants([]);
+          setApplicantsError(caught instanceof ApiError ? caught.message : "Không tải được danh sách ứng tuyển.");
+        }
       });
     return () => {
       cancelled = true;
     };
   }, [job.token, taskId, applyStamp]);
 
+  const allTasks = tasks.rows ?? [];
+  const pendingTotal = allTasks.reduce((sum, row) => sum + (row.slots?.pending ?? 0), 0);
+  const tasksWithPending = allTasks.filter((row) => (row.slots?.pending ?? 0) > 0).length;
+  const visibleTasks = tasks.rows
+    ? allTasks.filter((row) => {
+        if (onlyPending && (row.slots?.pending ?? 0) === 0) return false;
+        if (filterStationId && stationIdOf(row.stationId) !== filterStationId) return false;
+        return true;
+      })
+    : null;
+
   return (
     <OpsGate>
-      <Title>Nhân sự</Title>
+      <Title>Nhân sự & Tình nguyện viên</Title>
       <RoleNote />
-      <Note text={tasks.error || peopleError || job.note} />
+      <Note text={tasks.error || peopleError || applicantsError || job.note} />
+      {tasks.rows ? (
+        <StatRow
+          items={[
+            { label: "Tổng việc", value: allTasks.length, unit: "việc", tone: "ink" },
+            { label: "Đang mở tuyển", value: allTasks.filter((row) => row.recruitmentStatus === "OPEN").length, unit: "việc", tone: "primary" },
+            { label: "Đơn chờ duyệt", value: pendingTotal, unit: "đơn", tone: "coral" },
+          ]}
+        />
+      ) : null}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+        <Pill label={`Tất cả việc (${allTasks.length})`} active={!onlyPending} onPress={() => setOnlyPending(false)} />
+        <Pill label={`Có đơn chờ duyệt (${tasksWithPending})`} active={onlyPending} onPress={() => setOnlyPending(true)} />
+      </ScrollView>
+      {stations.rows && stations.rows.length > 0 ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+          <Pill label="Tất cả trạm" active={filterStationId === ""} onPress={() => setFilterStationId("")} />
+          {stations.rows.map((st) => (
+            <Pill key={st._id} label={st.name || "Trạm"} active={filterStationId === st._id} onPress={() => setFilterStationId(st._id)} />
+          ))}
+        </ScrollView>
+      ) : null}
       <PickList
-        rows={tasks.rows}
+        rows={visibleTasks}
         selected={taskId}
         onPick={setTaskId}
-        detail={(row) => `${row.status || ""} tuyển ${row.recruitmentStatus || ""}`}
+        detail={(row) => {
+          const stName = stationTitleOf(row.stationId);
+          const pending = row.slots?.pending ?? 0;
+          const approved = row.slots?.approved ?? 0;
+          const total = row.slots?.total ?? 0;
+          return [
+            stName || "Chưa rõ trạm",
+            pending > 0 ? `Chờ duyệt: ${pending} đơn` : null,
+            `Chỗ: ${approved}/${total}`,
+            `${row.status || ""} · ${row.recruitmentStatus || ""}`,
+          ].filter(Boolean).join(" · ");
+        }}
         panel={(row) => canTask ? (
-          <>
-            <Button label="Mở tuyển" tone="ghost" onPress={() => void job.run((token) => backend.updateTask(token, row._id, { recruitmentStatus: "OPEN" })).then((ok) => ok && tasks.reload())} />
-            <Button label="Hủy việc" tone="danger" onPress={() => void job.run((token) => backend.updateTask(token, row._id, { status: "CANCELLED" })).then((ok) => ok && tasks.reload())} />
-          </>
+          <View style={{ gap: 10 }}>
+            {stationTitleOf(row.stationId) ? <Body muted>{`Trạm: ${stationTitleOf(row.stationId)}`}</Body> : null}
+            {row.description ? <Body>{row.description}</Body> : null}
+            <Text style={{ fontFamily: fonts.bold, fontSize: 15, color: colors.ink }}>
+              {`Tình nguyện viên ứng tuyển (${applicants ? applicants.length : "…"})`}
+            </Text>
+            {applicants === null ? <Body muted>Đang tải danh sách ứng tuyển...</Body> : null}
+            {applicants && applicants.length === 0 ? <Body muted>Chưa có tình nguyện viên nào ứng tuyển việc này.</Body> : null}
+            {applicants?.map((app) => (
+              <Card key={app._id} style={{ backgroundColor: colors.surfaceLow, padding: 12, gap: 8 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                  <Text style={{ fontFamily: fonts.bold, fontSize: 15, color: colors.ink }}>
+                    {app.fullName || app.username || "Tình nguyện viên"}
+                  </Text>
+                  <Badge
+                    label={appStatusLabel(app.status)}
+                    tone={app.status === "APPROVED" ? "primary" : app.status === "REJECTED" ? "danger" : "coral"}
+                  />
+                </View>
+                {[app.phone, app.email, app.username ? `@${app.username}` : ""].filter(Boolean).length > 0 ? (
+                  <Body muted>{[app.phone, app.email, app.username ? `@${app.username}` : ""].filter(Boolean).join(" · ")}</Body>
+                ) : null}
+                {app.status === "PENDING" ? (
+                  <View style={{ gap: 8 }}>
+                    <Button
+                      label={job.busy ? "Đang xử lý..." : "Duyệt tình nguyện viên"}
+                      onPress={() => void job.run((token) => backend.reviewTaskApplication(token, app._id, { status: "APPROVED" })).then((ok) => {
+                        if (!ok) return;
+                        setApplyStamp((value) => value + 1);
+                        tasks.reload();
+                      })}
+                    />
+                    <Button
+                      label="Từ chối đơn"
+                      tone="danger"
+                      onPress={() => void job.run((token) => backend.reviewTaskApplication(token, app._id, { status: "REJECTED" })).then((ok) => {
+                        if (!ok) return;
+                        setApplyStamp((value) => value + 1);
+                        tasks.reload();
+                      })}
+                    />
+                  </View>
+                ) : null}
+              </Card>
+            ))}
+            <View style={{ gap: 8, paddingTop: 6, borderTopWidth: 1, borderTopColor: colors.hairline }}>
+              {row.recruitmentStatus !== "OPEN" ? (
+                <Button label="Mở tuyển lại" tone="ghost" onPress={() => void job.run((token) => backend.updateTask(token, row._id, { recruitmentStatus: "OPEN" })).then((ok) => ok && tasks.reload())} />
+              ) : null}
+              {row.status !== "CANCELLED" ? (
+                <Button label="Hủy việc này" tone="danger" onPress={() => void job.run((token) => backend.updateTask(token, row._id, { status: "CANCELLED" })).then((ok) => ok && tasks.reload())} />
+              ) : null}
+            </View>
+          </View>
         ) : null}
       />
       {canCreateTask ? (
@@ -531,8 +659,8 @@ export function CrewWork() {
           <PickList rows={stations.rows} selected={stationId} onPick={setStationId} detail={(row) => row.address || ""} />
           <TextField label="Tên việc" value={title} onChangeText={setTitle} />
           <TextField label="Mô tả ngắn" value={detail} onChangeText={setDetail} />
-          <TextField label="Bắt đầu, ví dụ 2026-11-07T08:00" value={startTime} onChangeText={setStartTime} />
-          <TextField label="Kết thúc, ví dụ 2026-11-07T12:00" value={endTime} onChangeText={setEndTime} />
+          <TextField label="Bắt đầu, ví dụ 2026-11-08T08:00" value={startTime} onChangeText={setStartTime} />
+          <TextField label="Kết thúc, ví dụ 2026-11-08T12:00" value={endTime} onChangeText={setEndTime} />
           <TextField label="Số người cần" value={needed} onChangeText={setNeeded} />
           <TextField label="Hạn đăng ký, có thể để trống" value={deadline} onChangeText={setDeadline} />
           <TextField label="Điểm thưởng" value={points} onChangeText={setPoints} />
@@ -554,26 +682,47 @@ export function CrewWork() {
         </Fold>
       ) : null}
       <Title>Đơn tham gia chiến dịch</Title>
-      <Body muted>Danh sách này tách với đơn xin việc bên dưới.</Body>
-      {can(role, ["ADMIN", "STATION_MANAGER", "STAFF"]) && campaignId ? <PickList rows={people} selected={registrationId} onPick={setRegistrationId} detail={(row) => row.status || ""} /> : <Body muted>Chọn chiến dịch ở trên để xem đơn tham gia.</Body>}
-      {role === "STAFF" ? <Body muted>Nhân viên xem được đơn tham gia chiến dịch. Chỉ admin và quản lý trạm duyệt đơn đó.</Body> : null}
-      {canApproveJoin && registrationId ? (
-        <View style={{ gap: 8 }}>
-          <Button label="Duyệt đơn tham gia" onPress={() => void job.run((token) => backend.updateVolunteerStatus(token, registrationId, { status: "APPROVED" })).then((ok) => ok && setJoinStamp((value) => value + 1))} />
-          <Button label="Từ chối đơn tham gia" tone="danger" onPress={() => void job.run((token) => backend.updateVolunteerStatus(token, registrationId, { status: "REJECTED" })).then((ok) => ok && setJoinStamp((value) => value + 1))} />
-          <Button label="Hủy đơn tham gia" tone="ghost" onPress={() => void job.run((token) => backend.updateVolunteerStatus(token, registrationId, { status: "CANCELLED" })).then((ok) => ok && setJoinStamp((value) => value + 1))} />
-        </View>
+      <Body muted>Chọn chiến dịch bên dưới để xem tình nguyện viên đăng ký theo chiến dịch.</Body>
+      {campaigns.rows && campaigns.rows.length > 0 ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+          {campaigns.rows.map((camp) => (
+            <Pill
+              key={camp._id}
+              label={camp.title || "Chiến dịch"}
+              active={campaignId === camp._id}
+              onPress={() => {
+                setCampaignId(camp._id);
+                setRegistrationId("");
+              }}
+            />
+          ))}
+        </ScrollView>
       ) : null}
-      <Title>Đơn xin việc</Title>
-      {canTask && taskId ? <PickList rows={applicants} selected={applicationId} onPick={setApplicationId} detail={(row) => row.status || ""} /> : <Body muted>Chọn một việc. Đơn xin việc không dùng id của đơn tham gia chiến dịch.</Body>}
-      {canTask && applicationId && taskId ? (
-        <View style={{ gap: 8 }}>
-          <Button label="Duyệt đơn xin việc" onPress={() => void job.run((token) => backend.reviewTaskApplication(token, applicationId, { status: "APPROVED" })).then((ok) => { if (!ok) return; setApplyStamp((value) => value + 1); tasks.reload(); })} />
-          <Button label="Từ chối đơn xin việc" tone="danger" onPress={() => void job.run((token) => backend.reviewTaskApplication(token, applicationId, { status: "REJECTED" })).then((ok) => { if (!ok) return; setApplyStamp((value) => value + 1); tasks.reload(); })} />
-          <Button label="Hủy đơn xin việc" tone="ghost" onPress={() => void job.run((token) => backend.reviewTaskApplication(token, applicationId, { status: "CANCELLED" })).then((ok) => { if (!ok) return; setApplyStamp((value) => value + 1); tasks.reload(); })} />
-          <Button label="Giao việc này cho người đang chọn" tone="ghost" onPress={() => void job.run((token) => backend.assignTask(token, { taskId, assigneeId: applicants?.find((row) => row._id === applicationId)?.ownerId || "", assigneeType: "VOLUNTEER" })).then((ok) => { if (!ok) return; setApplyStamp((value) => value + 1); tasks.reload(); })} />
-        </View>
-      ) : null}
+      {can(role, ["ADMIN", "STATION_MANAGER", "STAFF"]) && campaignId ? (
+        <PickList
+          rows={people}
+          selected={registrationId}
+          onPick={setRegistrationId}
+          detail={(row) => [row.phone, row.status || ""].filter(Boolean).join(" · ")}
+          panel={(row) => canApproveJoin ? (
+            <View style={{ gap: 8 }}>
+              {row.status !== "APPROVED" ? (
+                <Button label="Duyệt đơn tham gia" onPress={() => void job.run((token) => backend.updateVolunteerStatus(token, row._id, { status: "APPROVED" })).then((ok) => ok && setJoinStamp((value) => value + 1))} />
+              ) : null}
+              {row.status !== "REJECTED" ? (
+                <Button label="Từ chối đơn tham gia" tone="danger" onPress={() => void job.run((token) => backend.updateVolunteerStatus(token, row._id, { status: "REJECTED" })).then((ok) => ok && setJoinStamp((value) => value + 1))} />
+              ) : null}
+              {row.status !== "CANCELLED" ? (
+                <Button label="Hủy đơn tham gia" tone="ghost" onPress={() => void job.run((token) => backend.updateVolunteerStatus(token, row._id, { status: "CANCELLED" })).then((ok) => ok && setJoinStamp((value) => value + 1))} />
+              ) : null}
+            </View>
+          ) : (
+            <Body muted>Nhân viên xem được đơn tham gia chiến dịch. Chỉ Admin và Quản lý trạm duyệt đơn đó.</Body>
+          )}
+        />
+      ) : (
+        <Body muted>Bấm chọn một chiến dịch ở trên để xem danh sách đăng ký.</Body>
+      )}
     </OpsGate>
   );
 }

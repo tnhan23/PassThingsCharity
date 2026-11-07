@@ -3,7 +3,7 @@ import { Platform, ScrollView, View } from "react-native";
 import { backend } from "@/api/backend";
 import { donorLabel } from "@/api/labels";
 import { ApiError } from "@/api/client";
-import { Body, Button, Card, Pill, StatRow, Title } from "@/components/ui";
+import { Body, Button, Card, Photo, Pill, StatRow, Title } from "@/components/ui";
 import { colors } from "@/theme";
 import { can, Fold, nextCampaignStatuses, Note, OpsGate, PickList, RoleNote, TextField, Units, useJob, useRole, useRows, type Row } from "@/screens/ops/kit";
 
@@ -108,6 +108,16 @@ export function OrgScreen() {
             {row.operatingArea ? <Body muted>{row.operatingArea}</Body> : null}
             {row.idCardNumber ? <Body muted>{`CCCD ${row.idCardNumber}`}</Body> : null}
             {row.description ? <Body>{row.description}</Body> : null}
+            {row.evidenceImageUrls?.length ? (
+              <View style={{ gap: 8 }}>
+                <Body muted>{`Ảnh minh chứng (${row.evidenceImageUrls.length})`}</Body>
+                {row.evidenceImageUrls.map((url) => (
+                  <Photo key={url} uri={url} height={160} radius={14} />
+                ))}
+              </View>
+            ) : (
+              <Body muted>Chưa có ảnh minh chứng.</Body>
+            )}
             {row.rejectionReason ? <Body>{row.rejectionReason}</Body> : null}
             {orgBucket(row) === "PENDING" ? (
               <>

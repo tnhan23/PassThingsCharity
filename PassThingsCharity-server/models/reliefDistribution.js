@@ -49,6 +49,7 @@ const reliefDistributionSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+    completedAt: { type: Date, default: null },
     status: {
       type: String,
       enum: ['PLANNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'],

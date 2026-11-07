@@ -18,10 +18,14 @@ const pointTransactionSchema = new mongoose.Schema(
     type: {
       type: String,
       required: true,
-      enum: ['DONATION', 'VOLUNTEER_TASK', 'BONUS', 'SYSTEM'],
+      enum: ['DONATION', 'VOLUNTEER_TASK', 'BONUS', 'SYSTEM', 'NO_SHOW_PENALTY'],
     },
     sourceId: {
       type: mongoose.Schema.Types.ObjectId,
+    },
+    idempotencyKey: {
+      type: String,
+      trim: true,
     },
     description: {
       type: String,
@@ -30,5 +34,7 @@ const pointTransactionSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+pointTransactionSchema.index({ idempotencyKey: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('PointTransaction', pointTransactionSchema);

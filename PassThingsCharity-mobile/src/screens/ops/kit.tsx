@@ -28,11 +28,13 @@ export type Row = {
   description?: string;
   operatingArea?: string;
   idCardNumber?: string;
+  evidenceImageUrls?: string[];
   rejectionReason?: string;
   recipientName?: string;
   recruitmentStatus?: string;
+  slots?: { total?: number; approved?: number; pending?: number; remaining?: number; isFull?: boolean };
   campaignId?: { title?: string; _id?: string } | string;
-  stationId?: { name?: string } | string;
+  stationId?: { _id?: string; name?: string; address?: string } | string;
   fromStationId?: { name?: string } | string;
   toStationId?: { name?: string } | string;
 };
@@ -62,11 +64,11 @@ export const deskAccess = {
   stations: ["ADMIN", "ORG_MANAGER", "STATION_MANAGER"],
   catalog: ["ADMIN", "ORG_MANAGER", "STATION_MANAGER"],
   campaigns: ["ADMIN", "ORG_MANAGER", "STATION_MANAGER"],
-  intake: ["STATION_MANAGER", "STAFF"],
+  intake: ["ADMIN", "ORG_MANAGER", "STATION_MANAGER", "STAFF"],
   users: ["ADMIN"],
   alerts: ["ADMIN"],
   transfers: ["ADMIN", "STATION_MANAGER", "STAFF"],
-  relief: ["ADMIN", "STATION_MANAGER", "STAFF"],
+  relief: ["ADMIN", "ORG_MANAGER", "STATION_MANAGER", "STAFF"],
   crew: ["ADMIN", "STATION_MANAGER", "STAFF"],
   rewards: ["ADMIN", "ORG_MANAGER", "STATION_MANAGER", "STAFF"],
   stock: ["ADMIN", "STATION_MANAGER", "STAFF"],
