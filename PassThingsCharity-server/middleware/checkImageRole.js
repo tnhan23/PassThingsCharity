@@ -8,6 +8,7 @@ const roles = {
   'item-categories': ['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER'],
   'item-types': ['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER'],
   achievements: ['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER'],
+  tasks: ['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'STAFF'],
 };
 
 module.exports = function checkImageRole(req, res, next) {

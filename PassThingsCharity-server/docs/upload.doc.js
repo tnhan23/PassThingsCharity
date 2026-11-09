@@ -36,12 +36,14 @@ for (const [resource, label, field, tag] of [
   ['item-categories', 'ảnh nhóm hàng', 'imageUrl', 'Catalog'],
   ['item-types', 'ảnh loại hàng', 'imageUrl', 'Catalog'],
   ['achievements', 'ảnh huy hiệu', 'badgeIconUrl', 'Gamification'],
+  ['tasks', 'ảnh bài đăng tuyển TNV', 'imageUrl', 'BE3 - Workforce & Tasks'],
 ]) {
   const saveEndpoint = {
     users: 'PATCH /users/me/profile', organizations: 'PATCH /organizations/{id}',
     stations: 'PATCH /stations/{id}', campaigns: 'PATCH /campaigns/{id}',
     'item-categories': 'PATCH /catalog/categories/{id}', 'item-types': 'PATCH /catalog/items/{id}',
     achievements: 'PATCH /gamification/achievements/{id}',
+    tasks: 'PATCH /workforce/tasks/{id}',
   }[resource];
   const response = {
     type: 'object',

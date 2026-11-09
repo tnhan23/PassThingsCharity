@@ -11,5 +11,6 @@ for (const resource of ['users', 'organizations', 'stations', 'campaigns', 'item
   };
   router.post(`/${resource}/image`, checkBearerToken, selectResource, checkImageRole, uploadNewResourceImage);
 }
+router.post('/tasks/image', checkBearerToken, (req, res, next) => { req.params.resource = 'tasks'; next(); }, checkImageRole, uploadNewResourceImage);
 
 module.exports = router;
