@@ -575,11 +575,13 @@ export function CampaignWork() {
   const job = useJob();
   const role = useRole();
   const editor = can(role, ["ADMIN", "ORG_MANAGER", "STATION_MANAGER"]);
+  const draftCampaigns = useRows(async (token) => {
+    if (role !== "ADMIN") return [];
+    const data = await backend.listCampaigns({ status: "DRAFT" }, token);
+    return data.campaigns as Row[];
+  });
   const [picked, setPicked] = useState("");
   const [campaignFilter, setCampaignFilter] = useState<"ALL" | "DRAFT" | "ACTIVE" | "COMPLETED">("ALL");
-  const [draftCampaignRows, setDraftCampaignRows] = useState<Row[] | null>(null);
-  const [draftCampaignError, setDraftCampaignError] = useState("");
-  const [loadingDrafts, setLoadingDrafts] = useState(false);
   const [orgId, setOrgId] = useState("");
   const [itemId, setItemId] = useState("");
   const [stationId, setStationId] = useState("");
@@ -591,23 +593,10 @@ export function CampaignWork() {
   const [endDate, setEndDate] = useState(() => addCampaignDays(new Date(), 6));
   const [activeCampaignDate, setActiveCampaignDate] = useState<"start" | "end" | null>(null);
   const [quantity, setQuantity] = useState("10");
-  const loadDraftCampaigns = async () => {
-    if (!campaigns.token) return;
-    setDraftCampaignRows(null);
-    setDraftCampaignError("");
-    setLoadingDrafts(true);
-    try {
-      const data = await backend.listCampaigns({ status: "DRAFT" }, campaigns.token);
-      setDraftCampaignRows(data.campaigns as Row[]);
-    } catch (caught) {
-      setDraftCampaignError(caught instanceof Error ? caught.message : "Không tải được bản nháp.");
-    } finally {
-      setLoadingDrafts(false);
-    }
-  };
   const visibleCampaigns = campaignFilter === "DRAFT"
-    ? draftCampaignRows
+    ? draftCampaigns.rows
     : campaigns.rows?.filter((campaign) => campaignFilter === "ALL" || campaign.status === campaignFilter) ?? null;
+  const draftCount = draftCampaigns.error ? "—" : draftCampaigns.rows?.length ?? "…";
   const onCampaignDateChange = (event: DateTimePickerEvent, value?: Date) => {
     if (event.type === "dismissed") {
       setActiveCampaignDate(null);
@@ -663,7 +652,7 @@ export function CampaignWork() {
     <OpsGate>
       <Title>Chiến dịch</Title>
       <RoleNote />
-      <Note text={campaigns.error || draftCampaignError || job.note} />
+      <Note text={campaigns.error || draftCampaigns.error} />
       {campaigns.rows ? (
         <StatRow
           items={[
@@ -682,12 +671,12 @@ export function CampaignWork() {
           />
           {role === "ADMIN" ? (
             <Pill
-              label={`Bản nháp (${campaigns.rows.filter((row) => row.status === "DRAFT").length})`}
+              label={`Bản nháp (${draftCount})`}
               active={campaignFilter === "DRAFT"}
               onPress={() => {
                 setCampaignFilter("DRAFT");
                 setPicked("");
-                void loadDraftCampaigns();
+                draftCampaigns.reload();
               }}
             />
           ) : null}
@@ -704,7 +693,7 @@ export function CampaignWork() {
         </ScrollView>
       ) : null}
       <PickList
-        rows={loadingDrafts ? null : visibleCampaigns}
+        rows={visibleCampaigns}
         selected={picked}
         onPick={setPicked}
         detail={(row) => donorLabel({ status: row.status || "" })}
@@ -714,7 +703,7 @@ export function CampaignWork() {
               <Button key={status} label={status === "CANCELLED" ? "Hủy chiến dịch" : row.status === "DRAFT" && status === "ACTIVE" ? "Duyệt" : donorLabel({ status })} tone={status === "CANCELLED" ? "danger" : "ghost"} onPress={() => void job.run((token) => backend.updateCampaignStatus(token, row._id, status)).then((ok) => {
                 if (!ok) return;
                 campaigns.reload();
-                if (campaignFilter === "DRAFT") void loadDraftCampaigns();
+                if (campaignFilter === "DRAFT") draftCampaigns.reload();
               })} />
             ))}
             {nextCampaignStatuses(row.status || "").length === 0 ? <Body muted>Chiến dịch này không còn trạng thái để chuyển.</Body> : null}
@@ -725,6 +714,7 @@ export function CampaignWork() {
             <PickList rows={stations.rows} selected={stationId} onPick={setStationId} detail={(station) => station.address || ""} />
             <Button label="Gắn trạm" onPress={() => void job.run((token) => backend.assignCampaignStation(token, row._id, stationId))} />
             {stationId ? <Button label="Gỡ trạm đang chọn" tone="danger" onPress={() => void job.run((token) => backend.removeCampaignStation(token, row._id, stationId))} /> : null}
+            <Note text={job.note} />
           </>
         ) : null}
       />
@@ -765,7 +755,7 @@ export function CampaignWork() {
                 campaigns.reload();
                 if (role === "ADMIN") {
                   setCampaignFilter("DRAFT");
-                  void loadDraftCampaigns();
+                  draftCampaigns.reload();
                 }
               }
               return data;
@@ -782,6 +772,7 @@ export function CampaignWork() {
           <PickList rows={stations.rows} selected={stationId} onPick={setStationId} detail={(station) => station.address || ""} />
           <Button label="Gắn trạm" onPress={() => void job.run((token) => backend.assignCampaignStation(token, picked, stationId))} />
           <Button label="Duyệt" onPress={() => void job.run((token) => backend.updateCampaignStatus(token, picked, "ACTIVE")).then((ok) => ok && campaigns.reload())} />
+          <Note text={job.note} />
         </View>
       ) : null}
     </OpsGate>
