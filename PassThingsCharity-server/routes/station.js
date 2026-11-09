@@ -24,13 +24,13 @@ router.use(checkBearerToken);
 
 router.get(
   '/',
-  checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF', 'USER', 'VOLUNTEER', 'ORG_MANAGER']),
+  checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF', 'USER', 'ORG_MANAGER']),
   listStations
 );
 
 router.get(
   '/:id',
-  checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF', 'USER', 'VOLUNTEER', 'ORG_MANAGER']),
+  checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF', 'USER', 'ORG_MANAGER']),
   getStation
 );
 

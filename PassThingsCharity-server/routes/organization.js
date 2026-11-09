@@ -17,31 +17,31 @@ router.use(checkBearerToken);
 
 router.post(
   '/upload-evidence',
-  checkRole(['ADMIN', 'ORG_MANAGER', 'USER', 'VOLUNTEER']),
+  checkRole(['ADMIN', 'ORG_MANAGER', 'USER']),
   createUploadHandler('organization-evidence')
 );
 
 router.get(
   '/',
-  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'STAFF', 'USER', 'VOLUNTEER']),
+  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'STAFF', 'USER']),
   listOrganizations
 );
 
 router.get(
   '/:id',
-  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'STAFF', 'USER', 'VOLUNTEER']),
+  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'STAFF', 'USER']),
   getOrganization
 );
 
 router.post(
   '/',
-  checkRole(['ADMIN', 'ORG_MANAGER', 'USER', 'VOLUNTEER']),
+  checkRole(['ADMIN', 'ORG_MANAGER', 'USER']),
   createOrganization
 );
 
 router.patch(
   '/:id',
-  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'USER', 'VOLUNTEER']),
+  checkRole(['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'USER']),
   updateOrganization
 );
 

@@ -3,7 +3,6 @@ const Task = require('../models/task');
 const Assignment = require('../models/taskAssignment');
 const Application = require('../models/taskApplication');
 const User = require('../models/user');
-const Role = require('../models/role');
 const Station = require('../models/station');
 const StationStaff = require('../models/stationstaff');
 const { canEdit } = require('../utils/resourceImageAccess');
@@ -95,18 +94,7 @@ async function reviewApplication(applicationId, status, note, reviewer) {
       // Serialize approvals for a schedule and for a person, including approvals
       // for different schedules, so capacity and overlap checks cannot race.
       await Task.updateOne({ _id: task._id }, { $inc: { __v: 1 } }, { session });
-      const applicant = await User.findById(application.userId).populate('role', 'name').session(session);
-      if (!applicant || applicant.status !== 'active') fail(409, 'Applicant account is unavailable.');
-      const roleUpdate = {};
-      if (applicant.role?.name === 'USER') {
-        const volunteerRole = await Role.findOne({ name: 'VOLUNTEER' }).select('_id').session(session);
-        if (volunteerRole) roleUpdate.role = volunteerRole._id;
-      }
-      const user = await User.findOneAndUpdate(
-        { _id: application.userId, status: 'active' },
-        { $inc: { __v: 1 }, ...(roleUpdate.role ? { $set: roleUpdate } : {}) },
-        { session }
-      );
+      const user = await User.findOneAndUpdate({ _id: application.userId, status: 'active' }, { $inc: { __v: 1 } }, { session });
       if (!user) fail(409, 'Applicant account is unavailable.');
       await requireNoOverlap(application.userId, task, session);
       const used = await Assignment.countDocuments({ taskId: task._id, assigneeType: 'VOLUNTEER', status: { $in: ['ASSIGNED', 'IN_PROGRESS', 'COMPLETED'] } }).session(session);

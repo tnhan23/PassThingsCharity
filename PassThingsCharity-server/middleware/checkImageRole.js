@@ -1,7 +1,7 @@
 const checkRole = require('./checkRole');
 
 const roles = {
-  users: ['ADMIN', 'USER', 'VOLUNTEER', 'ORG_MANAGER', 'STATION_MANAGER', 'STAFF'],
+  users: ['ADMIN', 'USER', 'ORG_MANAGER', 'STATION_MANAGER', 'STAFF'],
   organizations: ['ADMIN', 'ORG_MANAGER', 'USER'],
   stations: ['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER'],
   campaigns: ['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER'],
