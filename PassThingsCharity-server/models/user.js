@@ -1,5 +1,6 @@
 const mongoose = require('mongoose')
 const userSchema = new mongoose.Schema({
+    googleId: { type: String, default: null },
     avatarUrl: { type: String, trim: true, default: null },
     imagePublicId: { type: String, default: null },
     email: { type: String, required: true, unique: true },

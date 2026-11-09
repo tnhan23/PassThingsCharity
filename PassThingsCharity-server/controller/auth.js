@@ -26,6 +26,14 @@ async function login(req, res, next) {
       account = await Admin.findOne({ username }).select('+password');
       isAdmin = true;
     }
+    if (!account && username.includes('@')) {
+      const normalizedEmail = username.trim().toLowerCase();
+      account = await User.findOne({ email: normalizedEmail }).select('+password');
+      isAdmin = false;
+      if (!account) {
+        return res.status(404).json({ error: 'Tài khoản Gmail này không tồn tại trong hệ thống. Vui lòng đăng ký tài khoản trước.' });
+      }
+    }
 
     // 2. Kiểm tra sự tồn tại và trạng thái (chỉ áp dụng check status cho User nếu Admin không có trường status)
     if (!account || (!isAdmin && account.status !== 'active')) {
