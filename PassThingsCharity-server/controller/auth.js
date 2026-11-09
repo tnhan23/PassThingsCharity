@@ -200,13 +200,17 @@ async function forgotPassword(req, res, next) {
     user.resetPasswordExpires = Date.now() + 10 * 60 * 1000; // 10 phút
     await user.save();
 
-    await sendMail(
-      user.email,
-      'Mã đặt lại mật khẩu - PassThingsCharity',
-      `<p>Chào bạn,</p>
-       <p>Mã OTP đặt lại mật khẩu của bạn là: <b style="font-size: 18px; color: #2563eb;">${otp}</b></p>
-       <p>Mã này có hiệu lực trong vòng <b>10 phút</b>. Vui lòng không chia sẻ mã này cho bất kỳ ai.</p>`
-    );
+    try {
+      await sendMail(
+        user.email,
+        'Mã đặt lại mật khẩu - PassThingsCharity',
+        `<p>Chào bạn,</p>
+         <p>Mã OTP đặt lại mật khẩu của bạn là: <b style="font-size: 18px; color: #2563eb;">${otp}</b></p>
+         <p>Mã này có hiệu lực trong vòng <b>10 phút</b>. Vui lòng không chia sẻ mã này cho bất kỳ ai.</p>`
+      );
+    } catch {
+      return res.status(502).json({ error: 'Không gửi được mã tới Gmail. Thử lại sau một lát.' });
+    }
 
     return res.status(200).json({ message });
   } catch (error) {
