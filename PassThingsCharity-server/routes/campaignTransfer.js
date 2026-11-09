@@ -19,6 +19,9 @@ router.post('/:id/shipments/:shipmentId/evidence/:stage', checkBearerToken, chec
 router.post('/:id/shipments/:shipmentId/dispatch', checkBearerToken, checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF']), handover.dispatchShipment);
 router.post('/:id/shipments/:shipmentId/report', checkBearerToken, checkRole(['USER', 'VOLUNTEER', 'STAFF', 'STATION_MANAGER', 'ADMIN']), handover.reportShipment);
 router.post('/:id/shipments/:shipmentId/receive', checkBearerToken, checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF']), handover.receiveShipment);
+const qrAndProximity = require('../services/qrAndProximity');
+router.get('/:id/shipments/:shipmentId/qr', checkBearerToken, checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF', 'USER', 'VOLUNTEER']), qrAndProximity.getShipmentQr);
+router.post('/:id/shipments/:shipmentId/qr-verify', checkBearerToken, checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF', 'USER', 'VOLUNTEER']), qrAndProximity.verifyShipmentQrAndProximityEndpoint);
 
 // Tạo phiếu điều phối giữa các trạm
 router.post(

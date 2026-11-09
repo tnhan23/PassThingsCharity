@@ -66,6 +66,7 @@ const createSwaggerDocument = (port = process.env.PORT || 8080) => ({
     ...uploadDocs,
     ...shiftDocs,
     ...notificationDocs,
+    ...require('../docs/qrAndProximity.doc'),
   },
 });
 

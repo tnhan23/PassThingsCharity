@@ -212,6 +212,7 @@ async function allocate(transfer, body, user) {
 
 async function handover(transfer, shipment, stage, body, user) {
   await requireStage(transfer, shipment, stage, user);
+  await require('./qrAndProximity').verifyTransferHandoverQrAndProximity(transfer, shipment, stage, body);
   const event = await evidence(transfer, shipment, stage, body, user);
   if (stage === 'DISPATCH') {
     const planned = await Item.find({ transferId: transfer._id });

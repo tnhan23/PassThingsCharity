@@ -75,4 +75,16 @@ router.delete(
   removeStationManager
 );
 
+const qrAndProximity = require('../services/qrAndProximity');
+router.get(
+  '/:id/qr',
+  checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF', 'USER', 'VOLUNTEER', 'ORG_MANAGER']),
+  qrAndProximity.getStationQr
+);
+router.post(
+  '/:id/verify-proximity',
+  checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF', 'USER', 'VOLUNTEER', 'ORG_MANAGER']),
+  qrAndProximity.checkStationProximityEndpoint
+);
+
 module.exports = router;

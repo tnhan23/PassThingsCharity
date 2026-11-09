@@ -737,6 +737,7 @@ async function checkInTask(req, res, next) {
     if (assignment.status !== 'ASSIGNED') {
       return res.status(409).json({ error: `Không thể check-in khi nhiệm vụ đang ở trạng thái ${assignment.status}.` });
     }
+    await require('../services/qrAndProximity').verifyTaskQrAndProximity(assignment, req.body);
 
     assignment.checkInTime = new Date();
     assignment.status = 'IN_PROGRESS';
@@ -778,6 +779,7 @@ async function checkOutTask(req, res, next) {
     }
 
     await require('../services/transferWorkflow').requireDeliveryConfirmed(assignment);
+    await require('../services/qrAndProximity').verifyTaskQrAndProximity(assignment, req.body);
     if (assignment.status === 'COMPLETED') {
       let existingTransaction = await PointTransaction.findOne({
         type: 'VOLUNTEER_TASK',
