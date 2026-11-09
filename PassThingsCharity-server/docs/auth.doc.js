@@ -169,4 +169,99 @@ module.exports = {
       },
     },
   },
+  '/auth/google': {
+    post: {
+      tags: ['Authentication'],
+      summary: 'Đăng nhập / Đăng ký bằng Google OAuth hoặc Gmail',
+      description: 'Hỗ trợ 3 cách:\n1. Gửi `idToken` hoặc `accessToken` của Google OAuth: tự động tạo tài khoản Gmail bắn thẳng vào DB nếu chưa có (hoặc trả 404 nếu `autoRegister: false`).\n2. Đăng ký nhanh bằng Gmail (`mode: "register"`, `email`, `password`, tùy chọn `fullname`, `phone`, `username`): tạo tài khoản Gmail bắn thẳng vào DB, gửi email chào mừng qua Gmail SMTP và trả về JWT token.\n3. Đăng nhập bằng Gmail (`email`, `password`): nếu Gmail chưa có trong DB sẽ trả về 404 "Tài khoản Gmail này không tồn tại trong hệ thống".',
+      security: [],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                email: { type: 'string', format: 'email', example: 'your_real_email@gmail.com', description: 'Địa chỉ Gmail' },
+                password: { type: 'string', format: 'password', example: '123456', description: 'Mật khẩu (khi đăng nhập hoặc đăng ký bằng Gmail)' },
+                mode: { type: 'string', enum: ['login', 'register', 'login_only'], default: 'login', description: 'Chọn register để tạo mới tài khoản Gmail bắn thẳng vào DB; chọn login để kiểm tra tồn tại và đăng nhập' },
+                fullname: { type: 'string', example: 'Nguyễn Văn A' },
+                phone: { type: 'string', example: '0901234567' },
+                username: { type: 'string', example: 'nguyenvana' },
+                idToken: { type: 'string', description: 'Google OAuth ID Token (tùy chọn)' },
+                accessToken: { type: 'string', description: 'Google OAuth Access Token (tùy chọn)' },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: { description: 'Đăng nhập bằng Gmail / Google thành công, trả về JWT token' },
+        201: { description: 'Đăng ký tài khoản Gmail mới bắn thẳng vào DB thành công và trả về JWT token' },
+        400: { description: 'Địa chỉ Gmail hoặc dữ liệu không hợp lệ' },
+        401: { description: 'Sai mật khẩu, token Google không hợp lệ hoặc tài khoản đã bị khóa' },
+        404: { description: 'Tài khoản Gmail này không tồn tại trong hệ thống' },
+        409: { description: 'Tài khoản Gmail đã tồn tại khi gọi ở chế độ register' },
+      },
+    },
+  },
+  '/auth/google/send-otp': {
+    post: {
+      tags: ['Authentication'],
+      summary: 'Gửi mã OTP 6 số về Gmail thật để Đăng nhập hoặc Đăng ký (kế thừa Gmail SMTP)',
+      description: 'Sử dụng cấu hình MAIL_USER / MAIL_PASS gửi mã OTP 6 chữ số về Gmail:\n- Khi `mode: "login"` (mặc định): kiểm tra Gmail trong DB trước; nếu không tồn tại sẽ báo lỗi 404 "Tài khoản Gmail này không tồn tại trong hệ thống".\n- Khi `mode: "register"`: gửi mã OTP xác thực về Gmail thật để bước sau tạo tài khoản bắn thẳng vào DB.',
+      security: [],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['email'],
+              properties: {
+                email: { type: 'string', format: 'email', example: 'your_real_email@gmail.com' },
+                mode: { type: 'string', enum: ['login', 'register'], default: 'login' },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: { description: 'Đã gửi mã OTP 6 chữ số tới Gmail' },
+        400: { description: 'Địa chỉ Gmail không hợp lệ hoặc không thể gửi thư' },
+        404: { description: 'Tài khoản Gmail không tồn tại trong hệ thống (khi mode = login)' },
+      },
+    },
+  },
+  '/auth/google/verify-otp': {
+    post: {
+      tags: ['Authentication'],
+      summary: 'Xác thực mã OTP từ Gmail để Đăng nhập hoặc tạo tài khoản mới bắn thẳng vào DB',
+      description: 'Nhập Gmail và mã OTP 6 chữ số:\n- Nếu Gmail đã có trong DB: cho đăng nhập ngay và trả về JWT token.\n- Nếu Gmail chưa có trong DB (đăng ký mới): tự động tạo tài khoản User mới bắn thẳng vào Database và trả về JWT token.',
+      security: [],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['email', 'otp'],
+              properties: {
+                email: { type: 'string', format: 'email', example: 'your_real_email@gmail.com' },
+                otp: { type: 'string', example: '123456' },
+                fullname: { type: 'string', example: 'Nguyễn Văn A' },
+                phone: { type: 'string', example: '0901234567' },
+                password: { type: 'string', format: 'password', example: '123456' },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: { description: 'Xác thực OTP và đăng nhập thành công' },
+        201: { description: 'Xác thực OTP và tạo mới tài khoản Gmail vào DB thành công' },
+        400: { description: 'Mã OTP không đúng hoặc đã hết hạn' },
+      },
+    },
+  },
 };
