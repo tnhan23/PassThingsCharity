@@ -51,7 +51,9 @@ async function registerVolunteer(req, res, next) {
       });
     }
 
+    const imageFields = require('../utils/resourceImageFields')(req.body || {});
     const registration = await VolunteerRegistration.create({
+      ...imageFields,
       campaignId,
       userId,
       status: 'PENDING',
@@ -241,7 +243,9 @@ async function createTask(req, res, next) {
       ? String(recruitmentStatus).toUpperCase()
       : 'OPEN';
 
+    const imageFields = require('../utils/resourceImageFields')(req.body || {});
     const task = await Task.create({
+      ...imageFields,
       campaignId: campaignId || null,
       stationId,
       transferId: transferId || null,
@@ -465,6 +469,11 @@ async function updateTask(req, res, next) {
       task.rewardPoints = points;
     }
 
+    const imageFields = require('../utils/resourceImageFields')(req.body || {});
+    if (imageFields.imageUrl !== undefined) {
+      task.imageUrl = imageFields.imageUrl;
+      task.imagePublicId = null;
+    }
     await task.save();
 
     return res.status(200).json({
@@ -527,7 +536,9 @@ async function applyForTask(req, res, next) {
       return res.status(409).json({ error: 'Bạn đã được phân công nhiệm vụ này rồi.' });
     }
 
+    const imageFields = require('../utils/resourceImageFields')(req.body || {});
     const application = await TaskApplication.create({
+      ...imageFields,
       taskId,
       userId,
       status: 'PENDING',

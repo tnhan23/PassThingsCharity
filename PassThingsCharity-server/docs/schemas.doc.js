@@ -406,6 +406,7 @@ module.exports = {
     type: 'object',
     required: ['stationId', 'title', 'startTime', 'endTime', 'requiredVolunteers'],
     properties: {
+      imageUrl: { type: 'string', format: 'uri', nullable: true, example: 'https://res.cloudinary.com/your-cloud/image/upload/example.jpg', description: 'URL ảnh minh họa bài đăng tuyển TNV (tùy chọn, lấy từ POST /uploads/tasks/image).' },
       campaignId: { type: 'string', nullable: true, description: 'Optional campaign. A schedule can belong to a station alone.' },
       stationId: { type: 'string', example: '671000000000000000000011' },
       transferId: { type: 'string', example: '6523456789abcdef00000d01' },
@@ -422,6 +423,7 @@ module.exports = {
   TaskUpdateRequest: {
     type: 'object',
     properties: {
+      imageUrl: { type: 'string', format: 'uri', nullable: true, example: 'https://res.cloudinary.com/your-cloud/image/upload/example.jpg', description: 'URL ảnh minh họa bài đăng tuyển TNV (tùy chọn, gửi null để xóa ảnh).' },
       title: { type: 'string', example: 'Bốc xếp và chuyển hàng lên xe tải' },
       description: { type: 'string', example: 'Đã bổ sung băng keo dán thùng' },
       transferId: { type: 'string', example: '6523456789abcdef00000d01' },
