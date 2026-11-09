@@ -95,7 +95,8 @@ async function createCampaign(req, res, next) {
 async function getAllCampaigns(req, res, next) {
   try {
     const { status, organizationId, search } = req.query;
-    const filter = { status: { $ne: 'DRAFT' } };
+    const isAdmin = req.user?.role?.name === 'ADMIN';
+    const filter = isAdmin ? {} : { status: { $ne: 'DRAFT' } };
 
     if (status) {
       if (typeof status !== 'string') {
@@ -103,9 +104,10 @@ async function getAllCampaigns(req, res, next) {
       }
       const formattedStatus = status.trim().toUpperCase();
       const publicStatuses = ['PUBLISHED', 'ACTIVE', 'COMPLETED', 'CANCELLED'];
-      if (!publicStatuses.includes(formattedStatus)) {
+      const allowedStatuses = isAdmin ? ['DRAFT', ...publicStatuses] : publicStatuses;
+      if (!allowedStatuses.includes(formattedStatus)) {
         return res.status(400).json({
-          error: `Status must be one of: ${publicStatuses.join(', ')}.`,
+          error: `Status must be one of: ${allowedStatuses.join(', ')}.`,
         });
       }
       filter.status = formattedStatus;
@@ -281,7 +283,7 @@ async function updateCampaign(req, res, next) {
 }
 
 /**
- * Update Campaign Status (State Transitions: DRAFT -> PUBLISHED -> ACTIVE -> COMPLETED / CANCELLED)
+ * Update Campaign Status (DRAFT/PUBLISHED -> ACTIVE -> COMPLETED / CANCELLED)
  */
 async function updateCampaignStatus(req, res, next) {
   try {
@@ -307,7 +309,7 @@ async function updateCampaignStatus(req, res, next) {
     }
 
     const allowedTransitions = {
-      DRAFT: ['PUBLISHED', 'CANCELLED'],
+      DRAFT: ['ACTIVE', 'CANCELLED'],
       PUBLISHED: ['ACTIVE', 'CANCELLED'],
       ACTIVE: ['COMPLETED', 'CANCELLED'],
       COMPLETED: [],

@@ -3,10 +3,10 @@ module.exports = {
     get: {
       tags: ['Campaigns'],
       summary: 'Lấy danh sách các Campaign cứu trợ (Public / Filter)',
-      description: 'Mỗi chiến dịch có items và progress: targetQuantity, currentQuantity/collectedQuantity, inTransitQuantity, distributedQuantity, remainingQuantity, progressPercent, isFulfilled. Tổng đã tiếp nhận và số thiếu tính theo phiếu quyên góp của chiến dịch, không lấy kho chung để cộng cho nhiều chiến dịch. Không còn stockQuantity vì hàng trong kho trạm chưa được phân bổ riêng theo chiến dịch. Chuyển trạm và trao cứu trợ không làm tăng/giảm số đã quyên góp.',
-      security: [],
+      description: 'Không gửi token thì chỉ trả các chiến dịch công khai; token ADMIN cũng nhận các bản nháp. Mỗi chiến dịch có items và progress: targetQuantity, currentQuantity/collectedQuantity, inTransitQuantity, distributedQuantity, remainingQuantity, progressPercent, isFulfilled. Tổng đã tiếp nhận và số thiếu tính theo phiếu quyên góp của chiến dịch, không lấy kho chung để cộng cho nhiều chiến dịch. Không còn stockQuantity vì hàng trong kho trạm chưa được phân bổ riêng theo chiến dịch. Chuyển trạm và trao cứu trợ không làm tăng/giảm số đã quyên góp.',
+      security: [{ bearerAuth: [] }, {}],
       parameters: [
-        { name: 'status', in: 'query', schema: { type: 'string', enum: ['PUBLISHED', 'ACTIVE', 'COMPLETED', 'CANCELLED'] }, description: 'Lọc trạng thái công khai của chiến dịch' },
+        { name: 'status', in: 'query', schema: { type: 'string', enum: ['DRAFT', 'PUBLISHED', 'ACTIVE', 'COMPLETED', 'CANCELLED'] }, description: 'ADMIN có thể lọc DRAFT; các vai trò khác chỉ lọc trạng thái công khai' },
         { name: 'organizationId', in: 'query', schema: { type: 'string' }, description: 'Lọc theo Tổ chức' },
         { name: 'search', in: 'query', schema: { type: 'string' }, description: 'Tìm kiếm theo tên chiến dịch' },
       ],
@@ -74,7 +74,7 @@ module.exports = {
   '/campaigns/{id}/status': {
     patch: {
       tags: ['Campaigns'],
-      summary: 'Chuyển trạng thái theo luồng DRAFT -> PUBLISHED -> ACTIVE -> COMPLETED hoặc CANCELLED',
+      summary: 'Chuyển trạng thái theo luồng DRAFT/PUBLISHED -> ACTIVE -> COMPLETED hoặc CANCELLED',
       parameters: [
         { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
       ],
@@ -86,7 +86,7 @@ module.exports = {
               type: 'object',
               required: ['status'],
               properties: {
-                status: { type: 'string', enum: ['DRAFT', 'PUBLISHED', 'ACTIVE', 'COMPLETED', 'CANCELLED'], example: 'PUBLISHED' },
+                status: { type: 'string', enum: ['DRAFT', 'PUBLISHED', 'ACTIVE', 'COMPLETED', 'CANCELLED'], example: 'ACTIVE' },
               },
             },
           },

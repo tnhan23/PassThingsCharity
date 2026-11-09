@@ -1,18 +1,35 @@
 import { useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Platform, ScrollView, View } from "react-native";
+import DateTimePicker, { type DateTimePickerEvent } from "@react-native-community/datetimepicker";
+import { createElement, useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+import { Platform, ScrollView, Text, View } from "react-native";
 import * as Location from "expo-location";
 import { backend } from "@/api/backend";
 import { donorLabel } from "@/api/labels";
 import { ApiError } from "@/api/client";
 import { Body, Button, Card, Photo, Pill, StatRow, Title } from "@/components/ui";
-import { colors } from "@/theme";
+import { colors, fonts } from "@/theme";
 import { can, Fold, nextCampaignStatuses, Note, OpsGate, PickList, RoleNote, TextField, Units, useJob, useRole, useRows, type Row } from "@/screens/ops/kit";
 
 const AppleMaps = Platform.OS === "ios" ? (require("expo-maps") as typeof import("expo-maps")).AppleMaps : null;
 const NativeWebView = Platform.OS === "android"
   ? (require("react-native-webview") as typeof import("react-native-webview")).WebView
   : null;
+
+function campaignDateValue(date: Date) {
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function campaignDateFromInput(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function addCampaignDays(date: Date, days: number) {
+  const result = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  result.setDate(result.getDate() + days);
+  return result;
+}
 
 function stationPlaceMapHtml(latitude: number | null, longitude: number | null) {
   const center = latitude !== null && longitude !== null ? [latitude, longitude] : [10.7769, 106.7009];
@@ -228,6 +245,9 @@ export function StationScreen() {
   const role = useRole();
   const hasFocused = useRef(false);
   const [picked, setPicked] = useState("");
+  const [stationFilter, setStationFilter] = useState<"ALL" | "PENDING" | "APPROVED">(
+    role === "ADMIN" ? "PENDING" : "ALL",
+  );
   const [staffError, setStaffError] = useState("");
   const [orgId, setOrgId] = useState("");
   const [name, setName] = useState("");
@@ -245,6 +265,9 @@ export function StationScreen() {
   const [identifier, setIdentifier] = useState("");
   const [staff, setStaff] = useState<Row[] | null>(null);
   const [staffId, setStaffId] = useState("");
+  const visibleStations = stations.rows?.filter((station) => (
+    stationFilter === "ALL" || (stationFilter === "APPROVED" ? station.isActive : !station.isActive)
+  )) ?? null;
 
   useFocusEffect(useCallback(() => {
     if (role !== "ADMIN") return;
@@ -325,7 +348,14 @@ export function StationScreen() {
           ]}
         />
       ) : null}
-      <PickList rows={stations.rows} selected={picked} onPick={setPicked} detail={(row) => `${row.isActive ? "Đang mở" : "Chưa kích hoạt"} · ${row.address || ""}`} />
+      {can(role, ["ADMIN", "ORG_MANAGER"]) ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+          <Pill label={`Tất cả (${stations.rows?.length ?? 0})`} active={stationFilter === "ALL"} onPress={() => { setStationFilter("ALL"); setPicked(""); }} />
+          <Pill label={`${role === "ADMIN" ? "Đã duyệt" : "Đang mở"} (${stations.rows?.filter((row) => row.isActive).length ?? 0})`} active={stationFilter === "APPROVED"} onPress={() => { setStationFilter("APPROVED"); setPicked(""); }} />
+          <Pill label={`${role === "ADMIN" ? "Chờ duyệt" : "Chờ kích hoạt"} (${stations.rows?.filter((row) => !row.isActive).length ?? 0})`} active={stationFilter === "PENDING"} onPress={() => { setStationFilter("PENDING"); setPicked(""); }} />
+        </ScrollView>
+      ) : null}
+      <PickList rows={can(role, ["ADMIN", "ORG_MANAGER"]) ? visibleStations : stations.rows} selected={picked} onPick={setPicked} detail={(row) => `${row.isActive ? "Đang mở" : "Chưa kích hoạt"} · ${row.address || ""}`} />
       {picked ? (
         <View style={{ gap: 8 }}>
           {can(role, ["ADMIN"]) && stations.rows?.find((row) => row._id === picked)?.isActive ? <Body>Trạm này đã được duyệt.</Body> : null}
@@ -535,8 +565,8 @@ export function CatalogScreen() {
 }
 
 export function CampaignWork() {
-  const campaigns = useRows(async () => {
-    const data = await backend.listCampaigns();
+  const campaigns = useRows(async (token) => {
+    const data = await backend.listCampaigns(undefined, token);
     return data.campaigns as Row[];
   });
   const orgs = useRows((token) => backend.listOrganizations(token).then((data) => data.data as Row[]));
@@ -546,19 +576,94 @@ export function CampaignWork() {
   const role = useRole();
   const editor = can(role, ["ADMIN", "ORG_MANAGER", "STATION_MANAGER"]);
   const [picked, setPicked] = useState("");
+  const [campaignFilter, setCampaignFilter] = useState<"ALL" | "DRAFT" | "ACTIVE" | "COMPLETED">("ALL");
+  const [draftCampaignRows, setDraftCampaignRows] = useState<Row[] | null>(null);
+  const [draftCampaignError, setDraftCampaignError] = useState("");
+  const [loadingDrafts, setLoadingDrafts] = useState(false);
   const [orgId, setOrgId] = useState("");
   const [itemId, setItemId] = useState("");
   const [stationId, setStationId] = useState("");
   const [title, setTitle] = useState("");
-  const [startDate, setStartDate] = useState("2026-10-20");
-  const [endDate, setEndDate] = useState("2026-10-26");
+  const [startDate, setStartDate] = useState(() => {
+    const date = new Date();
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  });
+  const [endDate, setEndDate] = useState(() => addCampaignDays(new Date(), 6));
+  const [activeCampaignDate, setActiveCampaignDate] = useState<"start" | "end" | null>(null);
   const [quantity, setQuantity] = useState("10");
+  const loadDraftCampaigns = async () => {
+    if (!campaigns.token) return;
+    setDraftCampaignRows(null);
+    setDraftCampaignError("");
+    setLoadingDrafts(true);
+    try {
+      const data = await backend.listCampaigns({ status: "DRAFT" }, campaigns.token);
+      setDraftCampaignRows(data.campaigns as Row[]);
+    } catch (caught) {
+      setDraftCampaignError(caught instanceof Error ? caught.message : "Không tải được bản nháp.");
+    } finally {
+      setLoadingDrafts(false);
+    }
+  };
+  const visibleCampaigns = campaignFilter === "DRAFT"
+    ? draftCampaignRows
+    : campaigns.rows?.filter((campaign) => campaignFilter === "ALL" || campaign.status === campaignFilter) ?? null;
+  const onCampaignDateChange = (event: DateTimePickerEvent, value?: Date) => {
+    if (event.type === "dismissed") {
+      setActiveCampaignDate(null);
+      return;
+    }
+    if (value) {
+      if (activeCampaignDate === "start") setStartDate(value);
+      if (activeCampaignDate === "end") setEndDate(value);
+    }
+    if (Platform.OS === "android") setActiveCampaignDate(null);
+  };
+  const campaignDateField = (label: string, value: Date, field: "start" | "end") => {
+    if (Platform.OS === "web") {
+      return (
+        <View key={field} style={{ gap: 6 }}>
+          <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.muted }}>{label}</Text>
+          {createElement("input", {
+            type: "date",
+            value: campaignDateValue(value),
+            onChange: (event: ChangeEvent<HTMLInputElement>) => {
+              const next = campaignDateFromInput(event.currentTarget.value);
+              if (!Number.isNaN(next.getTime())) {
+                if (field === "start") setStartDate(next);
+                else setEndDate(next);
+              }
+            },
+            "aria-label": label,
+            style: {
+              boxSizing: "border-box",
+              width: "100%",
+              minHeight: 48,
+              borderRadius: 12,
+              border: `1px solid ${colors.hairline}`,
+              backgroundColor: colors.surface,
+              padding: "0 12px",
+              fontFamily: fonts.regular,
+              fontSize: 16,
+              color: colors.ink,
+            },
+          })}
+        </View>
+      );
+    }
+    return (
+      <View key={field} style={{ gap: 6 }}>
+        <Body muted>{label}</Body>
+        <Button label={campaignDateValue(value)} tone="ghost" onPress={() => setActiveCampaignDate(field)} />
+      </View>
+    );
+  };
 
   return (
     <OpsGate>
       <Title>Chiến dịch</Title>
       <RoleNote />
-      <Note text={campaigns.error || job.note} />
+      <Note text={campaigns.error || draftCampaignError || job.note} />
       {campaigns.rows ? (
         <StatRow
           items={[
@@ -568,15 +673,49 @@ export function CampaignWork() {
           ]}
         />
       ) : null}
+      {campaigns.rows ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+          <Pill
+            label={`Tất cả (${campaigns.rows.length})`}
+            active={campaignFilter === "ALL"}
+            onPress={() => setCampaignFilter("ALL")}
+          />
+          {role === "ADMIN" ? (
+            <Pill
+              label={`Bản nháp (${campaigns.rows.filter((row) => row.status === "DRAFT").length})`}
+              active={campaignFilter === "DRAFT"}
+              onPress={() => {
+                setCampaignFilter("DRAFT");
+                setPicked("");
+                void loadDraftCampaigns();
+              }}
+            />
+          ) : null}
+          <Pill
+            label={`Đang diễn ra (${campaigns.rows.filter((row) => row.status === "ACTIVE").length})`}
+            active={campaignFilter === "ACTIVE"}
+            onPress={() => setCampaignFilter("ACTIVE")}
+          />
+          <Pill
+            label={`Hoàn thành (${campaigns.rows.filter((row) => row.status === "COMPLETED").length})`}
+            active={campaignFilter === "COMPLETED"}
+            onPress={() => setCampaignFilter("COMPLETED")}
+          />
+        </ScrollView>
+      ) : null}
       <PickList
-        rows={campaigns.rows}
+        rows={loadingDrafts ? null : visibleCampaigns}
         selected={picked}
         onPick={setPicked}
         detail={(row) => donorLabel({ status: row.status || "" })}
         panel={(row) => editor ? (
           <>
             {nextCampaignStatuses(row.status || "DRAFT").map((status) => (
-              <Button key={status} label={status === "CANCELLED" ? "Hủy chiến dịch" : donorLabel({ status })} tone={status === "CANCELLED" ? "danger" : "ghost"} onPress={() => void job.run((token) => backend.updateCampaignStatus(token, row._id, status)).then((ok) => ok && campaigns.reload())} />
+              <Button key={status} label={status === "CANCELLED" ? "Hủy chiến dịch" : row.status === "DRAFT" && status === "ACTIVE" ? "Duyệt" : donorLabel({ status })} tone={status === "CANCELLED" ? "danger" : "ghost"} onPress={() => void job.run((token) => backend.updateCampaignStatus(token, row._id, status)).then((ok) => {
+                if (!ok) return;
+                campaigns.reload();
+                if (campaignFilter === "DRAFT") void loadDraftCampaigns();
+              })} />
             ))}
             {nextCampaignStatuses(row.status || "").length === 0 ? <Body muted>Chiến dịch này không còn trạng thái để chuyển.</Body> : null}
             <PickList rows={items.rows} selected={itemId} onPick={setItemId} detail={(item) => item.unit || ""} />
@@ -595,16 +734,40 @@ export function CampaignWork() {
         <View style={{ gap: 8 }}>
           <PickList rows={orgs.rows} selected={orgId} onPick={setOrgId} detail={(row) => row.address || ""} />
           <TextField label="Tên chiến dịch" value={title} onChangeText={setTitle} />
-          <TextField label="Ngày bắt đầu" value={startDate} onChangeText={setStartDate} />
-          <TextField label="Ngày kết thúc" value={endDate} onChangeText={setEndDate} />
+          {campaignDateField("Ngày bắt đầu", startDate, "start")}
+          {campaignDateField("Ngày kết thúc", endDate, "end")}
+          {activeCampaignDate && Platform.OS !== "web" ? (
+            <View style={{ gap: 8 }}>
+              <DateTimePicker
+                value={activeCampaignDate === "start" ? startDate : endDate}
+                mode="date"
+                display={Platform.OS === "ios" ? "spinner" : "default"}
+                minimumDate={activeCampaignDate === "start" ? new Date() : startDate}
+                onChange={onCampaignDateChange}
+              />
+              {Platform.OS === "ios" ? <Button label="Xong" onPress={() => setActiveCampaignDate(null)} /> : null}
+            </View>
+          ) : null}
           <Button
             label="Tạo bản nháp"
             onPress={() => void job.run(async (token) => {
               const station = stations.rows?.find((row) => row._id === stationId) || stations.rows?.[0];
               const linked = (station as (Row & { organizationId?: string | { _id?: string } }) | undefined)?.organizationId;
               const organizationId = orgId || (typeof linked === "string" ? linked : linked?._id || "");
-              const data = await backend.createCampaign(token, { title: title.trim(), startDate, endDate, organizationId }) as { campaign?: { _id?: string } };
-              if (data.campaign?._id) setPicked(data.campaign._id);
+              const data = await backend.createCampaign(token, {
+                title: title.trim(),
+                startDate: campaignDateValue(startDate),
+                endDate: campaignDateValue(endDate),
+                organizationId,
+              });
+              if (data.campaign?._id) {
+                setPicked(data.campaign._id);
+                campaigns.reload();
+                if (role === "ADMIN") {
+                  setCampaignFilter("DRAFT");
+                  void loadDraftCampaigns();
+                }
+              }
               return data;
             })}
           />
@@ -618,7 +781,7 @@ export function CampaignWork() {
           <Button label="Gắn loại đồ" onPress={() => void job.run((token) => backend.addCampaignItem(token, picked, { itemTypeId: itemId, targetQuantity: Number(quantity), priority: "MEDIUM" }))} />
           <PickList rows={stations.rows} selected={stationId} onPick={setStationId} detail={(station) => station.address || ""} />
           <Button label="Gắn trạm" onPress={() => void job.run((token) => backend.assignCampaignStation(token, picked, stationId))} />
-          <Button label="Phát hành" onPress={() => void job.run((token) => backend.updateCampaignStatus(token, picked, "PUBLISHED")).then((ok) => ok && campaigns.reload())} />
+          <Button label="Duyệt" onPress={() => void job.run((token) => backend.updateCampaignStatus(token, picked, "ACTIVE")).then((ok) => ok && campaigns.reload())} />
         </View>
       ) : null}
     </OpsGate>

@@ -75,7 +75,7 @@ export const deskAccess = {
 } as const;
 
 const campaignNext: Record<string, string[]> = {
-  DRAFT: ["PUBLISHED", "CANCELLED"],
+  DRAFT: ["ACTIVE", "CANCELLED"],
   PUBLISHED: ["ACTIVE", "CANCELLED"],
   ACTIVE: ["COMPLETED", "CANCELLED"],
   COMPLETED: [],

@@ -63,6 +63,7 @@ export function IntakeWork() {
   const canWrite = can(role, ["ADMIN", "STATION_MANAGER", "STAFF"]);
   const canJudge = can(role, ["ADMIN", "STATION_MANAGER"]);
   const [picked, setPicked] = useState("");
+  const [receiptFilter, setReceiptFilter] = useState<"ALL" | "PENDING" | "ACCEPTED" | "REJECTED" | "COMPLETED">("ALL");
   const [detail, setDetail] = useState<ContributionDetail | null>(null);
   const [stamp, setStamp] = useState(0);
 
@@ -85,6 +86,7 @@ export function IntakeWork() {
   }, [job.token, picked, stamp]);
 
   const visible = receipts.rows?.filter((row) => !String(row.code || "").startsWith("SAMPLE-")) ?? null;
+  const filteredReceipts = visible?.filter((row) => receiptFilter === "ALL" || row.status === receiptFilter) ?? null;
 
   return (
     <OpsGate>
@@ -103,8 +105,18 @@ export function IntakeWork() {
           ]}
         />
       ) : null}
+      {visible && visible.length > 0 ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+          <Pill label={`Tất cả (${visible.length})`} active={receiptFilter === "ALL"} onPress={() => { setReceiptFilter("ALL"); setPicked(""); }} />
+          <Pill label={`Chờ xử lý (${visible.filter((row) => row.status === "PENDING").length})`} active={receiptFilter === "PENDING"} onPress={() => { setReceiptFilter("PENDING"); setPicked(""); }} />
+          <Pill label={`Đã tiếp nhận (${visible.filter((row) => row.status === "ACCEPTED").length})`} active={receiptFilter === "ACCEPTED"} onPress={() => { setReceiptFilter("ACCEPTED"); setPicked(""); }} />
+          <Pill label={`Từ chối (${visible.filter((row) => row.status === "REJECTED").length})`} active={receiptFilter === "REJECTED"} onPress={() => { setReceiptFilter("REJECTED"); setPicked(""); }} />
+          <Pill label={`Hoàn tất (${visible.filter((row) => row.status === "COMPLETED").length})`} active={receiptFilter === "COMPLETED"} onPress={() => { setReceiptFilter("COMPLETED"); setPicked(""); }} />
+        </ScrollView>
+      ) : null}
+      {filteredReceipts && filteredReceipts.length === 0 && visible?.length ? <Body>Không có phiếu ở trạng thái này.</Body> : null}
       <PickList
-        rows={receipts.rows ? visible : null}
+        rows={filteredReceipts}
         selected={picked}
         onPick={setPicked}
         detail={(row) => `${receiptStatus(row.status || "")} · ${typeof row.campaignId === "object" ? row.campaignId?.title || "" : ""}`}
@@ -198,6 +210,7 @@ export function TransferWork() {
   const { user } = useSession();
   const canWrite = can(role, ["ADMIN", "STATION_MANAGER", "STAFF"]);
   const [picked, setPicked] = useState("");
+  const [transferFilter, setTransferFilter] = useState("ALL");
   const [campaignId, setCampaignId] = useState("");
   const [fromId, setFromId] = useState("");
   const [toId, setToId] = useState("");
@@ -230,6 +243,8 @@ export function TransferWork() {
   }, [job.token, fromId]);
 
   const selectedItemsCount = stock.filter((row) => Number(amounts[refId(row.itemTypeId)]) > 0).length;
+  const transferStatuses = ["PENDING", "PREPARING", "IN_TRANSIT", "RECEIVED", "COMPLETED", "CANCELLED"];
+  const filteredTransfers = transfers.rows?.filter((row) => transferFilter === "ALL" || row.status === transferFilter) ?? null;
 
   return (
     <OpsGate>
@@ -255,8 +270,29 @@ export function TransferWork() {
           ]}
         />
       ) : null}
+      {role === "ADMIN" && transfers.rows ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+          <Pill label={`Tất cả (${transfers.rows.length})`} active={transferFilter === "ALL"} onPress={() => { setTransferFilter("ALL"); setPicked(""); }} />
+          {transferStatuses.map((status) => (
+            <Pill
+              key={status}
+              label={`${({
+                PENDING: "Chờ xử lý",
+                PREPARING: "Đang chuẩn bị",
+                IN_TRANSIT: "Đang vận chuyển",
+                RECEIVED: "Đã nhận",
+                COMPLETED: "Hoàn tất",
+                CANCELLED: "Đã hủy",
+              } as Record<string, string>)[status]} (${transfers.rows?.filter((row) => row.status === status).length ?? 0})`}
+              active={transferFilter === status}
+              onPress={() => { setTransferFilter(status); setPicked(""); }}
+            />
+          ))}
+        </ScrollView>
+      ) : null}
+      {filteredTransfers && filteredTransfers.length === 0 && transfers.rows?.length ? <Body>Không có lệnh điều chuyển ở trạng thái này.</Body> : null}
       <PickList
-        rows={transfers.rows}
+        rows={role === "ADMIN" ? filteredTransfers : transfers.rows}
         selected={picked}
         onPick={setPicked}
         detail={(row) => {

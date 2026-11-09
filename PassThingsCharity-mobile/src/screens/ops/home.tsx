@@ -421,10 +421,9 @@ export function OpsHome() {
   const fresh = receipts.filter((row) => !row.code.startsWith("SAMPLE-"));
   const waiting = [...fresh.filter((row) => row.status === "PENDING"), ...fresh.filter((row) => row.status !== "PENDING")].slice(0, 5);
   const moving = moves.filter((row) => transferOpen.has(row.status) && !String(row.code || "").startsWith("SAMPLE-")).slice(0, 5);
-  const quiet = !loading && pendingOrgs.length + soon.length + open.length + waiting.length + moving.length === 0;
+  const quiet = !loading && pendingOrgs.length + (role === "ORG_MANAGER" ? 0 : soon.length) + open.length + waiting.length + moving.length === 0;
   const pendingCount = orgs.filter((org) => org.status === "PENDING").length;
   const openCount = campaigns.filter((row) => row.status === "ACTIVE" && !row.title.startsWith("[Mẫu]")).length;
-  const soonCount = campaigns.filter((row) => row.status === "PUBLISHED" && !row.title.startsWith("[Mẫu]")).length;
   const slipCount = fresh.filter((row) => row.status === "PENDING").length;
   const moveCount = moves.filter((row) => transferOpen.has(row.status)).length;
   const stationCount = stations.filter((row) => row.isActive).length;
@@ -434,7 +433,6 @@ export function OpsHome() {
     role === "ADMIN" ? { key: "org", value: pendingCount, label: t("dash.orgWait"), href: "/desk/orgs" as const } : null,
     role === "ADMIN" ? { key: "waitStation", value: stations.filter((row) => !row.isActive).length, label: t("dash.stationWait"), href: "/desk/stations" as const } : null,
     { key: "open", value: openCount, label: t("dash.open"), href: "/desk/campaigns" as const },
-    role === "ORG_MANAGER" ? { key: "soon", value: soonCount, label: t("dash.soon"), href: "/desk/campaigns" as const } : null,
     seesIntake ? { key: "slip", value: slipCount, label: t("dash.pendingSlip"), href: "/desk/intake" as const } : null,
     seesStations ? { key: "station", value: stationCount, label: t("dash.stationOpen"), href: "/desk/stations" as const } : null,
     seesTransfers ? { key: "move", value: moveCount, label: t("dash.moving"), href: "/desk/transfers" as const } : null,
@@ -473,7 +471,7 @@ export function OpsHome() {
       </View>
       {quiet ? <Body muted>{t("dash.quiet")}</Body> : null}
       <Board title="Tổ chức chờ duyệt" href="/desk/orgs" rows={pendingOrgs.map((org) => ({ id: org._id, title: org.name, detail: "Chờ duyệt" }))} />
-      <Board title="Chiến dịch sắp mở" href="/desk/campaigns" rows={soon.map((row) => ({ id: row._id, title: row.title, detail: spoken(row.status) }))} />
+      {role !== "ORG_MANAGER" ? <Board title="Chiến dịch sắp mở" href="/desk/campaigns" rows={soon.map((row) => ({ id: row._id, title: row.title, detail: spoken(row.status) }))} /> : null}
       <Board title="Chiến dịch đang nhận" href="/desk/campaigns" rows={open.map((row) => ({ id: row._id, title: row.title, detail: spoken(row.status) }))} />
       {seesIntake ? <Board title="Phiếu gần nhất" href="/desk/intake" rows={waiting.map((row) => ({ id: row._id, title: row.code, detail: spoken(row.status) }))} /> : null}
       <Board title="Điều chuyển đang mở" href="/desk/transfers" rows={moving.map((row) => {

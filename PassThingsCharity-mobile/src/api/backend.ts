@@ -175,19 +175,19 @@ export const backend = {
     return api<{ message: string }>(`/catalog/items/${id}`, withToken(token, "DELETE"));
   },
 
-  listCampaigns(query?: { status?: string; search?: string; organizationId?: string }) {
+  listCampaigns(query?: { status?: string; search?: string; organizationId?: string }, token?: Token) {
     const params = new URLSearchParams();
     if (query?.status) params.set("status", query.status);
     if (query?.search) params.set("search", query.search);
     if (query?.organizationId) params.set("organizationId", query.organizationId);
     const suffix = params.toString();
-    return api<{ campaigns: CampaignSummary[] }>(`/campaigns${suffix ? `?${suffix}` : ""}`);
+    return api<{ campaigns: CampaignSummary[] }>(`/campaigns${suffix ? `?${suffix}` : ""}`, token ? { token } : {});
   },
   getCampaign(id: string) {
     return api<CampaignDetail>(`/campaigns/${id}`);
   },
   createCampaign(token: Token, body: Body) {
-    return api<{ message: string }>("/campaigns", withToken(token, "POST", body));
+    return api<{ message: string; campaign: Pick<CampaignSummary, "_id"> }>("/campaigns", withToken(token, "POST", body));
   },
   updateCampaign(token: Token, id: string, body: Body) {
     return api<{ message: string }>(`/campaigns/${id}`, withToken(token, "PATCH", body));
