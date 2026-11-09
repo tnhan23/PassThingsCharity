@@ -3,10 +3,10 @@ module.exports = {
     get: {
       tags: ['Campaigns'],
       summary: 'Lấy danh sách các Campaign cứu trợ (Public / Filter)',
-      description: 'Không gửi token thì chỉ trả các chiến dịch công khai; token ADMIN cũng nhận các bản nháp. Mỗi chiến dịch có items và progress: targetQuantity, currentQuantity/collectedQuantity, inTransitQuantity, distributedQuantity, remainingQuantity, progressPercent, isFulfilled. Tổng đã tiếp nhận và số thiếu tính theo phiếu quyên góp của chiến dịch, không lấy kho chung để cộng cho nhiều chiến dịch. Không còn stockQuantity vì hàng trong kho trạm chưa được phân bổ riêng theo chiến dịch. Chuyển trạm và trao cứu trợ không làm tăng/giảm số đã quyên góp.',
+      description: 'Không gửi token thì chỉ trả các chiến dịch công khai; bản nháp chỉ có thể được lọc riêng bởi ADMIN với status=DRAFT. Khi không có bộ lọc status, bản nháp luôn bị loại trừ. Mỗi chiến dịch có items và progress: targetQuantity, currentQuantity/collectedQuantity, inTransitQuantity, distributedQuantity, remainingQuantity, progressPercent, isFulfilled. Tổng đã tiếp nhận và số thiếu tính theo phiếu quyên góp của chiến dịch, không lấy kho chung để cộng cho nhiều chiến dịch. Không còn stockQuantity vì hàng trong kho trạm chưa được phân bổ riêng theo chiến dịch. Chuyển trạm và trao cứu trợ không làm tăng/giảm số đã quyên góp.',
       security: [{ bearerAuth: [] }, {}],
       parameters: [
-        { name: 'status', in: 'query', schema: { type: 'string', enum: ['DRAFT', 'PUBLISHED', 'ACTIVE', 'COMPLETED', 'CANCELLED'] }, description: 'ADMIN có thể lọc DRAFT; các vai trò khác chỉ lọc trạng thái công khai' },
+        { name: 'status', in: 'query', schema: { type: 'string', enum: ['DRAFT', 'ACTIVE', 'COMPLETED', 'CANCELLED'] }, description: 'ADMIN có thể lọc DRAFT; các vai trò khác chỉ lọc trạng thái công khai. Không truyền status sẽ loại trừ DRAFT.' },
         { name: 'organizationId', in: 'query', schema: { type: 'string' }, description: 'Lọc theo Tổ chức' },
         { name: 'search', in: 'query', schema: { type: 'string' }, description: 'Tìm kiếm theo tên chiến dịch' },
       ],
@@ -74,7 +74,7 @@ module.exports = {
   '/campaigns/{id}/status': {
     patch: {
       tags: ['Campaigns'],
-      summary: 'Chuyển trạng thái theo luồng DRAFT/PUBLISHED -> ACTIVE -> COMPLETED hoặc CANCELLED',
+      summary: 'Chuyển trạng thái theo luồng DRAFT -> ACTIVE -> COMPLETED hoặc CANCELLED',
       parameters: [
         { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
       ],
@@ -86,7 +86,7 @@ module.exports = {
               type: 'object',
               required: ['status'],
               properties: {
-                status: { type: 'string', enum: ['DRAFT', 'PUBLISHED', 'ACTIVE', 'COMPLETED', 'CANCELLED'], example: 'ACTIVE' },
+                status: { type: 'string', enum: ['DRAFT', 'ACTIVE', 'COMPLETED', 'CANCELLED'], example: 'ACTIVE' },
               },
             },
           },
@@ -222,7 +222,7 @@ module.exports['/campaigns/{id}/stations'].get.responses[200] = {
   } } } },
 };
 module.exports['/campaigns/{id}/status'].patch.description = (module.exports['/campaigns/{id}/status'].patch.description || '')
-  + ' Chuyển sang PUBLISHED hoặc ACTIVE cần ít nhất một trạm tiếp nhận đang hoạt động đã gắn qua POST /campaigns/{id}/stations; thiếu trạm trả 409.';
+  + ' Chuyển sang ACTIVE cần ít nhất một trạm tiếp nhận đang hoạt động đã gắn qua POST /campaigns/{id}/stations; thiếu trạm trả 409.';
 const resultsParameters = [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }];
 if (module.exports['/campaigns/{id}']?.get) {
   module.exports['/campaigns/{id}'].get.description = (module.exports['/campaigns/{id}'].get.description || '')

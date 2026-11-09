@@ -96,14 +96,14 @@ async function getAllCampaigns(req, res, next) {
   try {
     const { status, organizationId, search } = req.query;
     const isAdmin = req.user?.role?.name === 'ADMIN';
-    const filter = isAdmin ? {} : { status: { $ne: 'DRAFT' } };
+    const filter = { status: { $ne: 'DRAFT' } };
 
     if (status) {
       if (typeof status !== 'string') {
         return res.status(400).json({ error: 'Invalid Campaign status filter.' });
       }
       const formattedStatus = status.trim().toUpperCase();
-      const publicStatuses = ['PUBLISHED', 'ACTIVE', 'COMPLETED', 'CANCELLED'];
+      const publicStatuses = ['ACTIVE', 'COMPLETED', 'CANCELLED'];
       const allowedStatuses = isAdmin ? ['DRAFT', ...publicStatuses] : publicStatuses;
       if (!allowedStatuses.includes(formattedStatus)) {
         return res.status(400).json({
@@ -283,7 +283,7 @@ async function updateCampaign(req, res, next) {
 }
 
 /**
- * Update Campaign Status (DRAFT/PUBLISHED -> ACTIVE -> COMPLETED / CANCELLED)
+ * Update Campaign Status (DRAFT -> ACTIVE -> COMPLETED / CANCELLED)
  */
 async function updateCampaignStatus(req, res, next) {
   try {
@@ -294,7 +294,7 @@ async function updateCampaignStatus(req, res, next) {
       return res.status(400).json({ error: 'Invalid Campaign ID.' });
     }
 
-    const validStatuses = ['DRAFT', 'PUBLISHED', 'ACTIVE', 'COMPLETED', 'CANCELLED'];
+    const validStatuses = ['DRAFT', 'ACTIVE', 'COMPLETED', 'CANCELLED'];
     const formattedStatus = typeof status === 'string' ? status.trim().toUpperCase() : '';
 
     if (!validStatuses.includes(formattedStatus)) {
@@ -310,7 +310,6 @@ async function updateCampaignStatus(req, res, next) {
 
     const allowedTransitions = {
       DRAFT: ['ACTIVE', 'CANCELLED'],
-      PUBLISHED: ['ACTIVE', 'CANCELLED'],
       ACTIVE: ['COMPLETED', 'CANCELLED'],
       COMPLETED: [],
       CANCELLED: [],
@@ -322,10 +321,10 @@ async function updateCampaignStatus(req, res, next) {
       });
     }
 
-    if (['PUBLISHED', 'ACTIVE'].includes(formattedStatus)) {
+    if (formattedStatus === 'ACTIVE') {
       const links = await CampaignStation.find({ campaignId: id }).populate('stationId', 'isActive');
       if (!links.some(link => link.stationId?.isActive)) {
-        return res.status(409).json({ error: 'Cần gắn ít nhất một trạm tiếp nhận đang hoạt động trước khi công bố hoặc kích hoạt chiến dịch.' });
+        return res.status(409).json({ error: 'Cần gắn ít nhất một trạm tiếp nhận đang hoạt động trước khi kích hoạt chiến dịch.' });
       }
     }
     campaign.status = formattedStatus;
