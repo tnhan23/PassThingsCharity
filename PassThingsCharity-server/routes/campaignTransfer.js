@@ -15,9 +15,9 @@ router.patch('/:id/approval', checkBearerToken, checkRole(['ADMIN', 'STATION_MAN
 router.patch('/:id/responsibilities', checkBearerToken, checkRole(['ADMIN', 'STATION_MANAGER']), handover.assignResponsibilities);
 router.post('/:id/shipments', checkBearerToken, checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF']), handover.allocateShipment);
 router.delete('/:id/shipments/:shipmentId', checkBearerToken, checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF']), handover.removeShipment);
-router.post('/:id/shipments/:shipmentId/evidence/:stage', checkBearerToken, checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF', 'USER']), handover.uploadEvidence);
+router.post('/:id/shipments/:shipmentId/evidence/:stage', checkBearerToken, checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF', 'USER', 'VOLUNTEER']), handover.uploadEvidence);
 router.post('/:id/shipments/:shipmentId/dispatch', checkBearerToken, checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF']), handover.dispatchShipment);
-router.post('/:id/shipments/:shipmentId/report', checkBearerToken, checkRole(['USER', 'STAFF', 'STATION_MANAGER', 'ADMIN']), handover.reportShipment);
+router.post('/:id/shipments/:shipmentId/report', checkBearerToken, checkRole(['USER', 'VOLUNTEER', 'STAFF', 'STATION_MANAGER', 'ADMIN']), handover.reportShipment);
 router.post('/:id/shipments/:shipmentId/receive', checkBearerToken, checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF']), handover.receiveShipment);
 
 // Tạo phiếu điều phối giữa các trạm
@@ -32,7 +32,7 @@ router.post(
 router.get(
   '/',
   checkBearerToken,
-  checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF']),
+  checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF', 'USER', 'VOLUNTEER']),
   getAllTransfers
 );
 
@@ -40,7 +40,7 @@ router.get(
 router.get(
   '/:id',
   checkBearerToken,
-  checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF', 'USER']),
+  checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF', 'USER', 'VOLUNTEER']),
   getTransferById
 );
 

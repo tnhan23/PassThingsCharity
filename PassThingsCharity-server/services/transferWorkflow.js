@@ -117,7 +117,7 @@ async function loadShipment(transfer, shipmentId) {
 }
 
 async function requireRead(transfer, user) {
-  if (user.role?.name === 'USER') {
+  if (user.role?.name === 'USER' || user.role?.name === 'VOLUNTEER') {
     if (await Shipment.exists({ transferId: transfer._id, carrierId: user._id })) return;
     fail(403, 'This transfer is not assigned to you.');
   }
