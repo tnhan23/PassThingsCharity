@@ -401,13 +401,23 @@ export function StationScreen() {
               <TextField label="Điện thoại" value={phone} onChangeText={setPhone} />
               <Button
                 label="Tạo và gán trưởng trạm"
-                onPress={() => void job.run((token) => backend.createStationManager(token, picked, {
-                  email: email.trim(),
-                  username: username.trim(),
-                  password,
-                  fullName: fullName.trim(),
-                  phone: phone.trim(),
-                }))}
+                onPress={() => {
+                  if (!email.trim() || !username.trim() || !password || !fullName.trim()) {
+                    job.fail("Vui lòng nhập đầy đủ email, username, mật khẩu và họ tên trưởng trạm.");
+                    return;
+                  }
+                  if (!/^\d{10}$/.test(phone.trim())) {
+                    job.fail("Số điện thoại trưởng trạm phải gồm đúng 10 chữ số.");
+                    return;
+                  }
+                  void job.run((token) => backend.createStationManager(token, picked, {
+                    email: email.trim(),
+                    username: username.trim(),
+                    password,
+                    fullName: fullName.trim(),
+                    phone: phone.trim(),
+                  }));
+                }}
               />
             </View>
           ) : null}
@@ -454,19 +464,41 @@ export function StationScreen() {
                 }}
               />
             ) : null}
-            <TextField label="Vĩ độ" value={latitude} onChangeText={setLatitude} />
-            <TextField label="Kinh độ" value={longitude} onChangeText={setLongitude} />
+            <TextField label="Vĩ độ (số thập phân, ví dụ 10.8289)" value={latitude} onChangeText={setLatitude} keyboardType="decimal-pad" />
+            <TextField label="Kinh độ (số thập phân, ví dụ 106.8172)" value={longitude} onChangeText={setLongitude} keyboardType="decimal-pad" />
             <Button
               label="Tạo trạm"
-              onPress={() => void createStationJob.run((token) => backend.createStationForOrganization(token, orgId, {
-                name: name.trim(),
-                address: address.trim(),
-                latitude: latitude.trim(),
-                longitude: longitude.trim(),
-              })).then((ok) => ok && stations.reload())}
+              onPress={() => {
+                if (!orgId) {
+                  createStationJob.fail("Vui lòng chọn tổ chức sở hữu trạm ở danh sách phía trên.");
+                  return;
+                }
+                if (!name.trim() || !address.trim()) {
+                  createStationJob.fail("Vui lòng nhập đầy đủ Tên trạm và Địa chỉ.");
+                  return;
+                }
+                const cleanLat = latitude.trim().replace(",", ".");
+                const cleanLng = longitude.trim().replace(",", ".");
+                if (/[°'"]/.test(cleanLat) || /[°'"]/.test(cleanLng)) {
+                  createStationJob.fail("Tọa độ phải nhập dạng số thập phân dùng dấu chấm (ví dụ Vĩ độ: 10.8289, Kinh độ: 106.8172), không nhập độ-phút-giây (° ' \").");
+                  return;
+                }
+                const numLat = Number(cleanLat);
+                const numLng = Number(cleanLng);
+                if ((cleanLat && (Number.isNaN(numLat) || numLat < -90 || numLat > 90)) || (cleanLng && (Number.isNaN(numLng) || numLng < -180 || numLng > 180))) {
+                  createStationJob.fail("Tọa độ không hợp lệ. Vĩ độ phải từ -90 đến 90 (ví dụ 10.8289) và Kinh độ từ -180 đến 180 (ví dụ 106.8172).");
+                  return;
+                }
+                void createStationJob.run((token) => backend.createStationForOrganization(token, orgId, {
+                  name: name.trim(),
+                  address: address.trim(),
+                  latitude: cleanLat,
+                  longitude: cleanLng,
+                })).then((ok) => ok && stations.reload());
+              }}
             />
           </View>
-          <Note text={createStationJob.note} />
+          <Note text={createStationJob.note} error={createStationJob.isError} />
         </>
       ) : role === "ADMIN" ? null : <Body muted>Vai trò này không tạo trạm.</Body>}
     </OpsGate>

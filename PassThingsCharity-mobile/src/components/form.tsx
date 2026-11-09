@@ -59,17 +59,38 @@ export function PasswordReset() {
   const [otp, setOtp] = useState("");
   const [nextPassword, setNextPassword] = useState("");
   const [message, setMessage] = useState("");
+  const [isError, setIsError] = useState(false);
   const [busy, setBusy] = useState(false);
 
   async function send(kind: "code" | "reset") {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setIsError(true);
+      setMessage("Vui lòng nhập địa chỉ email hợp lệ.");
+      return;
+    }
+    if (kind === "reset") {
+      if (!/^\d{6}$/.test(otp.trim())) {
+        setIsError(true);
+        setMessage("Mã OTP phải gồm đúng 6 chữ số.");
+        return;
+      }
+      if (nextPassword.length < 6) {
+        setIsError(true);
+        setMessage("Mật khẩu mới phải có ít nhất 6 ký tự.");
+        return;
+      }
+    }
     setBusy(true);
+    setIsError(false);
     setMessage("");
     try {
       const data = kind === "code"
         ? await backend.forgotPassword(email.trim())
         : await backend.resetPassword({ email: email.trim(), otp: otp.trim(), newPassword: nextPassword });
+      setIsError(false);
       setMessage(data.message);
     } catch (caught) {
+      setIsError(true);
       setMessage(caught instanceof ApiError ? caught.message : "Máy chủ từ chối yêu cầu.");
     } finally {
       setBusy(false);
@@ -80,11 +101,15 @@ export function PasswordReset() {
     <Card>
       <Title>Đặt lại mật khẩu</Title>
       <Body muted>Máy chủ gửi mã 6 số qua email. Mã hết hạn sau 10 phút. Mật khẩu mới từ 6 ký tự.</Body>
-      <Field label="Email" value={email} onChangeText={setEmail} />
+      <Field label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" />
       <Button disabled={busy} label={busy ? "Đang gửi" : "Gửi mã"} onPress={() => void send("code")} />
-      <Field label="Mã 6 số" value={otp} onChangeText={setOtp} />
+      <Field label="Mã 6 số" value={otp} onChangeText={setOtp} keyboardType="number-pad" />
       <Field label="Mật khẩu mới" value={nextPassword} onChangeText={setNextPassword} secure />
-      {message ? <Text selectable style={{ fontFamily: fonts.medium, fontSize: 14, color: colors.ink }}>{message}</Text> : null}
+      {message ? (
+        <Text selectable style={{ fontFamily: fonts.medium, fontSize: 14, color: isError ? colors.error : colors.primary }}>
+          {message}
+        </Text>
+      ) : null}
       <Button disabled={busy} label={busy ? "Đang gửi" : "Đặt mật khẩu"} tone="ghost" onPress={() => void send("reset")} />
     </Card>
   );
@@ -106,6 +131,7 @@ export function Action({
   const { token } = useSession();
   const [values, setValues] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
+  const [isError, setIsError] = useState(false);
   const [busy, setBusy] = useState(false);
 
   return (
@@ -121,21 +147,33 @@ export function Action({
           onChangeText={(next) => setValues((current) => ({ ...current, [field.name]: next }))}
         />
       ))}
-      {message ? <Text selectable style={{ fontFamily: fonts.medium, fontSize: 14, color: colors.ink }}>{message}</Text> : null}
+      {message ? (
+        <Text selectable style={{ fontFamily: fonts.medium, fontSize: 14, color: isError ? colors.error : colors.primary }}>
+          {message}
+        </Text>
+      ) : null}
       <Button
         disabled={busy}
         label={busy ? "Đang gửi" : label}
         onPress={() => {
           if (busy) return;
           if (!token) {
+            setIsError(true);
             setMessage("Đăng nhập trước khi gọi API này.");
             return;
           }
           setBusy(true);
+          setIsError(false);
           setMessage("");
           void run(values, token)
-            .then((data) => setMessage(resultText(data)))
-            .catch((caught) => setMessage(caught instanceof ApiError ? caught.message : "Máy chủ từ chối yêu cầu."))
+            .then((data) => {
+              setIsError(false);
+              setMessage(resultText(data));
+            })
+            .catch((caught) => {
+              setIsError(true);
+              setMessage(caught instanceof ApiError ? caught.message : "Máy chủ từ chối yêu cầu.");
+            })
             .finally(() => setBusy(false));
         }}
       />

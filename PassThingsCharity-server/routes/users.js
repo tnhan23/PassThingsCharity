@@ -3,13 +3,17 @@ const router = express.Router();
 const {
   getMyProfile,
   updateMyProfile,
-  deleteMyAccount
+  deleteMyAccount,
+  getUser,
+  setUserStatus,
 } = require("../controller/user");
 const { assignStationManager } = require('../controller/adminUser')
 const checkRole = require('../middleware/checkRole')
 const checkBearerToken = require('../middleware/checkBearerToken')
+router.get('/', checkBearerToken, checkRole(['ADMIN']), getUser)
 router.delete('/:id', checkBearerToken, deleteMyAccount)
 router.get('/me/profile', checkBearerToken, getMyProfile);
 router.patch('/me/profile', checkBearerToken, updateMyProfile);
+router.patch('/:id/status', checkBearerToken, checkRole(['ADMIN']), setUserStatus)
 router.patch('/:id/station-manager', checkBearerToken, checkRole(['ADMIN']), assignStationManager)
 module.exports = router;

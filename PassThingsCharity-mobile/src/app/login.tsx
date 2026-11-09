@@ -29,10 +29,39 @@ export default function LoginPage() {
   async function submit() {
     if (busy) return;
     setError("");
+    if (form === "register") {
+      if (!email.trim() || !fullname.trim() || !phone.trim() || !username.trim() || !password) {
+        setError("Vui lòng điền đầy đủ email, họ tên, số điện thoại, tên đăng nhập và mật khẩu.");
+        return;
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+        setError("Email không đúng định dạng (ví dụ: ten@email.com).");
+        return;
+      }
+      if (!/^\d{10}$/.test(phone.trim())) {
+        setError("Số điện thoại phải gồm đúng 10 chữ số.");
+        return;
+      }
+      if (password.length < 6) {
+        setError("Mật khẩu phải có ít nhất 6 ký tự.");
+        return;
+      }
+    } else {
+      if (!username.trim() || !password) {
+        setError("Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu.");
+        return;
+      }
+    }
     setBusy(true);
     try {
       if (form === "register") {
-        await register({ email, username, password, fullname, phone });
+        await register({
+          email: email.trim(),
+          username: username.trim(),
+          password,
+          fullname: fullname.trim(),
+          phone: phone.trim(),
+        });
       } else {
         await login(username.trim(), password);
       }

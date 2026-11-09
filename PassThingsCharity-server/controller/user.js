@@ -175,8 +175,92 @@ async function deleteMyAccount(req, res, next) {
     return next(error);
   }
 }
+
+async function getUser(req, res, next) {
+  try {
+    const { role, status } = req.query;
+    const filter = {};
+
+    if (role !== undefined) {
+      const normalizedRole = String(role).trim().toUpperCase();
+      const roleDoc = await Role.findOne({ name: normalizedRole });
+
+      if (!roleDoc) {
+        return res.status(400).json({
+          error: 'Role không hợp lệ.',
+        });
+      }
+
+      filter.role = roleDoc._id;
+    }
+
+    if (status !== undefined) {
+      const normalizedStatus = String(status).trim().toLowerCase();
+      if (!['active', 'inactive', 'banned'].includes(normalizedStatus)) {
+        return res.status(400).json({
+          error: 'Status phải là active, inactive hoặc banned.',
+        });
+      }
+      filter.status = normalizedStatus;
+    }
+
+    const users = await User.find(filter).populate('role', 'name').sort({ createdAt: -1 });
+    const data = users.map((user) => ({
+      ...user.toObject(),
+      role: user.role?.name || user.role,
+    }));
+
+    return res.status(200).json({
+      data,
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function setUserStatus(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { status = 'inactive' } = req.body || {};
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ error: 'User ID không hợp lệ.' });
+    }
+
+    if (!['active', 'inactive', 'banned'].includes(status)) {
+      return res.status(400).json({
+        error: 'Status phải là active, inactive hoặc banned.',
+      });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      id,
+      { $set: { status } },
+      { new: true, runValidators: true }
+    ).populate('role', 'name');
+
+    if (!user) {
+      return res.status(404).json({ error: 'Không tìm thấy user.' });
+    }
+
+    return res.status(200).json({
+      message: `Đã cập nhật trạng thái user thành ${status}.`,
+      user: {
+        id: user._id,
+        username: user.username,
+        role: user.role?.name,
+        status: user.status,
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
 module.exports={
   getMyProfile,
   updateMyProfile,
   deleteMyAccount,
+  getUser,
+  setUserStatus,
 };

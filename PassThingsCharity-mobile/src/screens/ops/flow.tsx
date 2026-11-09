@@ -358,24 +358,32 @@ export function TransferWork() {
       {canWrite ? (
         <Button
           label={selectedItemsCount > 0 ? `Tạo lệnh (${selectedItemsCount} món)` : "Tạo lệnh"}
-          onPress={() => void job.run((token) => {
+          onPress={() => {
+            if (!campaignId || !fromId || !toId) {
+              job.fail("Vui lòng chọn đầy đủ Chiến dịch, Trạm đi và Trạm đến.");
+              return;
+            }
             const items = stock.flatMap((row) => {
               const id = refId(row.itemTypeId);
               const quantity = Number(amounts[id]);
               if (!id || !(quantity > 0)) return [];
               return [{ itemTypeId: id, quantity, unit: row.unit }];
             });
-            return backend.createTransfer(token, {
+            if (items.length === 0) {
+              job.fail("Vui lòng nhập số lượng lớn hơn 0 cho ít nhất một món đồ cần gửi.");
+              return;
+            }
+            void job.run((token) => backend.createTransfer(token, {
               campaignId,
               fromStationId: fromId,
               toStationId: toId,
               items,
+            })).then((ok) => {
+              if (!ok) return;
+              setAmounts({});
+              transfers.reload();
             });
-          }).then((ok) => {
-            if (!ok) return;
-            setAmounts({});
-            transfers.reload();
-          })}
+          }}
         />
       ) : null}
     </OpsGate>
@@ -864,6 +872,18 @@ export function CrewWork() {
             disabled={Boolean(startDateError || endDateError || neededError || createTaskJob.busy)}
             onPress={() => {
               if (startDateError || endDateError || neededError) return;
+              if (!stationId) {
+                createTaskJob.fail("Vui lòng chọn trạm cho công việc tình nguyện.");
+                return;
+              }
+              if (!title.trim()) {
+                createTaskJob.fail("Vui lòng nhập tên công việc.");
+                return;
+              }
+              if (!startDate || !startTime || !endDate || !endTime) {
+                createTaskJob.fail("Vui lòng chọn đầy đủ cả Ngày và Giờ bắt đầu, Ngày và Giờ kết thúc.");
+                return;
+              }
               const payload = {
                 ...(campaignId ? { campaignId } : {}),
                 stationId,
@@ -887,7 +907,7 @@ export function CrewWork() {
               });
             }}
           />
-          <Note text={createTaskJob.note} />
+          <Note text={createTaskJob.note} error={createTaskJob.isError} />
         </Fold>
       ) : null}
       <Title>Đơn tham gia chiến dịch</Title>

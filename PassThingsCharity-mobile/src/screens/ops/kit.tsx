@@ -144,27 +144,69 @@ export function useRows(load: (token: string) => Promise<Row[]>) {
   return { token, rows, error, reload };
 }
 
+export function formatServerMessage(raw: string) {
+  const trimmed = raw.trim();
+  if (trimmed === "name và address là bắt buộc; tọa độ phải hợp lệ.") {
+    return "Vui lòng nhập tên trạm, địa chỉ và tọa độ dạng số thập phân hợp lệ (ví dụ: 10.8289, 106.8172).";
+  }
+  if (trimmed === "Provide startTime and endTime, with endTime after startTime.") {
+    return "Vui lòng chọn đầy đủ ngày giờ bắt đầu và kết thúc (giờ kết thúc phải sau giờ bắt đầu).";
+  }
+  if (trimmed === "Schedule must start in the future.") {
+    return "Thời gian bắt đầu công việc phải ở trong tương lai.";
+  }
+  if (trimmed === "You cannot manage schedules for this station.") {
+    return "Tài khoản này không có quyền quản lý lịch công việc của trạm này.";
+  }
+  if (trimmed === "Station not found.") {
+    return "Không tìm thấy trạm.";
+  }
+  if (trimmed === "Cannot edit this campaign.") {
+    return "Bạn không có quyền chỉnh sửa chiến dịch này.";
+  }
+  return trimmed;
+}
+
+export function isErrorText(text: string) {
+  if (!text) return false;
+  if (/không|lỗi|chưa|từ chối|thiếu|sai|bắt buộc|hợp lệ|tối thiểu|ít nhất|phải|trùng|quá hạn|hết hạn|vui lòng|cần|chỉ có thể|khóa|hủy|đã có lịch|đã thuộc|đã được sử dụng|đã được gán|đã gửi đơn|đã ứng tuyển|đã đủ|đã kết thúc|đã đóng|only|cannot|invalid|required|must|provide|not found|failed|error/i.test(text)) {
+    return true;
+  }
+  if (/^(đã |có \d+)/i.test(text.trim()) || /thành công/i.test(text)) return false;
+  return false;
+}
+
 export function useJob() {
   const { token } = useSession();
   const [note, setNote] = useState("");
+  const [isError, setIsError] = useState(false);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
 
+  function fail(message: string) {
+    setIsError(true);
+    setNote(formatServerMessage(message));
+  }
+
   async function run(job: (token: string) => Promise<unknown>) {
     if (!token) {
-      setNote("Đăng nhập trước.");
+      setIsError(true);
+      setNote("Vui lòng đăng nhập trước.");
       return false;
     }
     if (busyRef.current) return false;
     busyRef.current = true;
     setBusy(true);
+    setIsError(false);
     setNote("");
     try {
       const data = await job(token);
+      setIsError(false);
       setNote(resultText(data));
       return true;
     } catch (caught) {
-      setNote(caught instanceof Error ? caught.message : "Máy chủ từ chối.");
+      setIsError(true);
+      setNote(formatServerMessage(caught instanceof Error ? caught.message : "Máy chủ từ chối yêu cầu."));
       return false;
     } finally {
       busyRef.current = false;
@@ -172,12 +214,13 @@ export function useJob() {
     }
   }
 
-  return { token, note, busy, run };
+  return { token, note, isError, busy, run, fail };
 }
 
-export function Note({ text }: { text: string }) {
+export function Note({ text, error }: { text: string; error?: boolean }) {
   if (!text) return null;
-  const isErr = /không|lỗi|chưa|từ chối|thiếu|sai/i.test(text);
+  const display = formatServerMessage(text);
+  const isErr = error ?? isErrorText(display);
   return (
     <Card
       style={{
@@ -196,7 +239,7 @@ export function Note({ text }: { text: string }) {
             color: isErr ? colors.error : colors.primary,
           }}
         >
-          {text}
+          {display}
         </Text>
       </View>
     </Card>
