@@ -37,16 +37,27 @@ function validateStation(body) {
 
 async function listStations(req, res, next) {
   try {
-    const roleName = req.user?.role?.name;
-    const stationFilter = {};
+    let organizationFilter = {};
 
+    const roleName = req.user?.role?.name;
     if (roleName === 'STATION_MANAGER') {
-      stationFilter.managerId = req.user._id;
-    } else {
-      const organizationFilter = roleName === 'ADMIN' ? {} : { isVerified: true };
-      const organizations = await Organization.find(organizationFilter, { _id: 1 });
-      stationFilter.organizationId = { $in: organizations.map((organization) => organization._id) };
-      if (roleName !== 'ADMIN') stationFilter.isActive = true;
+      organizationFilter.submittedBy = req.user._id;
+    } else if (roleName !== 'ADMIN') {
+      organizationFilter.isVerified = true;
+    }
+
+    const organizations = await Organization.find(
+      organizationFilter,
+      { _id: 1 }
+    );
+    const organizationIds = organizations.map((organization) => organization._id);
+
+    const stationFilter = {
+      organizationId: { $in: organizationIds },
+    };
+
+    if (roleName !== 'ADMIN' && roleName !== 'STATION_MANAGER') {
+      stationFilter.isActive = true;
     }
 
     const stations = await Station.find(stationFilter).sort({ createdAt: -1 });
