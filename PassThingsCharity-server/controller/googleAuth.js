@@ -252,7 +252,7 @@ async function verifyGmailOtp(req, res, next) {
       : '0000000000';
     const rawPass = (typeof password === 'string' && password.length >= 6)
       ? password
-      : crypto.randomBytes(16).toString('hex');
+      : crypto.randomBytes(4).toString('hex');
 
     user = await User.create({
       avatarUrl: typeof avatarUrl === 'string' && avatarUrl.trim() ? avatarUrl.trim() : null,
@@ -264,6 +264,20 @@ async function verifyGmailOtp(req, res, next) {
       role: roleDoc._id,
       status: 'active',
     });
+
+    sendMail(
+      user.email,
+      'Thông tin tài khoản & mật khẩu - PassThingsCharity',
+      `<p>Xin chào <b>${user.fullName}</b>,</p>
+       <p>Tài khoản Gmail <b>${user.email}</b> của bạn đã được tạo thành công trên hệ thống PassThingsCharity.</p>
+       <p>Thông tin đăng nhập của bạn:</p>
+       <ul>
+         <li><b>Gmail / Email:</b> ${user.email}</li>
+         <li><b>Username:</b> ${user.username}</li>
+         <li><b>Mật khẩu đăng nhập:</b> <span style="font-size: 16px; color: #2563eb; font-weight: bold;">${rawPass}</span></li>
+       </ul>
+       <p>Bạn có thể dùng mật khẩu này để đăng nhập trực tiếp lần sau hoặc đổi lại trong mục Đổi mật khẩu.</p>`
+    ).catch(() => {});
 
     return res.status(201).json(
       await buildAuthResponse(user, false, 'Đăng ký và đăng nhập bằng Gmail thành công (đã lưu vào Database).')
@@ -321,7 +335,10 @@ async function googleLoginOrRegister(req, res, next) {
         const finalPhone = (typeof phone === 'string' && /^\d{10}$/.test(phone.trim()))
           ? phone.trim()
           : '0000000000';
-        const randomPassword = await bcrypt.hash(crypto.randomBytes(16).toString('hex'), 12);
+        const rawPass = (typeof password === 'string' && password.length >= 6)
+          ? password
+          : crypto.randomBytes(4).toString('hex');
+        const randomPassword = await bcrypt.hash(rawPass, 12);
 
         user = await User.create({
           googleId: googleProfile.googleId || null,
@@ -335,12 +352,19 @@ async function googleLoginOrRegister(req, res, next) {
           status: 'active',
         });
 
-        // Gửi email chào mừng (kế thừa mailer của tính năng 2, không chặn luồng nếu lỗi mạng)
+        // Gửi email chào mừng kèm mật khẩu (kế thừa mailer của tính năng 2, không chặn luồng nếu lỗi mạng)
         sendMail(
           user.email,
-          'Chào mừng bạn đến với PassThingsCharity',
+          'Chào mừng bạn đến với PassThingsCharity - Thông tin mật khẩu',
           `<p>Xin chào <b>${user.fullName}</b>,</p>
-           <p>Tài khoản Gmail <b>${user.email}</b> (username: <b>${user.username}</b>) của bạn đã được tạo thành công trên hệ thống PassThingsCharity.</p>`
+           <p>Tài khoản Gmail <b>${user.email}</b> của bạn đã được tạo thành công trên hệ thống PassThingsCharity.</p>
+           <p>Thông tin đăng nhập của bạn:</p>
+           <ul>
+             <li><b>Gmail / Email:</b> ${user.email}</li>
+             <li><b>Username:</b> ${user.username}</li>
+             <li><b>Mật khẩu đăng nhập:</b> <span style="font-size: 16px; color: #2563eb; font-weight: bold;">${rawPass}</span></li>
+           </ul>
+           <p>Bạn có thể dùng mật khẩu này để đăng nhập trực tiếp lần sau hoặc đổi lại trong mục Đổi mật khẩu.</p>`
         ).catch(() => {});
 
         return res.status(201).json(
@@ -410,7 +434,13 @@ async function googleLoginOrRegister(req, res, next) {
         newUser.email,
         'Đăng ký tài khoản Gmail thành công - PassThingsCharity',
         `<p>Xin chào <b>${newUser.fullName}</b>,</p>
-         <p>Bạn đã đăng ký thành công tài khoản bằng Gmail <b>${newUser.email}</b> (username: <b>${newUser.username}</b>) trên hệ thống PassThingsCharity.</p>`
+         <p>Bạn đã đăng ký thành công tài khoản bằng Gmail <b>${newUser.email}</b> trên hệ thống PassThingsCharity.</p>
+         <p>Thông tin đăng nhập của bạn:</p>
+         <ul>
+           <li><b>Gmail / Email:</b> ${newUser.email}</li>
+           <li><b>Username:</b> ${newUser.username}</li>
+           <li><b>Mật khẩu đăng nhập:</b> <span style="font-size: 16px; color: #2563eb; font-weight: bold;">${password}</span></li>
+         </ul>`
       ).catch(() => {});
 
       return res.status(201).json(
