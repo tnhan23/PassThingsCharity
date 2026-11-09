@@ -76,6 +76,12 @@ module.exports = {
       description: { type: 'string', example: 'Cứu trợ đồng bào vùng lũ lụt và hỗ trợ trẻ em khó khăn' },
       operatingArea: { type: 'string', example: 'TP.HCM và các tỉnh Miền Trung' },
       idCardNumber: { type: 'string', example: '079123456789' },
+      evidenceImageUrls: {
+        type: 'array',
+        items: { type: 'string', format: 'uri' },
+        description: 'Mảng 1–10 URL ảnh bằng chứng Cloudinary trả từ POST /organizations/upload-evidence (bắt buộc khi người dùng đăng ký tổ chức).',
+        example: ['https://res.cloudinary.com/djfr51v2j/image/upload/v1/PassThingsCharity/organization-evidence/sample.jpg'],
+      },
     },
   },
   OrganizationUpdateRequest: {
@@ -84,6 +90,11 @@ module.exports = {
       name: { type: 'string' }, code: { type: 'string' }, address: { type: 'string' },
       phone: { type: 'string' }, email: { type: 'string', format: 'email' },
       logoUrl: { type: 'string', format: 'uri', nullable: true },
+      evidenceImageUrls: {
+        type: 'array',
+        items: { type: 'string', format: 'uri' },
+        description: 'Cập nhật lại danh sách URL ảnh bằng chứng Cloudinary.',
+      },
     },
   },
   CreateStationManagerRequest: {

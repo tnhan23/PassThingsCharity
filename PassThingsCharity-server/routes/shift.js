@@ -21,4 +21,9 @@ router.get('/:stationId/schedules', checkBearerToken, checkRole(['STATION_MANAGE
 router.post('/schedules/:id/check-in', checkBearerToken, checkRole(['STAFF']), checkInShift);
 router.post('/schedules/:id/check-out', checkBearerToken, checkRole(['STAFF']), checkOutShift);
 
+// QR & GPS proximity cho ca trực
+const qrAndProximity = require('../services/qrAndProximity');
+router.get('/:stationId/qr', checkBearerToken, checkRole(['ADMIN', 'STATION_MANAGER', 'ORG_MANAGER', 'STAFF']), qrAndProximity.getStationQr);
+router.get('/schedules/:id/qr', checkBearerToken, checkRole(['ADMIN', 'STATION_MANAGER', 'ORG_MANAGER', 'STAFF']), qrAndProximity.getShiftScheduleQr);
+
 module.exports = router;

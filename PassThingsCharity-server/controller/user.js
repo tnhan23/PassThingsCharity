@@ -175,21 +175,48 @@ async function deleteMyAccount(req, res, next) {
     return next(error);
   }
 }
-async function listUsers(req, res, next) {
+
+async function getUser(req, res, next) {
   try {
-    const users = await User.find()
-      .populate('role', 'name')
-      .sort({ createdAt: -1 });
+    const { role, status } = req.query;
+    const filter = {};
+
+    if (role !== undefined) {
+      const normalizedRole = String(role).trim().toUpperCase();
+      const roleDoc = await Role.findOne({ name: normalizedRole });
+
+      if (!roleDoc) {
+        return res.status(400).json({
+          error: 'Role không hợp lệ.',
+        });
+      }
+
+      filter.role = roleDoc._id;
+    }
+
+    if (status !== undefined) {
+      const normalizedStatus = String(status).trim().toLowerCase();
+      if (!['active', 'inactive', 'banned'].includes(normalizedStatus)) {
+        return res.status(400).json({
+          error: 'Status phải là active, inactive hoặc banned.',
+        });
+      }
+      filter.status = normalizedStatus;
+    }
+
+    const users = await User.find(filter).populate('role', 'name').sort({ createdAt: -1 });
+    const data = users.map((user) => ({
+      _id: user._id,
+      username: user.username,
+      fullName: user.fullName,
+      phone: user.phone,
+      email: user.email,
+      status: user.status,
+      role: user.role?.name || '',
+    }));
+
     return res.status(200).json({
-      data: users.map((user) => ({
-        _id: user._id,
-        username: user.username,
-        fullName: user.fullName,
-        phone: user.phone,
-        email: user.email,
-        status: user.status,
-        role: user.role && user.role.name ? user.role.name : '',
-      })),
+      data,
     });
   } catch (error) {
     return next(error);
@@ -200,26 +227,39 @@ async function setUserStatus(req, res, next) {
   try {
     const { id } = req.params;
     const status = typeof req.body?.status === 'string' ? req.body.status.trim() : '';
+
     if (!mongoose.isValidObjectId(id)) {
       return res.status(400).json({ error: 'User ID không hợp lệ.' });
     }
-    if (status !== 'active' && status !== 'banned') {
-      return res.status(400).json({ error: 'Trạng thái chỉ được là active hoặc banned.' });
+
+    if (!['active', 'inactive', 'banned'].includes(status)) {
+      return res.status(400).json({
+        error: 'Status phải là active, inactive hoặc banned.',
+      });
     }
     if (String(id) === String(req.user._id)) {
-      return res.status(400).json({ error: 'Không khóa tài khoản đang đăng nhập.' });
+      return res.status(400).json({ error: 'Không đổi trạng thái tài khoản đang đăng nhập.' });
     }
+
     const user = await User.findById(id).populate('role', 'name');
+
     if (!user) {
-      return res.status(404).json({ error: 'Không tìm thấy tài khoản.' });
+      return res.status(404).json({ error: 'Không tìm thấy user.' });
     }
-    if (user.role && user.role.name === 'ADMIN') {
-      return res.status(400).json({ error: 'Không khóa tài khoản quản trị.' });
+    if (user.role?.name === 'ADMIN') {
+      return res.status(400).json({ error: 'Không đổi trạng thái tài khoản quản trị.' });
     }
     user.status = status;
     await user.save();
+
     return res.status(200).json({
-      message: status === 'banned' ? 'Đã khóa tài khoản.' : 'Đã mở lại tài khoản.',
+      message: `Đã cập nhật trạng thái user thành ${status}.`,
+      user: {
+        id: user._id,
+        username: user.username,
+        role: user.role?.name,
+        status: user.status,
+      },
     });
   } catch (error) {
     return next(error);
@@ -230,6 +270,6 @@ module.exports={
   getMyProfile,
   updateMyProfile,
   deleteMyAccount,
-  listUsers,
+  getUser,
   setUserStatus,
 };

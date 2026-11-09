@@ -165,10 +165,16 @@ async function getAllTransfers(req, res, next) {
     const filter = {};
     if (req.user.role?.name !== 'ADMIN') {
       const StationStaff = require('../models/stationstaff');
+      const Shipment = require('../models/transferShipment');
       const managed = await Station.find({ managerId: req.user._id }).select('_id');
       const assigned = await StationStaff.distinct('stationId', { userId: req.user._id });
+      const carrierTransferIds = await Shipment.distinct('transferId', { carrierId: req.user._id });
       const ids = [...managed.map(station => station._id), ...assigned];
-      filter.$or = [{ fromStationId: { $in: ids } }, { toStationId: { $in: ids } }];
+      filter.$or = [
+        { fromStationId: { $in: ids } },
+        { toStationId: { $in: ids } },
+        { _id: { $in: carrierTransferIds } },
+      ];
     }
 
     if (campaignId) {
@@ -253,7 +259,7 @@ async function getTransferById(req, res, next) {
 
     await workflow.requireRead(transfer, req.user);
     const details = await workflow.summary(transfer);
-    if (req.user.role?.name === 'USER') {
+    if (req.user.role?.name === 'USER' || req.user.role?.name === 'VOLUNTEER') {
       details.shipments = details.shipments.filter(shipment => String(shipment.carrierId._id) === String(req.user._id));
     }
     return res.status(200).json({ transfer, ...details });

@@ -127,4 +127,8 @@ router.patch(
   markAssignmentAbsent
 );
 
+// Lấy mã QR điểm danh nhiệm vụ tại trạm
+const qrAndProximity = require('../services/qrAndProximity');
+router.get('/tasks/:id/qr', checkBearerToken, qrAndProximity.getTaskQr);
+
 module.exports = router;

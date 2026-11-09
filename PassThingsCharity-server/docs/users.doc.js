@@ -1,4 +1,80 @@
 module.exports = {
+  '/users': {
+    get: {
+      tags: ['Users'],
+      summary: 'Lấy danh sách tài khoản người dùng (Chỉ ADMIN)',
+      description: 'Có thể lọc tùy chọn theo tên role (không phân biệt chữ hoa/thường) hoặc status.',
+      parameters: [
+        {
+          name: 'role',
+          in: 'query',
+          required: false,
+          schema: {
+            type: 'string',
+            enum: ['ADMIN', 'ORG_MANAGER', 'STATION_MANAGER', 'STAFF', 'VOLUNTEER', 'USER'],
+          },
+          description: 'Lọc theo role của tài khoản',
+        },
+        {
+          name: 'status',
+          in: 'query',
+          required: false,
+          schema: {
+            type: 'string',
+            enum: ['active', 'inactive', 'banned'],
+          },
+          description: 'Lọc theo trạng thái tài khoản',
+        },
+      ],
+      responses: {
+        200: { description: 'Trả về danh sách user trong trường data' },
+        400: { description: 'Role hoặc status không hợp lệ' },
+        401: { description: 'Chưa đăng nhập' },
+        403: { description: 'Không có quyền truy cập (Yêu cầu ADMIN)' },
+      },
+    },
+  },
+  '/users/{id}/status': {
+    patch: {
+      tags: ['Users'],
+      summary: 'Chuyển đổi trạng thái tài khoản: active / inactive / banned (Chỉ ADMIN)',
+      description: 'Cập nhật trạng thái của user. Nếu không gửi status, mặc định sẽ là "inactive".',
+      parameters: [
+        {
+          name: 'id',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+          description: 'MongoDB ObjectId của user',
+        },
+      ],
+      requestBody: {
+        required: false,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                status: {
+                  type: 'string',
+                  enum: ['active', 'inactive', 'banned'],
+                  default: 'inactive',
+                  example: 'banned',
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: { description: 'Cập nhật trạng thái thành công' },
+        400: { description: 'User ID không hợp lệ hoặc status sai định dạng' },
+        401: { description: 'Chưa đăng nhập' },
+        403: { description: 'Chỉ ADMIN mới có quyền thực hiện' },
+        404: { description: 'Không tìm thấy user' },
+      },
+    },
+  },
   '/users/me/profile': {
     get: {
       tags: ['Users'],

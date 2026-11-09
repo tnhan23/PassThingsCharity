@@ -37,6 +37,10 @@ const organizationSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    evidenceImageUrls: {
+      type: [String],
+      default: [],
+    },
     submittedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
