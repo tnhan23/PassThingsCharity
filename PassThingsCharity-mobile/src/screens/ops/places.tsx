@@ -16,22 +16,6 @@ const NativeWebView = Platform.OS === "android"
   ? (require("react-native-webview") as typeof import("react-native-webview")).WebView
   : null;
 
-function campaignDateValue(date: Date) {
-  const pad = (part: number) => String(part).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
-
-function campaignDateFromInput(value: string) {
-  const [year, month, day] = value.split("-").map(Number);
-  return new Date(year, month - 1, day);
-}
-
-function addCampaignDays(date: Date, days: number) {
-  const result = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  result.setDate(result.getDate() + days);
-  return result;
-}
-
 function stationPlaceMapHtml(latitude: number | null, longitude: number | null) {
   const center = latitude !== null && longitude !== null ? [latitude, longitude] : [10.7769, 106.7009];
   const zoom = latitude !== null && longitude !== null ? 16 : 13;
@@ -94,6 +78,7 @@ function addCampaignDays(date: Date, days: number) {
   result.setDate(result.getDate() + days);
   return result;
 }
+
 
 function StationPlaceMap({
   latitude,
