@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Text, TextInput, View } from "react-native";
 import * as Location from "expo-location";
 import { backend } from "@/api/backend";
 import { ApiError } from "@/api/client";
@@ -8,7 +8,7 @@ import { campaignPhase, donorLabel, formatDay, itemName, itemUnit, orgName } fro
 import { useSession } from "@/api/session";
 import type { CampaignDetail, CampaignSummary } from "@/api/types";
 import { Screen } from "@/components/chrome";
-import { Badge, Body, Button, Card, Eyebrow, Icon, Meter, Photo, Pill, StatRow, Tap, Title } from "@/components/ui";
+import { Badge, Body, Button, Card, Eyebrow, Icon, Meter, Photo, StatRow, Tap, Title } from "@/components/ui";
 import { colors, fonts, photos } from "@/theme";
 
 const urgent = [
@@ -43,8 +43,17 @@ function OpenJobs() {
   if (!token) return null;
   const shown = (posts ?? []).slice(0, 3);
   return (
-    <View style={{ gap: 10 }}>
-      <Title>Việc đang tuyển</Title>
+    <View style={{ gap: 12 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 4 }}>
+        <View style={{ width: 44, height: 44, borderRadius: 15, backgroundColor: colors.coralSoft, alignItems: "center", justifyContent: "center" }}>
+          <Icon name="volunteer-activism" size={23} color={colors.secondary} />
+        </View>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Eyebrow>CƠ HỘI ĐỒNG HÀNH</Eyebrow>
+          <Text style={{ fontFamily: fonts.bold, fontSize: 21, lineHeight: 28, color: colors.ink }}>Việc đang tuyển</Text>
+        </View>
+        <Icon name="arrow-forward" size={20} color={colors.secondary} />
+      </View>
       {posts === null ? <Body muted>Đang tải tin tuyển.</Body> : null}
       {posts && shown.length === 0 ? <Body muted>Hiện chưa có tin tuyển tình nguyện.</Body> : null}
       {shown.map((post) => {
@@ -52,12 +61,21 @@ function OpenJobs() {
         const remaining = post.slots?.remaining;
         const image = post.imageUrl || station?.imageUrl || "";
         return (
-          <Card key={post._id}>
-            {image ? <Photo uri={image} height={140} radius={12} /> : null}
-            <Eyebrow>{station?.name || "Trạm"}</Eyebrow>
-            <Title>{post.title || "Việc chưa đặt tên"}</Title>
-            <Body muted>{`${typeof remaining === "number" ? `Còn ${remaining} chỗ` : "Đang tuyển"} · +${post.rewardPoints || 0} điểm`}</Body>
-            <Button label="Xem và ứng tuyển" tone="ghost" onPress={() => router.push("/jobs")} />
+          <Card key={post._id} style={{ borderColor: colors.coralSoft, padding: 14 }}>
+            {image ? (
+              <Photo uri={image} height={164} radius={14} />
+            ) : (
+              <View style={{ height: 84, borderRadius: 14, backgroundColor: colors.coralSoft, alignItems: "center", justifyContent: "center" }}>
+                <Icon name="volunteer-activism" size={34} color={colors.secondary} />
+              </View>
+            )}
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+              <Eyebrow>{station?.name || "Trạm"}</Eyebrow>
+              <Badge label={`+${post.rewardPoints || 0} điểm`} tone="coral" icon="stars" />
+            </View>
+            <Text style={{ fontFamily: fonts.bold, fontSize: 19, lineHeight: 26, color: colors.ink }}>{post.title || "Việc chưa đặt tên"}</Text>
+            <Body muted>{typeof remaining === "number" ? `Còn ${remaining} chỗ tuyển` : "Đang nhận tình nguyện viên"}</Body>
+            <Button label="Xem việc và ứng tuyển" tone="coral" icon="arrow-forward" onPress={() => router.push("/jobs")} />
           </Card>
         );
       })}
@@ -139,22 +157,6 @@ export function HomeScreen({ state = "content" }: { state?: "content" | "loading
   return (
     <Screen tab="home">
       <SearchField />
-      <View style={{ flexDirection: "row", gap: 10, alignItems: "stretch" }}>
-        <Card style={{ flex: 1, backgroundColor: colors.primary, justifyContent: "space-between" }}>
-          <Text style={{ fontFamily: fonts.semibold, color: colors.onPrimary, fontSize: 13 }}>Bạn có đồ dư?</Text>
-          <Text style={{ fontFamily: fonts.bold, color: colors.onPrimary, fontSize: 18, lineHeight: 24 }}>Pass đồ trao gửi</Text>
-          <Text style={{ fontFamily: fonts.regular, color: "#d5e4dc", fontSize: 12, lineHeight: 18 }}>
-            Xem nhu cầu và mang tới trạm. Không cần khai báo trước.
-          </Text>
-          <Button label="Xem nhu cầu" tone="coral" onPress={() => router.push("/campaign")} />
-        </Card>
-        <Card style={{ flex: 1, justifyContent: "space-between" }}>
-          <Text style={{ fontFamily: fonts.semibold, color: colors.secondary, fontSize: 13 }}>Đồng hành</Text>
-          <Text style={{ fontFamily: fonts.bold, color: colors.ink, fontSize: 18 }}>Tham gia TNV</Text>
-          <Body muted>Phân loại, đóng gói, vận chuyển tại trạm.</Body>
-          <Button label="Việc đang tuyển" tone="ghost" onPress={() => router.push("/jobs")} />
-        </Card>
-      </View>
       <View style={{ flexDirection: "row", gap: 8 }}>
         {[
           { label: "Danh sách trạm", icon: "place" as const, href: "/stations/list" as const },
@@ -186,8 +188,8 @@ export function HomeScreen({ state = "content" }: { state?: "content" | "loading
           </Tap>
         ))}
       </View>
-      <OpenJobs />
       <FeaturedCampaigns />
+      <OpenJobs />
     </Screen>
   );
 }
@@ -328,7 +330,6 @@ export function CampaignScreen({ mode = "content" }: { mode?: "content" | "loadi
 function FeaturedCampaigns() {
   const [campaigns, setCampaigns] = useState<CampaignSummary[] | null>(null);
   const [problem, setProblem] = useState("");
-  const [phase, setPhase] = useState<"open" | "soon" | "closed">("open");
 
   useEffect(() => {
     let cancelled = false;
@@ -363,38 +364,26 @@ function FeaturedCampaigns() {
     );
   }
 
-  const listed = campaigns.filter((campaign) => !campaign.title.startsWith("[Mẫu]"));
-  const counts = {
-    open: listed.filter((campaign) => campaignPhase(campaign) === "open").length,
-    soon: listed.filter((campaign) => campaignPhase(campaign) === "soon").length,
-    closed: listed.filter((campaign) => campaignPhase(campaign) === "closed").length,
-  };
-  const visible = listed.filter((campaign) => campaignPhase(campaign) === phase);
-  const emptyCopy = {
-    open: "Chưa có chiến dịch nào máy chủ đang để ở trạng thái nhận đồ.",
-    soon: "Chưa có chiến dịch đã phát hành nhưng chưa tới ngày bắt đầu.",
-    closed: "Chưa có chiến dịch đã kết thúc hoặc đã hủy.",
-  }[phase];
+  const visible = campaigns
+    .filter((campaign) => !campaign.title.startsWith("[Mẫu]") && campaignPhase(campaign) !== "closed")
+    .slice(0, 3);
 
   return (
     <View style={{ gap: 14 }}>
-      <Title>{phase === "open" ? "Chiến dịch đang diễn ra" : phase === "soon" ? "Sắp mở" : "Đã kết thúc"}</Title>
-      <StatRow
-        items={[
-          { label: "Đang nhận", value: counts.open, unit: "đợt", tone: "primary" },
-          { label: "Sắp mở", value: counts.soon, unit: "đợt", tone: "coral" },
-          { label: "Đã kết thúc", value: counts.closed, unit: "đợt", tone: "ink" },
-        ]}
-      />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-        <Pill label={`Đang nhận (${counts.open})`} active={phase === "open"} onPress={() => setPhase("open")} />
-        <Pill label={`Sắp mở (${counts.soon})`} active={phase === "soon"} onPress={() => setPhase("soon")} />
-        <Pill label={`Đã xong (${counts.closed})`} active={phase === "closed"} onPress={() => setPhase("closed")} />
-      </ScrollView>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 4 }}>
+        <View style={{ width: 44, height: 44, borderRadius: 15, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" }}>
+          <Icon name="volunteer-activism" size={23} color={colors.primary} />
+        </View>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Eyebrow>CHUNG TAY TRAO GỬI</Eyebrow>
+          <Text style={{ fontFamily: fonts.bold, fontSize: 21, lineHeight: 28, color: colors.ink }}>Chiến dịch đang diễn ra</Text>
+        </View>
+        <Icon name="arrow-forward" size={20} color={colors.primary} />
+      </View>
       {visible.length === 0 ? (
-        <Card>
-          <Title>Không có chiến dịch ở mục này</Title>
-          <Body>{emptyCopy}</Body>
+        <Card style={{ backgroundColor: colors.primarySoft, borderColor: colors.primarySoft }}>
+          <Title>Chưa có chiến dịch</Title>
+          <Body>Hiện chưa có chiến dịch nào đang diễn ra hoặc sắp mở.</Body>
         </Card>
       ) : null}
       {visible.map((campaign) => {
@@ -406,7 +395,14 @@ function FeaturedCampaigns() {
               router.navigate(`/campaign?id=${campaign._id}`);
             }}
           >
-            <Card>
+            <Card style={{ borderColor: colors.primarySoft, padding: 14 }}>
+              {campaign.imageUrl ? (
+                <Photo uri={campaign.imageUrl} height={190} radius={14} />
+              ) : (
+                <View style={{ height: 100, borderRadius: 14, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" }}>
+                  <Icon name="volunteer-activism" size={36} color={colors.primary} />
+                </View>
+              )}
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                 <Badge
                   label={donorLabel(campaign)}
@@ -418,6 +414,41 @@ function FeaturedCampaigns() {
               </View>
               <Title>{campaign.title}</Title>
               <Body muted>{orgName(campaign.organizationId)}</Body>
+              {campaign.items?.length ? (
+                <View style={{ gap: 8, padding: 12, borderRadius: 14, backgroundColor: colors.surfaceLow }}>
+                  <Text style={{ fontFamily: fonts.semibold, fontSize: 13, color: colors.ink }}>
+                    Vật phẩm cần quyên góp
+                  </Text>
+                  {campaign.items.slice(0, 3).map((item) => {
+                    const donated = item.currentQuantity;
+                    const target = item.targetQuantity;
+                    const progress = target > 0 ? Math.min(100, Math.max(0, donated / target * 100)) : 0;
+                    return (
+                      <View key={item._id} style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
+                        <View style={{ width: 30, height: 30, borderRadius: 10, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" }}>
+                          <Icon name="inventory-2" size={16} color={colors.primary} />
+                        </View>
+                        <View style={{ flex: 1, gap: 2 }}>
+                          <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.ink }} numberOfLines={1}>
+                            {itemName(item)}
+                          </Text>
+                          <Text style={{ fontFamily: fonts.regular, fontSize: 11, color: colors.muted }}>
+                            {`Đã quyên góp ${donated.toLocaleString("vi-VN")} / ${target.toLocaleString("vi-VN")} ${itemUnit(item)}`}
+                          </Text>
+                          <View style={{ height: 5, borderRadius: 99, backgroundColor: colors.surfaceContainer, overflow: "hidden" }}>
+                            <View style={{ width: `${progress}%`, height: "100%", borderRadius: 99, backgroundColor: colors.primary }} />
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  })}
+                  {campaign.items.length > 3 ? (
+                    <Text style={{ fontFamily: fonts.medium, fontSize: 12, color: colors.primary }}>
+                      {`Và ${campaign.items.length - 3} vật phẩm khác`}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
               {campaign.progress && campaign.progress.totalItemTypes > 0 ? (
                 <Meter
                   value={campaign.progress.fulfilledItemTypes}
@@ -446,7 +477,147 @@ function FeaturedCampaigns() {
           </Tap>
         );
       })}
+      <Button
+        label="Xem thêm chiến dịch"
+        tone="ghost"
+        onPress={() => router.push("/campaigns")}
+      />
     </View>
+  );
+}
+
+export function CampaignsListScreen() {
+  const [campaigns, setCampaigns] = useState<CampaignSummary[] | null>(null);
+  const [problem, setProblem] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    backend.listCampaigns()
+      .then((data) => {
+        if (!cancelled) {
+          setCampaigns(data.campaigns.filter((campaign) => !campaign.title.startsWith("[Mẫu]")));
+        }
+      })
+      .catch((caught) => {
+        if (!cancelled) setProblem(caught instanceof ApiError ? caught.message : "Không tải được chiến dịch.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <Screen tab="home">
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 4 }}>
+        <View style={{ width: 48, height: 48, borderRadius: 16, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" }}>
+          <Icon name="volunteer-activism" size={25} color={colors.primary} />
+        </View>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Eyebrow>CHUNG TAY TRAO GỬI</Eyebrow>
+          <Text style={{ fontFamily: fonts.bold, fontSize: 23, lineHeight: 30, color: colors.ink }}>Tất cả chiến dịch</Text>
+        </View>
+      </View>
+      <Body muted>Khám phá các chiến dịch đang diễn ra và sắp mở.</Body>
+      {problem ? (
+        <Card style={{ borderColor: colors.errorSoft, backgroundColor: colors.errorSoft }}>
+          <Icon name="wifi-off" size={22} color={colors.error} />
+          <Title>Không tải được chiến dịch</Title>
+          <Body>{problem}</Body>
+        </Card>
+      ) : null}
+      {!campaigns && !problem ? (
+        <Card>
+          <ActivityIndicator color={colors.primary} />
+          <Body muted>Đang tải danh sách chiến dịch.</Body>
+        </Card>
+      ) : null}
+      {campaigns?.length === 0 ? (
+        <Card style={{ backgroundColor: colors.primarySoft, borderColor: colors.primarySoft }}>
+          <Icon name="campaign" size={26} color={colors.primary} />
+          <Title>Chưa có chiến dịch</Title>
+          <Body muted>Hiện chưa có chiến dịch nào được phát hành.</Body>
+        </Card>
+      ) : null}
+      <View style={{ gap: 14 }}>
+        {campaigns?.map((campaign) => {
+          const currentPhase = campaignPhase(campaign);
+          return (
+            <Tap key={campaign._id} onPress={() => router.push(`/campaign?id=${campaign._id}`)}>
+              <Card style={{ borderColor: colors.primarySoft, padding: 14 }}>
+                {campaign.imageUrl ? (
+                  <Photo uri={campaign.imageUrl} height={190} radius={14} />
+                ) : (
+                  <View style={{ height: 100, borderRadius: 14, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" }}>
+                    <Icon name="volunteer-activism" size={36} color={colors.primary} />
+                  </View>
+                )}
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                  <Badge
+                    label={donorLabel(campaign)}
+                    tone={currentPhase === "open" ? "primary" : currentPhase === "soon" ? "warning" : "neutral"}
+                  />
+                  <Text style={{ fontFamily: fonts.medium, fontSize: 12, color: colors.muted, fontVariant: ["tabular-nums"] }}>
+                    {`${formatDay(campaign.startDate)} – ${formatDay(campaign.endDate)}`}
+                  </Text>
+                </View>
+                <Title>{campaign.title}</Title>
+                <Body muted>{orgName(campaign.organizationId)}</Body>
+                {campaign.items?.length ? (
+                  <View style={{ gap: 8, padding: 12, borderRadius: 14, backgroundColor: colors.surfaceLow }}>
+                    <Text style={{ fontFamily: fonts.semibold, fontSize: 13, color: colors.ink }}>
+                      Vật phẩm cần quyên góp
+                    </Text>
+                    {campaign.items.slice(0, 3).map((item) => {
+                      const donated = item.currentQuantity;
+                      const target = item.targetQuantity;
+                      const progress = target > 0 ? Math.min(100, Math.max(0, donated / target * 100)) : 0;
+                      return (
+                        <View key={item._id} style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
+                          <View style={{ width: 30, height: 30, borderRadius: 10, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" }}>
+                            <Icon name="inventory-2" size={16} color={colors.primary} />
+                          </View>
+                          <View style={{ flex: 1, gap: 2 }}>
+                            <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.ink }} numberOfLines={1}>
+                              {itemName(item)}
+                            </Text>
+                            <Text style={{ fontFamily: fonts.regular, fontSize: 11, color: colors.muted }}>
+                              {`Đã quyên góp ${donated.toLocaleString("vi-VN")} / ${target.toLocaleString("vi-VN")} ${itemUnit(item)}`}
+                            </Text>
+                            <View style={{ height: 5, borderRadius: 99, backgroundColor: colors.surfaceContainer, overflow: "hidden" }}>
+                              <View style={{ width: `${progress}%`, height: "100%", borderRadius: 99, backgroundColor: colors.primary }} />
+                            </View>
+                          </View>
+                        </View>
+                      );
+                    })}
+                    {campaign.items.length > 3 ? (
+                      <Text style={{ fontFamily: fonts.medium, fontSize: 12, color: colors.primary }}>
+                        {`Và ${campaign.items.length - 3} vật phẩm khác`}
+                      </Text>
+                    ) : null}
+                  </View>
+                ) : null}
+                {campaign.progress && campaign.progress.totalItemTypes > 0 ? (
+                  <Meter
+                    value={campaign.progress.fulfilledItemTypes}
+                    max={campaign.progress.totalItemTypes}
+                    unit="loại"
+                    label={`Đã đủ ${campaign.progress.fulfilledItemTypes} trên ${campaign.progress.totalItemTypes} loại đồ cần nhận.`}
+                  />
+                ) : null}
+                {campaign.description ? <Body numberOfLines={2}>{campaign.description}</Body> : null}
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.hairline }}>
+                  <Text style={{ fontFamily: fonts.semibold, fontSize: 13, color: colors.primary }}>
+                    Xem chi tiết & trạm tiếp nhận
+                  </Text>
+                  <Icon name="chevron-right" size={18} color={colors.primary} />
+                </View>
+              </Card>
+            </Tap>
+          );
+        })}
+      </View>
+    </Screen>
   );
 }
 
@@ -592,24 +763,44 @@ function CampaignLive() {
               router.push(`/station/${station._id}`);
             }}
           >
-            <Card>
-              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                <Text style={{ flex: 1, fontFamily: fonts.bold, fontSize: 17, color: colors.ink }}>{station.name}</Text>
+            <Card style={{ borderColor: colors.primarySoft, padding: 14 }}>
+              {station.imageUrl ? (
+                <Photo uri={station.imageUrl} height={150} radius={14} />
+              ) : (
+                <View style={{ height: 82, borderRadius: 14, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" }}>
+                  <Icon name="place" size={34} color={colors.primary} />
+                </View>
+              )}
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 7, flex: 1 }}>
+                  <View style={{ width: 30, height: 30, borderRadius: 10, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" }}>
+                    <Icon name="place" size={17} color={colors.primary} />
+                  </View>
+                  <Text style={{ flex: 1, fontFamily: fonts.bold, fontSize: 17, color: colors.ink }} numberOfLines={2}>
+                    {station.name}
+                  </Text>
+                </View>
                 {typeof station.distanceKm === "number" ? (
-                  <Badge label={`Cách ${station.distanceKm.toFixed(1)} km`} tone="primary" />
+                  <Badge label={`Cách ${station.distanceKm.toFixed(1)} km`} tone="primary" icon="near-me" />
                 ) : null}
               </View>
-              {station.address ? <Body muted>{station.address}</Body> : null}
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  paddingTop: 6,
-                  borderTopWidth: 1,
-                  borderTopColor: colors.hairline,
-                }}
-              >
+              {station.address ? (
+                <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 7 }}>
+                  <Icon name="location-on" size={17} color={colors.outline} />
+                  <Text style={{ flex: 1, fontFamily: fonts.regular, fontSize: 13, lineHeight: 19, color: colors.muted }}>
+                    {station.address}
+                  </Text>
+                </View>
+              ) : null}
+              {station.openingTime || station.closingTime ? (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
+                  <Icon name="schedule" size={17} color={colors.outline} />
+                  <Text style={{ fontFamily: fonts.medium, fontSize: 12, color: colors.muted }}>
+                    {`${station.openingTime || "?"} – ${station.closingTime || "?"}`}
+                  </Text>
+                </View>
+              ) : null}
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.hairline }}>
                 <Text style={{ fontFamily: fonts.semibold, fontSize: 13, color: colors.primary }}>
                   {open ? "Xem thông tin trạm để mang đồ" : "Xem thông tin trạm"}
                 </Text>
