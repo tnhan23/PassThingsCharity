@@ -18,7 +18,16 @@
         },
         "NSLocationWhenInUseUsageDescription": "Pass Things Charity dùng vị trí của bạn khi đang mở app để hiện trạm gần và khoảng cách tới điểm nhận đồ.",
         "NSPhotoLibraryUsageDescription": "Pass Things Charity mở thư viện ảnh để tải ảnh phiếu quyên góp và ảnh hồ sơ.",
-        "NSCameraUsageDescription": "Pass Things Charity dùng camera để quét mã QR trên giao diện. Máy chủ chưa dùng mã này để ghi nhận ca."
+        "NSCameraUsageDescription": "Pass Things Charity dùng camera để quét mã QR trên giao diện. Máy chủ chưa dùng mã này để ghi nhận ca.",
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "passdo",
+              "vn.passdo.app",
+              "com.googleusercontent.apps.116703453640-5pmgf0934l9ri041611mcr8qkm0oq246"
+            ]
+          }
+        ]
       }
     },
     "android": {
@@ -65,7 +74,8 @@
           "cameraPermission": "Pass Things Charity dùng camera để quét mã QR trên giao diện. Máy chủ chưa dùng mã này để ghi nhận ca."
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-web-browser"
     ]
   }
 }
