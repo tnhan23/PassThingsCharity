@@ -5,18 +5,20 @@ import { backend } from "@/api/backend";
 import { ApiError } from "@/api/client";
 import { useSession } from "@/api/session";
 import { Screen } from "@/components/chrome";
-import { Badge, Body, Button, Card, Pill, StatRow, Title } from "@/components/ui";
+import { StationProofScan } from "@/components/station-proof";
+import { Badge, Body, Button, Card, Photo, Pill, StatRow, Title } from "@/components/ui";
 import { colors, fonts } from "@/theme";
 
 type Post = {
   _id: string;
   title?: string;
   description?: string;
+  imageUrl?: string | null;
   rewardPoints?: number;
   startTime?: string;
   endTime?: string;
   slots?: { remaining?: number; total?: number };
-  stationId?: { name?: string; address?: string } | string;
+  stationId?: { name?: string; address?: string; imageUrl?: string | null } | string;
 };
 
 type MyAssignedItem = {
@@ -37,6 +39,16 @@ type MyApplicationItem = {
 function stationName(value?: Post["stationId"]) {
   if (!value || typeof value === "string") return "Trạm";
   return value.name || "Trạm";
+}
+
+function stationImage(value?: Post["stationId"]) {
+  if (!value || typeof value === "string") return "";
+  return value.imageUrl || "";
+}
+
+function postImage(post?: { imageUrl?: string | null; stationId?: Post["stationId"] } | null) {
+  if (post?.imageUrl) return post.imageUrl;
+  return stationImage(post?.stationId);
 }
 
 function stationAddress(value?: Post["stationId"]) {
@@ -75,6 +87,7 @@ export default function JobsPage() {
   const [busyId, setBusyId] = useState("");
   const [stamp, setStamp] = useState(0);
   const [note, setNote] = useState("");
+  const [proofFor, setProofFor] = useState<{ id: string; kind: "in" | "out" } | null>(null);
 
   useEffect(() => {
     if (!token) return;
@@ -142,6 +155,21 @@ export default function JobsPage() {
         <Pill label={`Việc đã duyệt & đơn của tôi (${assigned.length + pendingOrRejectedApps.length})`} active={tab === "mine"} onPress={() => setTab("mine")} />
       </ScrollView>
       {note ? <Body>{note}</Body> : null}
+      {proofFor ? (
+        <StationProofScan
+          title={proofFor.kind === "in" ? "Điểm danh bắt đầu việc" : "Điểm danh hoàn thành việc"}
+          onCancel={() => setProofFor(null)}
+          onDone={(proof) => {
+            const next = proofFor;
+            setProofFor(null);
+            void runAction(next.id, () => (
+              next.kind === "in"
+                ? backend.checkInTask(token, next.id, proof)
+                : backend.checkOutTask(token, next.id, proof)
+            ));
+          }}
+        />
+      ) : null}
 
       {tab === "open" ? (
         <>
@@ -161,6 +189,7 @@ export default function JobsPage() {
             const myStatus = appliedByTaskId.get(post._id);
             return (
               <Card key={post._id}>
+                {postImage(post) ? <Photo uri={postImage(post)} height={148} radius={12} /> : null}
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                   <Badge label={stationName(post.stationId)} tone="primary" />
                   <Badge label={`+${post.rewardPoints || 0} điểm`} tone="coral" />
@@ -212,6 +241,7 @@ export default function JobsPage() {
             const task = item.taskId;
             return (
               <Card key={item._id}>
+                {postImage(task) ? <Photo uri={postImage(task)} height={148} radius={12} /> : null}
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                   <Badge label={stationName(task?.stationId)} tone="primary" />
                   <Badge
@@ -232,7 +262,7 @@ export default function JobsPage() {
                   <Button
                     label={busyId === item._id ? "Đang xử lý..." : "Bắt đầu làm (Check-in)"}
                     disabled={busyId !== ""}
-                    onPress={() => void runAction(item._id, () => backend.checkInTask(token, item._id))}
+                    onPress={() => setProofFor({ id: item._id, kind: "in" })}
                   />
                 ) : null}
                 {item.status === "IN_PROGRESS" ? (
@@ -240,7 +270,7 @@ export default function JobsPage() {
                     label={busyId === item._id ? "Đang xử lý..." : "Hoàn thành công việc (Check-out nhận điểm)"}
                     tone="coral"
                     disabled={busyId !== ""}
-                    onPress={() => void runAction(item._id, () => backend.checkOutTask(token, item._id))}
+                    onPress={() => setProofFor({ id: item._id, kind: "out" })}
                   />
                 ) : null}
               </Card>
