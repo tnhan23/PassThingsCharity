@@ -194,7 +194,7 @@ export const backend = {
   },
   listItemTypes(activeOnly = false) {
     const query = activeOnly ? "?activeOnly=true" : "";
-    return api<{ itemTypes: { _id: string; name: string; unit?: string; pointsPerUnit?: number; categoryId?: { name?: string } | string }[] }>(`/catalog/items${query}`);
+    return api<{ itemTypes: { _id: string; name: string; unit?: string; pointsPerUnit?: number; categoryId?: { _id?: string; name?: string } | string }[] }>(`/catalog/items${query}`);
   },
   createItemType(token: Token, body: Body) {
     return api<{ message: string }>("/catalog/items", withToken(token, "POST", body));

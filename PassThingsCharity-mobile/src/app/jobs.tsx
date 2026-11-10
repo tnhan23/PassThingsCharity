@@ -6,7 +6,7 @@ import { ApiError } from "@/api/client";
 import { useSession } from "@/api/session";
 import { Screen } from "@/components/chrome";
 import { StationProofScan } from "@/components/station-proof";
-import { Badge, Body, Button, Card, Photo, Pill, StatRow, Title } from "@/components/ui";
+import { Badge, Body, Button, Card, Icon, Photo, Pill, StatRow, Title } from "@/components/ui";
 import { colors, fonts } from "@/theme";
 
 type Post = {
@@ -51,6 +51,15 @@ function postImage(post?: { imageUrl?: string | null; stationId?: Post["stationI
   return stationImage(post?.stationId);
 }
 
+function TaskImage({ uri }: { uri: string }) {
+  if (uri) return <Photo uri={uri} height={164} radius={14} />;
+  return (
+    <View style={{ height: 84, borderRadius: 14, backgroundColor: colors.secondaryContainer, alignItems: "center", justifyContent: "center" }}>
+      <Icon name="volunteer-activism" size={34} color={colors.secondary} />
+    </View>
+  );
+}
+
 function stationAddress(value?: Post["stationId"]) {
   if (!value || typeof value === "string") return "";
   return value.address || "";
@@ -77,6 +86,12 @@ function applicationStatusLabel(status: string) {
   if (status === "CANCELLED") return "Đã hủy";
   return "Đang chờ Admin duyệt";
 }
+
+const jobCardStyle = {
+  backgroundColor: colors.coralSoft,
+  borderColor: colors.coralSoft,
+  padding: 14,
+};
 
 export default function JobsPage() {
   const { token } = useSession();
@@ -211,8 +226,8 @@ export default function JobsPage() {
             const total = post.slots?.total;
             const myStatus = appliedByTaskId.get(post._id);
             return (
-              <Card key={post._id}>
-                {postImage(post) ? <Photo uri={postImage(post)} height={148} radius={12} /> : null}
+              <Card key={post._id} style={jobCardStyle}>
+                <TaskImage uri={postImage(post)} />
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                   <Badge label={stationName(post.stationId)} tone="primary" />
                   <Badge label={`+${post.rewardPoints || 0} điểm`} tone="coral" />
@@ -264,8 +279,8 @@ export default function JobsPage() {
           {assigned.map((item) => {
             const task = item.taskId;
             return (
-              <Card key={item._id}>
-                {postImage(task) ? <Photo uri={postImage(task)} height={148} radius={12} /> : null}
+              <Card key={item._id} style={jobCardStyle}>
+                <TaskImage uri={postImage(task)} />
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                   <Badge label={stationName(task?.stationId)} tone="primary" />
                   <Badge
@@ -305,7 +320,7 @@ export default function JobsPage() {
             <>
               <Title>Đơn đang chờ / đã từ chối</Title>
               {pendingOrRejectedApps.map((app) => (
-                <Card key={app._id}>
+                <Card key={app._id} style={jobCardStyle}>
                   <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                     <Badge label={stationName(app.taskId?.stationId)} tone="neutral" />
                     <Badge

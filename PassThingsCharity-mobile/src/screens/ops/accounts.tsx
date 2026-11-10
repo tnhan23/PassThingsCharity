@@ -321,13 +321,13 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   card: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
+    backgroundColor: colors.primarySoft,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: colors.hairline,
+    borderColor: colors.primarySoft,
     overflow: "hidden",
   },
-  cardOn: { borderColor: colors.primary },
+  cardOn: { borderColor: colors.primary, borderWidth: 2 },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -341,7 +341,7 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 14,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.hairline,
+    borderTopColor: colors.line,
   },
   stationChoices: {
     gap: 8,

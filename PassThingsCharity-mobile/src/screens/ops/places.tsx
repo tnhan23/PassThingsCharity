@@ -1058,12 +1058,163 @@ export function CatalogScreen() {
   );
 }
 
+function CampaignItemTypeGroups({
+  categories,
+  items,
+  selected,
+  onPick,
+}: {
+  categories: Row[] | null;
+  items: Row[] | null;
+  selected: string;
+  onPick: (id: string) => void;
+}) {
+  const [page, setPage] = useState(0);
+  if (!categories || !items) {
+    return (
+      <Card>
+        <Body muted>Đang tải nhóm và loại đồ.</Body>
+      </Card>
+    );
+  }
+
+  const categoryIds = new Set(categories.map((category) => category._id));
+  const categoryNames = new Set(categories.map((category) => category.name?.trim().toLocaleLowerCase()).filter(Boolean));
+  const itemCategoryMatches = (item: Row, category: Row) => {
+    if (typeof item.categoryId === "string") return item.categoryId === category._id;
+    if (!item.categoryId) return false;
+    if (item.categoryId._id) return item.categoryId._id === category._id;
+    return Boolean(
+      item.categoryId.name
+      && category.name
+      && item.categoryId.name.trim().toLocaleLowerCase() === category.name.trim().toLocaleLowerCase(),
+    );
+  };
+  const itemHasKnownCategory = (item: Row) => {
+    if (typeof item.categoryId === "string") return categoryIds.has(item.categoryId);
+    if (!item.categoryId) return false;
+    if (item.categoryId._id) return categoryIds.has(item.categoryId._id);
+    return Boolean(item.categoryId.name && categoryNames.has(item.categoryId.name.trim().toLocaleLowerCase()));
+  };
+  const groups = categories
+    .map((category) => ({
+      key: category._id,
+      title: category.name || "Nhóm đồ",
+      items: items.filter((item) => itemCategoryMatches(item, category)),
+    }))
+    .filter((group) => group.items.length > 0);
+  const uncategorizedItems = items.filter((item) => !itemHasKnownCategory(item));
+  if (uncategorizedItems.length > 0) {
+    groups.push({ key: "uncategorized", title: "Chưa phân nhóm", items: uncategorizedItems });
+  }
+  const pageSize = 5;
+  const pageCount = Math.ceil(groups.length / pageSize);
+  const currentPage = Math.min(page, Math.max(0, pageCount - 1));
+  const visibleGroups = groups.slice(currentPage * pageSize, currentPage * pageSize + pageSize);
+
+  return (
+    <View style={{ gap: 8 }}>
+      <Body muted>Chọn loại đồ theo nhóm</Body>
+      {visibleGroups.map(({ key, title, items: categoryItems }) => (
+        <Fold
+          key={key}
+          title={title}
+          style={{ backgroundColor: colors.primarySoft, borderColor: colors.primarySoft }}
+        >
+          <PickList
+            rows={categoryItems}
+            selected={selected}
+            onPick={onPick}
+            detail={(item) => item.unit || ""}
+            selectedBackgroundColor={colors.primarySoft}
+            cardBackgroundColor={colors.primarySoft}
+            cardBorderColor={colors.hairline}
+          />
+        </Fold>
+      ))}
+      {pageCount > 1 ? (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Button
+            label="Trước"
+            tone="ghost"
+            icon="chevron-left"
+            disabled={currentPage === 0}
+            onPress={() => setPage(Math.max(0, currentPage - 1))}
+          />
+          <Text style={{ flex: 1, textAlign: "center", fontFamily: fonts.medium, fontSize: 13, color: colors.muted }}>
+            {`Trang ${currentPage + 1} / ${pageCount} · ${groups.length} nhóm`}
+          </Text>
+          <Button
+            label="Tiếp"
+            tone="ghost"
+            icon="chevron-right"
+            disabled={currentPage >= pageCount - 1}
+            onPress={() => setPage(Math.min(pageCount - 1, currentPage + 1))}
+          />
+        </View>
+      ) : null}
+      {items.length === 0 ? <Body muted>Chưa có loại đồ để gắn vào chiến dịch.</Body> : null}
+    </View>
+  );
+}
+
+function CampaignStationPages({
+  rows,
+  selected,
+  onPick,
+}: {
+  rows: Row[] | null;
+  selected: string;
+  onPick: (id: string) => void;
+}) {
+  const [page, setPage] = useState(0);
+  const pageCount = Math.ceil((rows?.length ?? 0) / 5);
+  const currentPage = Math.min(page, Math.max(0, pageCount - 1));
+  const pageRows = rows?.slice(currentPage * 5, currentPage * 5 + 5) ?? null;
+
+  return (
+    <View style={{ gap: 8 }}>
+      <PickList
+        rows={pageRows}
+        selected={selected}
+        onPick={onPick}
+        detail={(station) => station.address || ""}
+        selectedBackgroundColor={colors.primarySoft}
+        cardBackgroundColor={colors.primarySoft}
+        cardBorderColor={colors.hairline}
+      />
+      {pageCount > 1 ? (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Button
+            label="Trước"
+            tone="ghost"
+            icon="chevron-left"
+            disabled={currentPage === 0}
+            onPress={() => setPage(Math.max(0, currentPage - 1))}
+          />
+          <Text style={{ flex: 1, textAlign: "center", fontFamily: fonts.medium, fontSize: 13, color: colors.muted }}>
+            {`Trang ${currentPage + 1} / ${pageCount} · ${rows?.length ?? 0} trạm`}
+          </Text>
+          <Button
+            label="Tiếp"
+            tone="ghost"
+            icon="chevron-right"
+            disabled={currentPage >= pageCount - 1}
+            onPress={() => setPage(Math.min(pageCount - 1, currentPage + 1))}
+          />
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 export function CampaignWork() {
   const campaigns = useRows(async (token) => {
     const data = await backend.listCampaigns(undefined, token);
     return data.campaigns as Row[];
   });
   const orgs = useRows((token) => backend.listOrganizations(token).then((data) => data.data as Row[]));
+  const categories = useRows(async () => (await backend.listCategories()).categories as Row[]);
   const items = useRows(async () => (await backend.listItemTypes()).itemTypes as Row[]);
   const stations = useRows((token) => backend.listStations(token).then((data) => data.data as Row[]));
   const job = useJob();
@@ -1098,6 +1249,11 @@ export function CampaignWork() {
   const pagedCampaigns = visibleCampaigns?.slice(currentCampaignPage * 5, currentCampaignPage * 5 + 5) ?? null;
   const draftCount = draftCampaigns.error ? "—" : draftCampaigns.rows?.length ?? "…";
   const selectedCampaignOrganization = orgs.rows?.find((org) => org._id === orgId);
+  const refreshCampaignCard = (campaignId: string) => {
+    setPicked(campaignId);
+    campaigns.reload();
+    if (role === "ADMIN") draftCampaigns.reload();
+  };
   const onCampaignDateChange = (event: DateTimePickerEvent, value?: Date) => {
     if (event.type === "dismissed") {
       setActiveCampaignDate(null);
@@ -1147,6 +1303,25 @@ export function CampaignWork() {
         <Button label={campaignDateValue(value)} tone="ghost" onPress={() => setActiveCampaignDate(field)} />
       </View>
     );
+  };
+  const attachCampaignItem = (campaignId: string) => {
+    const targetQuantity = Number(quantity);
+    if (!itemId) {
+      job.fail("Vui lòng chọn loại đồ cần gắn vào chiến dịch.");
+      return;
+    }
+    if (!Number.isInteger(targetQuantity) || targetQuantity < 1) {
+      job.fail("Số mục tiêu phải là số nguyên lớn hơn hoặc bằng 1.");
+      return;
+    }
+    void job.run((token) => backend.addCampaignItem(token, campaignId, {
+      itemTypeId: itemId,
+      targetQuantity,
+      priority: "MEDIUM",
+    })).then((ok) => {
+      if (!ok) return;
+      refreshCampaignCard(campaignId);
+    });
   };
 
   return (
@@ -1199,13 +1374,15 @@ export function CampaignWork() {
         selected={picked}
         onPick={setPicked}
         selectedBackgroundColor={colors.primarySoft}
+        cardBackgroundColor={colors.primarySoft}
+        cardBorderColor={colors.hairline}
         detail={(row) => [
           donorLabel({ status: row.status || "" }),
           row.startDate && row.endDate ? `${formatDay(row.startDate)} – ${formatDay(row.endDate)}` : "",
         ].filter(Boolean).join(" · ")}
         panel={(row) => (
           <>
-            <View style={{ gap: 6, padding: 12, borderRadius: 12, backgroundColor: colors.card }}>
+            <View style={{ gap: 6, padding: 12, borderRadius: 12, backgroundColor: colors.primarySoft }}>
               <Text style={{ fontFamily: fonts.bold, fontSize: 16, color: colors.ink }}>Chi tiết chiến dịch</Text>
               <Body muted>{`Trạng thái: ${donorLabel({ status: row.status || "" })}`}</Body>
               {row.startDate ? <Body muted>{`Bắt đầu: ${formatDay(row.startDate)}`}</Body> : null}
@@ -1240,13 +1417,43 @@ export function CampaignWork() {
                   })} />
                 ))}
                 {nextCampaignStatuses(row.status || "").length === 0 ? <Body muted>Chiến dịch này không còn trạng thái để chuyển.</Body> : null}
-                <PickList rows={items.rows} selected={itemId} onPick={setItemId} detail={(item) => item.unit || ""} />
+                <CampaignItemTypeGroups categories={categories.rows} items={items.rows} selected={itemId} onPick={setItemId} />
                 <TextField label="Số mục tiêu" value={quantity} onChangeText={setQuantity} />
-                <Button label="Gắn loại đồ" onPress={() => void job.run((token) => backend.addCampaignItem(token, row._id, { itemTypeId: itemId, targetQuantity: Number(quantity), priority: "MEDIUM" }))} />
-                {itemId ? <Button label="Gỡ loại đồ đang chọn" tone="danger" onPress={() => void job.run((token) => backend.removeCampaignItem(token, row._id, itemId))} /> : null}
-                <PickList rows={stations.rows} selected={stationId} onPick={setStationId} detail={(station) => station.address || ""} />
-                <Button label="Gắn trạm" onPress={() => void job.run((token) => backend.assignCampaignStation(token, row._id, stationId))} />
-                {stationId ? <Button label="Gỡ trạm đang chọn" tone="danger" onPress={() => void job.run((token) => backend.removeCampaignStation(token, row._id, stationId))} /> : null}
+                <Button
+                  label={job.busy ? "Đang gắn loại đồ..." : "Gắn thêm loại đồ"}
+                  disabled={job.busy || !itemId}
+                  tone="ghost"
+                  icon="add"
+                  onPress={() => attachCampaignItem(row._id)}
+                />
+                {itemId ? (
+                  <Button
+                    label="Gỡ loại đồ đang chọn"
+                    tone="danger"
+                    disabled={job.busy}
+                    onPress={() => void job.run((token) => backend.removeCampaignItem(token, row._id, itemId)).then((ok) => {
+                      if (ok) refreshCampaignCard(row._id);
+                    })}
+                  />
+                ) : null}
+                <CampaignStationPages rows={stations.rows} selected={stationId} onPick={setStationId} />
+                <Button
+                  label="Gắn trạm"
+                  disabled={job.busy || !stationId}
+                  onPress={() => void job.run((token) => backend.assignCampaignStation(token, row._id, stationId)).then((ok) => {
+                    if (ok) refreshCampaignCard(row._id);
+                  })}
+                />
+                {stationId ? (
+                  <Button
+                    label="Gỡ trạm đang chọn"
+                    tone="danger"
+                    disabled={job.busy}
+                    onPress={() => void job.run((token) => backend.removeCampaignStation(token, row._id, stationId)).then((ok) => {
+                      if (ok) refreshCampaignCard(row._id);
+                    })}
+                  />
+                ) : null}
                 <Note text={job.note} />
               </>
             ) : null}
@@ -1281,7 +1488,11 @@ export function CampaignWork() {
         </View>
       ) : null}
       {editor ? (
-        <Card style={createCampaignExpanded ? { borderColor: colors.primary, borderWidth: 1.5 } : undefined}>
+        <Card style={{
+          backgroundColor: colors.primarySoft,
+          borderColor: createCampaignExpanded ? colors.primary : colors.primarySoft,
+          ...(createCampaignExpanded ? { borderWidth: 1.5 } : {}),
+        }}>
           <Tap
             onPress={() => {
               setCreateCampaignExpanded((expanded) => !expanded);
@@ -1375,7 +1586,7 @@ export function CampaignWork() {
                             borderWidth: selected ? 2 : 1,
                             borderColor: selected ? colors.primary : colors.line,
                             borderRadius: 12,
-                            backgroundColor: selected ? colors.primarySoft : colors.card,
+                            backgroundColor: colors.primarySoft,
                             gap: 4,
                           }}
                         >
@@ -1442,12 +1653,28 @@ export function CampaignWork() {
       {editor && picked && !campaigns.rows?.some((row) => row._id === picked) ? (
         <View style={{ gap: 8 }}>
           <Body muted>Bản nháp vừa tạo chưa hiện trong danh sách công khai. Gắn trạm đang hoạt động, rồi duyệt để chiến dịch chạy.</Body>
-          <PickList rows={items.rows} selected={itemId} onPick={setItemId} detail={(item) => item.unit || ""} />
+          <CampaignItemTypeGroups categories={categories.rows} items={items.rows} selected={itemId} onPick={setItemId} />
           <TextField label="Số mục tiêu" value={quantity} onChangeText={setQuantity} />
-          <Button label="Gắn loại đồ" onPress={() => void job.run((token) => backend.addCampaignItem(token, picked, { itemTypeId: itemId, targetQuantity: Number(quantity), priority: "MEDIUM" }))} />
-          <PickList rows={stations.rows} selected={stationId} onPick={setStationId} detail={(station) => station.address || ""} />
-          <Button label="Gắn trạm" onPress={() => void job.run((token) => backend.assignCampaignStation(token, picked, stationId))} />
-          <Button label="Duyệt" onPress={() => void job.run((token) => backend.updateCampaignStatus(token, picked, "ACTIVE")).then((ok) => ok && campaigns.reload())} />
+          <Button
+            label={job.busy ? "Đang gắn loại đồ..." : "Gắn thêm loại đồ"}
+            disabled={job.busy || !itemId}
+            tone="ghost"
+            icon="add"
+            onPress={() => attachCampaignItem(picked)}
+          />
+          <CampaignStationPages rows={stations.rows} selected={stationId} onPick={setStationId} />
+          <Button
+            label="Gắn trạm"
+            disabled={job.busy || !stationId}
+            onPress={() => void job.run((token) => backend.assignCampaignStation(token, picked, stationId)).then((ok) => {
+              if (ok) refreshCampaignCard(picked);
+            })}
+          />
+          <Button
+            label="Duyệt"
+            disabled={job.busy}
+            onPress={() => void job.run((token) => backend.updateCampaignStatus(token, picked, "ACTIVE")).then((ok) => ok && refreshCampaignCard(picked))}
+          />
           <Note text={job.note} />
         </View>
       ) : null}

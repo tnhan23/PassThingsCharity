@@ -18,6 +18,18 @@ const urgent = [
   { title: "Thuốc và vật phẩm y tế", meta: "Bông băng, dầu gió", gap: "Thiếu 18 hộp", photo: photos.medicine, href: "/campaign" as const },
 ];
 
+const campaignCardStyle = {
+  backgroundColor: colors.primarySoft,
+  borderColor: colors.primarySoft,
+  padding: 14,
+};
+
+const jobCardStyle = {
+  backgroundColor: colors.coralSoft,
+  borderColor: colors.coralSoft,
+  padding: 14,
+};
+
 function OpenJobs() {
   const { token } = useSession();
   const [posts, setPosts] = useState<{ _id: string; title?: string; imageUrl?: string | null; rewardPoints?: number; slots?: { remaining?: number }; stationId?: { name?: string; imageUrl?: string | null } | string }[] | null>(null);
@@ -89,11 +101,11 @@ function OpenJobs() {
         const remaining = post.slots?.remaining;
         const image = post.imageUrl || station?.imageUrl || "";
         return (
-          <Card key={post._id} style={{ borderColor: colors.coralSoft, padding: 14 }}>
+          <Card key={post._id} style={jobCardStyle}>
             {image ? (
               <Photo uri={image} height={164} radius={14} />
             ) : (
-              <View style={{ height: 84, borderRadius: 14, backgroundColor: colors.coralSoft, alignItems: "center", justifyContent: "center" }}>
+              <View style={{ height: 84, borderRadius: 14, backgroundColor: colors.secondaryContainer, alignItems: "center", justifyContent: "center" }}>
                 <Icon name="volunteer-activism" size={34} color={colors.secondary} />
               </View>
             )}
@@ -102,7 +114,12 @@ function OpenJobs() {
               <Badge label={`+${post.rewardPoints || 0} điểm`} tone="coral" icon="stars" />
             </View>
             <Text style={{ fontFamily: fonts.bold, fontSize: 19, lineHeight: 26, color: colors.ink }}>{post.title || "Việc chưa đặt tên"}</Text>
-            <Body muted>{typeof remaining === "number" ? `Còn ${remaining} chỗ tuyển` : "Đang nhận tình nguyện viên"}</Body>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 7, alignSelf: "flex-start", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 99, backgroundColor: colors.card }}>
+              <Icon name="people" size={15} color={colors.secondary} />
+              <Text style={{ fontFamily: fonts.medium, fontSize: 12, color: colors.secondary }}>
+                {typeof remaining === "number" ? `Còn ${remaining} chỗ tuyển` : "Đang nhận tình nguyện viên"}
+              </Text>
+            </View>
             <Button label="Xem việc và ứng tuyển" tone="coral" icon="arrow-forward" onPress={() => router.push("/jobs")} />
           </Card>
         );
@@ -274,7 +291,7 @@ export function SearchScreen({ mode = "ready" }: { mode?: "ready" | "loading" | 
       {problem ? <Body>{problem}</Body> : null}
       {found?.map((campaign) => (
         <Tap key={campaign._id} onPress={() => router.push(`/campaign?id=${campaign._id}`)}>
-          <Card>
+          <Card style={campaignCardStyle}>
             <Text style={{ fontFamily: fonts.semibold, fontSize: 16, color: colors.ink }}>{campaign.title}</Text>
             <Body muted>{`${donorLabel(campaign)} · ${orgName(campaign.organizationId)}`}</Body>
           </Card>
@@ -423,7 +440,7 @@ function FeaturedCampaigns() {
               router.navigate(`/campaign?id=${campaign._id}`);
             }}
           >
-            <Card style={{ borderColor: colors.primarySoft, padding: 14 }}>
+            <Card style={campaignCardStyle}>
               {campaign.imageUrl ? (
                 <Photo uri={campaign.imageUrl} height={190} radius={14} />
               ) : (
@@ -443,7 +460,7 @@ function FeaturedCampaigns() {
               <Title>{campaign.title}</Title>
               <Body muted>{orgName(campaign.organizationId)}</Body>
               {campaign.items?.length ? (
-                <View style={{ gap: 8, padding: 12, borderRadius: 14, backgroundColor: colors.surfaceLow }}>
+                <View style={{ gap: 8, padding: 12, borderRadius: 14, backgroundColor: colors.card }}>
                   <Text style={{ fontFamily: fonts.semibold, fontSize: 13, color: colors.ink }}>
                     Vật phẩm cần quyên góp
                   </Text>
@@ -571,7 +588,7 @@ export function CampaignsListScreen() {
           const currentPhase = campaignPhase(campaign);
           return (
             <Tap key={campaign._id} onPress={() => router.push(`/campaign?id=${campaign._id}`)}>
-              <Card style={{ borderColor: colors.primarySoft, padding: 14 }}>
+            <Card style={campaignCardStyle}>
                 {campaign.imageUrl ? (
                   <Photo uri={campaign.imageUrl} height={190} radius={14} />
                 ) : (
@@ -591,7 +608,7 @@ export function CampaignsListScreen() {
                 <Title>{campaign.title}</Title>
                 <Body muted>{orgName(campaign.organizationId)}</Body>
                 {campaign.items?.length ? (
-                  <View style={{ gap: 8, padding: 12, borderRadius: 14, backgroundColor: colors.surfaceLow }}>
+                  <View style={{ gap: 8, padding: 12, borderRadius: 14, backgroundColor: colors.card }}>
                     <Text style={{ fontFamily: fonts.semibold, fontSize: 13, color: colors.ink }}>
                       Vật phẩm cần quyên góp
                     </Text>

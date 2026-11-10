@@ -360,11 +360,11 @@ const styles = StyleSheet.create({
   },
   buttonText: { fontFamily: fonts.semibold, fontSize: 15 },
   card: {
-    backgroundColor: colors.card,
+    backgroundColor: colors.primarySoft,
     borderRadius: 18,
     borderCurve: "continuous",
     borderWidth: 1,
-    borderColor: colors.hairline,
+    borderColor: colors.primarySoft,
     padding: 16,
     gap: 10,
   },

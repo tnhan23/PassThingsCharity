@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ActivityIndicator, Text, View } from "react-native";
+import { ActivityIndicator, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { ApiError } from "@/api/client";
 import { resultText } from "@/api/backend";
 import { isOperator, useSession } from "@/api/session";
@@ -24,6 +24,7 @@ export type Row = {
   isVerified?: boolean;
   isActive?: boolean;
   organizationId?: string | { _id?: string; name?: string; code?: string; address?: string };
+  categoryId?: string | { _id?: string; name?: string };
   managerId?: string | { _id?: string; fullName?: string; username?: string; phone?: string; email?: string } | null;
   staffUserIds?: string[];
   unit?: string;
@@ -270,11 +271,13 @@ export function Fold({
   children,
   open: controlledOpen,
   onToggle,
+  style,
 }: {
   title: string;
   children: ReactNode;
   open?: boolean;
   onToggle?: (open: boolean) => void;
+  style?: StyleProp<ViewStyle>;
 }) {
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
@@ -286,7 +289,7 @@ export function Fold({
     }
   };
   return (
-    <Card style={open ? { borderColor: colors.primary, borderWidth: 1.5 } : undefined}>
+    <Card style={[style, open ? { borderColor: colors.primary, borderWidth: 1.5 } : undefined]}>
       <Tap onPress={toggle} accessibilityLabel={title}>
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 38, gap: 10 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
@@ -312,6 +315,8 @@ export function PickList({
   detail,
   panel,
   selectedBackgroundColor,
+  cardBackgroundColor,
+  cardBorderColor,
 }: {
   rows: Row[] | null;
   selected: string;
@@ -319,10 +324,16 @@ export function PickList({
   detail: (row: Row) => string;
   panel?: (row: Row) => ReactNode;
   selectedBackgroundColor?: string;
+  cardBackgroundColor?: string;
+  cardBorderColor?: string;
 }) {
+  const selectedFill = selectedBackgroundColor ?? colors.primarySoft;
+  const cardStyle = cardBackgroundColor || cardBorderColor
+    ? { backgroundColor: cardBackgroundColor, borderColor: cardBorderColor }
+    : undefined;
   if (!rows) {
     return (
-      <Card>
+      <Card style={cardStyle}>
         <ActivityIndicator color={colors.primary} />
         <Body muted>Đang tải danh sách.</Body>
       </Card>
@@ -330,7 +341,7 @@ export function PickList({
   }
   if (rows.length === 0) {
     return (
-      <Card>
+      <Card style={cardStyle}>
         <Body muted>Chưa có dòng nào cho tài khoản này.</Body>
       </Card>
     );
@@ -343,11 +354,14 @@ export function PickList({
         return (
           <Card
             key={row._id}
-            style={open ? {
-              borderWidth: 2,
-              borderColor: colors.primary,
-              ...(selectedBackgroundColor ? { backgroundColor: selectedBackgroundColor } : {}),
-            } : undefined}
+            style={[
+              cardStyle,
+              open ? {
+                borderWidth: 2,
+                borderColor: colors.primary,
+                backgroundColor: selectedFill,
+              } : undefined,
+            ]}
           >
             <Tap onPress={() => onPick(open ? "" : row._id)} accessibilityLabel={labelOf(row)}>
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 }}>

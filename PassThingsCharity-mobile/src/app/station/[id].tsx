@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator } from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
 import * as Location from "expo-location";
 import { backend } from "@/api/backend";
 import { ApiError } from "@/api/client";
@@ -9,8 +9,8 @@ import { donorLabel, formatDay, itemName, itemUnit } from "@/api/labels";
 import { useSession } from "@/api/session";
 import type { CampaignDetail, StationRow, TaskRow } from "@/api/types";
 import { Screen } from "@/components/chrome";
-import { Body, Button, Card, Eyebrow, Meter, Photo, Title } from "@/components/ui";
-import { colors } from "@/theme";
+import { Badge, Body, Button, Card, Eyebrow, Icon, Meter, Photo, StatRow, Title } from "@/components/ui";
+import { colors, fonts } from "@/theme";
 
 function hasStation(detail: CampaignDetail, stationId: string) {
   return detail.stations.some((station) => station?._id === stationId);
@@ -163,29 +163,87 @@ export default function StationDetailPage() {
 
   return (
     <Screen tab="stations">
-      <Eyebrow>{station.isActive ? "Đang mở" : "Chưa kích hoạt"}</Eyebrow>
-      <Title>{station.name}</Title>
-      {station.imageUrl ? <Photo uri={station.imageUrl} height={200} radius={18} /> : <Body muted>Trạm chưa có ảnh.</Body>}
-      <Body>{station.address}</Body>
-      <Body muted>{hours}</Body>
+      <Card style={{ backgroundColor: colors.primarySoft, borderColor: colors.primarySoft, padding: 12 }}>
+        {station.imageUrl ? (
+          <Photo uri={station.imageUrl} height={210} radius={16} />
+        ) : (
+          <View style={{ height: 150, borderRadius: 16, backgroundColor: colors.card, alignItems: "center", justifyContent: "center" }}>
+            <Icon name="place" size={44} color={colors.primary} />
+            <Text style={{ marginTop: 8, fontFamily: fonts.medium, fontSize: 13, color: colors.muted }}>Chưa có ảnh trạm</Text>
+          </View>
+        )}
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <Eyebrow>TRẠM TIẾP NHẬN</Eyebrow>
+          <Badge
+            label={station.isActive ? "Đang hoạt động" : "Chưa kích hoạt"}
+            tone={station.isActive ? "primary" : "neutral"}
+            icon={station.isActive ? "check-circle" : "schedule"}
+          />
+        </View>
+        <Title>{station.name}</Title>
+        <View style={{ gap: 10, padding: 12, borderRadius: 14, backgroundColor: colors.card }}>
+          <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 9 }}>
+            <Icon name="place" size={19} color={colors.primary} />
+            <Body>{station.address || "Chưa có địa chỉ."}</Body>
+          </View>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
+            <Icon name="schedule" size={19} color={colors.primary} />
+            <Body muted>{hours}</Body>
+          </View>
+        </View>
+      </Card>
+      <StatRow
+        items={[
+          { label: "Chiến dịch", value: active.length, unit: "chiến dịch", tone: "primary" },
+          { label: "Công việc", value: tasks.length, unit: "việc", tone: "coral" },
+        ]}
+      />
       {hasCoordinates ? (
         <Button
           label={findingRoute ? "Đang lấy vị trí..." : "Tìm đường trên bản đồ"}
           disabled={findingRoute}
+          tone="coral"
+          icon="near-me"
           onPress={() => void findRoute()}
         />
-      ) : <Body muted>Trạm chưa có tọa độ để tìm đường.</Body>}
-      {routeNote ? <Body>{routeNote}</Body> : null}
-      {canEditPhoto ? (
-        <Button label={uploading ? "Đang tải ảnh..." : station.imageUrl ? "Đổi ảnh trạm" : "Tải ảnh trạm"} disabled={uploading} onPress={() => void changePhoto()} />
+      ) : (
+        <Card style={{ backgroundColor: colors.surfaceLow }}>
+          <Body muted>Trạm chưa có tọa độ để tìm đường.</Body>
+        </Card>
+      )}
+      {routeNote ? (
+        <Card style={{ backgroundColor: colors.warningSoft, borderColor: colors.warningSoft }}>
+          <Body>{routeNote}</Body>
+        </Card>
       ) : null}
-      {photoNote ? <Body>{photoNote}</Body> : null}
-      <Title>Chiến dịch tại trạm</Title>
-      {active.length === 0 ? <Body>Trạm này chưa gắn chiến dịch đang diễn ra.</Body> : null}
+      {canEditPhoto ? (
+        <Button
+          label={uploading ? "Đang tải ảnh..." : station.imageUrl ? "Đổi ảnh trạm" : "Tải ảnh trạm"}
+          tone="ghost"
+          icon="add-a-photo"
+          disabled={uploading}
+          onPress={() => void changePhoto()}
+        />
+      ) : null}
+      {photoNote ? (
+        <Card style={{ backgroundColor: photoNote.startsWith("Đã lưu") ? colors.primarySoft : colors.errorSoft }}>
+          <Body>{photoNote}</Body>
+        </Card>
+      ) : null}
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
+        <Icon name="volunteer-activism" size={21} color={colors.primary} />
+        <Title>Chiến dịch tại trạm</Title>
+      </View>
+      {active.length === 0 ? (
+        <Card style={{ backgroundColor: colors.surfaceLow }}>
+          <Body muted>Trạm này chưa gắn chiến dịch đang diễn ra.</Body>
+        </Card>
+      ) : null}
       {active.map((detail) => (
-        <Card key={detail.campaign._id}>
-          <Eyebrow>{`${donorLabel(detail.campaign)} · ${formatDay(detail.campaign.startDate)} đến ${formatDay(detail.campaign.endDate)}`}</Eyebrow>
+        <Card key={detail.campaign._id} style={{ backgroundColor: colors.primarySoft, borderColor: colors.primarySoft }}>
+          <Badge label={donorLabel(detail.campaign)} tone="primary" icon="campaign" />
           <Title>{detail.campaign.title}</Title>
+          <Body muted>{`${formatDay(detail.campaign.startDate)} đến ${formatDay(detail.campaign.endDate)}`}</Body>
           {detail.campaign.description ? <Body>{detail.campaign.description}</Body> : null}
           {detail.items.length === 0 ? <Body muted>Chiến dịch chưa khai báo món đồ.</Body> : null}
           {detail.items.map((item) => {
@@ -204,13 +262,25 @@ export default function StationDetailPage() {
           })}
         </Card>
       ))}
-      <Title>Việc tại trạm</Title>
-      {tasks.length === 0 ? <Body>Chưa có việc được giao cho trạm này.</Body> : null}
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
+        <Icon name="work-outline" size={21} color={colors.secondary} />
+        <Title>Việc tại trạm</Title>
+      </View>
+      {tasks.length === 0 ? (
+        <Card style={{ backgroundColor: colors.surfaceLow }}>
+          <Body muted>Chưa có việc được giao cho trạm này.</Body>
+        </Card>
+      ) : null}
       {tasks.map((task) => (
-        <Card key={task._id}>
-          {task.imageUrl ? <Photo uri={task.imageUrl} height={140} radius={12} /> : null}
-          <Eyebrow>{task.recruitmentStatus === "OPEN" ? "Đang tuyển" : task.status}</Eyebrow>
+        <Card key={task._id} style={{ backgroundColor: colors.coralSoft, borderColor: colors.coralSoft }}>
+          {task.imageUrl ? <Photo uri={task.imageUrl} height={150} radius={14} /> : null}
+          <Badge
+            label={task.recruitmentStatus === "OPEN" ? "Đang tuyển" : task.status}
+            tone={task.recruitmentStatus === "OPEN" ? "coral" : "neutral"}
+            icon="work-outline"
+          />
           <Title>{task.title}</Title>
+          {task.description ? <Body>{task.description}</Body> : null}
           <Body muted>{typeof task.rewardPoints === "number" ? `${task.rewardPoints} điểm khi hoàn thành.` : "Điểm cộng lúc check-out."}</Body>
         </Card>
       ))}
