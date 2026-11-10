@@ -67,6 +67,7 @@ export function MyDonations({ summary = false }: { summary?: boolean }) {
   const [points, setPoints] = useState<PointsPayload | null>(null);
   const [quantities, setQuantities] = useState<string>("");
   const [problem, setProblem] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "PENDING" | "ACCEPTED" | "REJECTED" | "COMPLETED">("ALL");
 
   useEffect(() => {
     if (!token || !user?.id) return;
@@ -134,6 +135,14 @@ export function MyDonations({ summary = false }: { summary?: boolean }) {
     .map((row) => row.createdAt)
     .filter((value): value is string => Boolean(value))
     .sort()[0];
+  const visibleRows = rows.filter((row) => statusFilter === "ALL" || row.status === statusFilter);
+  const statusFilters = [
+    { status: "ALL" as const, label: "Tất cả", count: rows.length },
+    { status: "PENDING" as const, label: "Chờ xử lý", count: rows.filter((row) => row.status === "PENDING").length },
+    { status: "ACCEPTED" as const, label: "Đã tiếp nhận", count: rows.filter((row) => row.status === "ACCEPTED").length },
+    { status: "REJECTED" as const, label: "Từ chối", count: rows.filter((row) => row.status === "REJECTED").length },
+    { status: "COMPLETED" as const, label: "Hoàn tất", count: rows.filter((row) => row.status === "COMPLETED").length },
+  ];
 
   return (
     <View style={{ gap: 14 }}>
@@ -153,7 +162,20 @@ export function MyDonations({ summary = false }: { summary?: boolean }) {
       </Card>
       {summary ? null : <Body muted>Nhân viên lập phiếu khi bạn mang đồ tới quầy.</Body>}
       {rows.length === 0 ? <Body>Chưa có phiếu nào gắn với tài khoản này.</Body> : null}
-      {rows.map((row) => {
+      {rows.length > 0 ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+          {statusFilters.map((filter) => (
+            <Pill
+              key={filter.status}
+              label={`${filter.label} (${filter.count})`}
+              active={statusFilter === filter.status}
+              onPress={() => setStatusFilter(filter.status)}
+            />
+          ))}
+        </ScrollView>
+      ) : null}
+      {rows.length > 0 && visibleRows.length === 0 ? <Body>Không có phiếu ở trạng thái này.</Body> : null}
+      {visibleRows.map((row) => {
         const awarded = pointsForReceipt(points, row._id);
         return (
           <Tap key={row._id} onPress={() => router.push(`/contribution/${row._id}`)}>

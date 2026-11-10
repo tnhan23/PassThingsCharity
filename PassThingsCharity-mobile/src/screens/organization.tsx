@@ -113,6 +113,10 @@ export function OrganizationScreen() {
 
   async function submit() {
     if (!token || !user?.id) return;
+    if (!name.trim() || !code.trim() || !address.trim()) {
+      setNote("Vui lòng nhập đủ tên tổ chức, mã tổ chức và địa chỉ.");
+      return;
+    }
     if (evidenceImageUrls.length === 0) {
       setNote("Vui lòng đính kèm ít nhất 1 ảnh minh chứng trước khi gửi hồ sơ.");
       return;
