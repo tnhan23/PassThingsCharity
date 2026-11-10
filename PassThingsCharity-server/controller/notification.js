@@ -78,11 +78,15 @@ async function getMyNotifications(req, res, next) {
       }
     }
 
+    // Thông báo đích danh luôn lưu thêm targetRole của người nhận. Chỉ khớp role khi userId trống,
+    // nếu không mỗi trưởng trạm sẽ thấy và bị tính cả thông báo đã đọc của trưởng trạm khác.
     const query = {
       $or: [
         { userId: currentUserId },
-        { targetRole: 'ALL' },
-        ...(userRoleName ? [{ targetRole: userRoleName }] : []),
+        {
+          userId: null,
+          targetRole: { $in: ['ALL', ...(userRoleName ? [userRoleName] : [])] },
+        },
       ],
     };
 

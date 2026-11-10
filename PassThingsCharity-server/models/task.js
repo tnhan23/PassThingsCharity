@@ -6,6 +6,8 @@ const mongoose = require('mongoose');
  */
 const taskSchema = new mongoose.Schema(
   {
+    imageUrl: { type: String, trim: true, default: null },
+    imagePublicId: { type: String, default: null },
     campaignId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Campaign',

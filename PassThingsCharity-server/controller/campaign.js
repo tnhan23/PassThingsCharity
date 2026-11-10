@@ -95,6 +95,7 @@ async function createCampaign(req, res, next) {
 async function getAllCampaigns(req, res, next) {
   try {
     const { status, organizationId, search } = req.query;
+    const isAdmin = req.user?.role?.name === 'ADMIN';
     const filter = { status: { $ne: 'DRAFT' } };
 
     if (status) {
@@ -102,10 +103,11 @@ async function getAllCampaigns(req, res, next) {
         return res.status(400).json({ error: 'Invalid Campaign status filter.' });
       }
       const formattedStatus = status.trim().toUpperCase();
-      const publicStatuses = ['PUBLISHED', 'ACTIVE', 'COMPLETED', 'CANCELLED'];
-      if (!publicStatuses.includes(formattedStatus)) {
+      const publicStatuses = ['ACTIVE', 'COMPLETED', 'CANCELLED'];
+      const allowedStatuses = isAdmin ? ['DRAFT', ...publicStatuses] : publicStatuses;
+      if (!allowedStatuses.includes(formattedStatus)) {
         return res.status(400).json({
-          error: `Status must be one of: ${publicStatuses.join(', ')}.`,
+          error: `Status must be one of: ${allowedStatuses.join(', ')}.`,
         });
       }
       filter.status = formattedStatus;
@@ -179,7 +181,7 @@ async function getCampaignById(req, res, next) {
     // Fetch associated stations
     const stations = await CampaignStation.find({ campaignId: id }).populate({
       path: 'stationId',
-      select: 'name address latitude longitude openingTime closingTime isActive',
+      select: 'name address latitude longitude openingTime closingTime isActive imageUrl',
     });
 
     return res.status(200).json({
@@ -281,7 +283,7 @@ async function updateCampaign(req, res, next) {
 }
 
 /**
- * Update Campaign Status (State Transitions: DRAFT -> PUBLISHED -> ACTIVE -> COMPLETED / CANCELLED)
+ * Update Campaign Status (DRAFT -> ACTIVE -> COMPLETED / CANCELLED)
  */
 async function updateCampaignStatus(req, res, next) {
   try {
@@ -292,7 +294,7 @@ async function updateCampaignStatus(req, res, next) {
       return res.status(400).json({ error: 'Invalid Campaign ID.' });
     }
 
-    const validStatuses = ['DRAFT', 'PUBLISHED', 'ACTIVE', 'COMPLETED', 'CANCELLED'];
+    const validStatuses = ['DRAFT', 'ACTIVE', 'COMPLETED', 'CANCELLED'];
     const formattedStatus = typeof status === 'string' ? status.trim().toUpperCase() : '';
 
     if (!validStatuses.includes(formattedStatus)) {
@@ -307,8 +309,7 @@ async function updateCampaignStatus(req, res, next) {
     }
 
     const allowedTransitions = {
-      DRAFT: ['PUBLISHED', 'CANCELLED'],
-      PUBLISHED: ['ACTIVE', 'CANCELLED'],
+      DRAFT: ['ACTIVE', 'CANCELLED'],
       ACTIVE: ['COMPLETED', 'CANCELLED'],
       COMPLETED: [],
       CANCELLED: [],
@@ -320,10 +321,10 @@ async function updateCampaignStatus(req, res, next) {
       });
     }
 
-    if (['PUBLISHED', 'ACTIVE'].includes(formattedStatus)) {
+    if (formattedStatus === 'ACTIVE') {
       const links = await CampaignStation.find({ campaignId: id }).populate('stationId', 'isActive');
       if (!links.some(link => link.stationId?.isActive)) {
-        return res.status(409).json({ error: 'Cần gắn ít nhất một trạm tiếp nhận đang hoạt động trước khi công bố hoặc kích hoạt chiến dịch.' });
+        return res.status(409).json({ error: 'Cần gắn ít nhất một trạm tiếp nhận đang hoạt động trước khi kích hoạt chiến dịch.' });
       }
     }
     campaign.status = formattedStatus;
@@ -510,7 +511,7 @@ async function findStationsForCampaign(req, res, next) {
 
     const campaignStations = await CampaignStation.find({ campaignId: id }).populate({
       path: 'stationId',
-      select: 'name address latitude longitude openingTime closingTime isActive organizationId managerId',
+      select: 'name address latitude longitude openingTime closingTime isActive organizationId managerId imageUrl',
       populate: { path: 'organizationId', select: 'name code' },
     });
 

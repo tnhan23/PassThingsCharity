@@ -50,7 +50,7 @@ const campaignSchema = new mongoose.Schema(
     status: {
       type: String,
       required: true,
-      enum: ['DRAFT', 'PUBLISHED', 'ACTIVE', 'COMPLETED', 'CANCELLED'],
+      enum: ['DRAFT', 'ACTIVE', 'COMPLETED', 'CANCELLED'],
       default: 'DRAFT',
     },
     organizationId: {

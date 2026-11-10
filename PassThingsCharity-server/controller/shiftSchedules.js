@@ -80,6 +80,7 @@ async function checkInShift(req, res, next) {
         if (!template) return res.status(409).json({ error: 'Không tìm thấy ca mẫu của lịch.' });
         const now = new Date();
         shifts.validateCheckIn(schedule.date, template, now);
+        await require('../services/qrAndProximity').verifyShiftQrAndProximity(schedule, req.body);
         schedule.checkInTime = now;
         schedule.status = 'IN_PROGRESS';
         await schedule.save();
@@ -106,6 +107,7 @@ async function checkOutShift(req, res, next) {
             return res.status(400).json({ error: 'Bạn chưa check-in vào ca này.' });
         }
         await shifts.requireStation(schedule.stationId, req.user);
+        await require('../services/qrAndProximity').verifyShiftQrAndProximity(schedule, req.body);
         schedule.checkOutTime = new Date();
         schedule.status = 'COMPLETED';
         await schedule.save();

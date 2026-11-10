@@ -11,6 +11,7 @@ const resources = {
   'item-categories': { model: require('../models/itemCategory'), field: 'imageUrl' },
   'item-types': { model: require('../models/itemType'), field: 'imageUrl' },
   achievements: { model: require('../models/achievement'), field: 'badgeIconUrl' },
+  tasks: { model: require('../models/task'), field: 'imageUrl' },
 };
 
 const receiveImage = multer({

@@ -76,6 +76,12 @@ module.exports = {
       description: { type: 'string', example: 'Cứu trợ đồng bào vùng lũ lụt và hỗ trợ trẻ em khó khăn' },
       operatingArea: { type: 'string', example: 'TP.HCM và các tỉnh Miền Trung' },
       idCardNumber: { type: 'string', example: '079123456789' },
+      evidenceImageUrls: {
+        type: 'array',
+        items: { type: 'string', format: 'uri' },
+        description: 'Mảng 1–10 URL ảnh bằng chứng Cloudinary trả từ POST /organizations/upload-evidence (bắt buộc khi người dùng đăng ký tổ chức).',
+        example: ['https://res.cloudinary.com/djfr51v2j/image/upload/v1/PassThingsCharity/organization-evidence/sample.jpg'],
+      },
     },
   },
   OrganizationUpdateRequest: {
@@ -84,6 +90,11 @@ module.exports = {
       name: { type: 'string' }, code: { type: 'string' }, address: { type: 'string' },
       phone: { type: 'string' }, email: { type: 'string', format: 'email' },
       logoUrl: { type: 'string', format: 'uri', nullable: true },
+      evidenceImageUrls: {
+        type: 'array',
+        items: { type: 'string', format: 'uri' },
+        description: 'Cập nhật lại danh sách URL ảnh bằng chứng Cloudinary.',
+      },
     },
   },
   CreateStationManagerRequest: {
@@ -395,6 +406,7 @@ module.exports = {
     type: 'object',
     required: ['stationId', 'title', 'startTime', 'endTime', 'requiredVolunteers'],
     properties: {
+      imageUrl: { type: 'string', format: 'uri', nullable: true, example: 'https://res.cloudinary.com/your-cloud/image/upload/example.jpg', description: 'URL ảnh minh họa bài đăng tuyển TNV (tùy chọn, lấy từ POST /uploads/tasks/image).' },
       campaignId: { type: 'string', nullable: true, description: 'Optional campaign. A schedule can belong to a station alone.' },
       stationId: { type: 'string', example: '671000000000000000000011' },
       transferId: { type: 'string', example: '6523456789abcdef00000d01' },
@@ -411,6 +423,7 @@ module.exports = {
   TaskUpdateRequest: {
     type: 'object',
     properties: {
+      imageUrl: { type: 'string', format: 'uri', nullable: true, example: 'https://res.cloudinary.com/your-cloud/image/upload/example.jpg', description: 'URL ảnh minh họa bài đăng tuyển TNV (tùy chọn, gửi null để xóa ảnh).' },
       title: { type: 'string', example: 'Bốc xếp và chuyển hàng lên xe tải' },
       description: { type: 'string', example: 'Đã bổ sung băng keo dán thùng' },
       transferId: { type: 'string', example: '6523456789abcdef00000d01' },

@@ -1,4 +1,34 @@
 module.exports = {
+  '/organizations/upload-evidence': {
+    post: {
+      tags: ['Organizations'],
+      summary: 'Upload 1–5 ảnh bằng chứng thành lập tổ chức lên Cloudinary (ADMIN, ORG_MANAGER, USER)',
+      requestBody: {
+        required: true,
+        content: {
+          'multipart/form-data': {
+            schema: {
+              type: 'object',
+              required: ['images'],
+              properties: {
+                images: {
+                  type: 'array',
+                  minItems: 1,
+                  maxItems: 5,
+                  items: { type: 'string', format: 'binary' },
+                  description: 'Đính kèm 1–5 ảnh JPEG, PNG hoặc WebP (tối đa 5MB/ảnh)',
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        201: { description: 'Trả về { images, imageUrls } chứa các URL Cloudinary' },
+        400: { description: 'File ảnh không hợp lệ hoặc thiếu field images' },
+      },
+    },
+  },
   '/organizations': {
     get: {
       tags: ['Organizations'],

@@ -1,17 +1,41 @@
 {
   "expo": {
-    "name": "PassThingsCharity-mobile",
-    "slug": "PassThingsCharity-mobile",
+    "name": "Pass Things Charity",
+    "slug": "pass-do",
+    "scheme": "passdo",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "backgroundColor": "#f9f9f7",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "vn.passdo.app",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        },
+        "NSLocationWhenInUseUsageDescription": "Pass Things Charity dùng vị trí của bạn khi đang mở app để hiện trạm gần và khoảng cách tới điểm nhận đồ.",
+        "NSPhotoLibraryUsageDescription": "Pass Things Charity mở thư viện ảnh để tải ảnh phiếu quyên góp và ảnh hồ sơ.",
+        "NSCameraUsageDescription": "Pass Things Charity dùng camera để quét mã QR trên giao diện. Máy chủ chưa dùng mã này để ghi nhận ca.",
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "passdo",
+              "vn.passdo.app",
+              "com.googleusercontent.apps.116703453640-5pmgf0934l9ri041611mcr8qkm0oq246"
+            ]
+          }
+        ]
+      }
     },
     "android": {
+      "package": "vn.passdo.app",
+      "versionCode": 1,
+      "usesCleartextTraffic": true,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#07241a",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -20,6 +44,38 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "apiUrl": "http://localhost:8080"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-image",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#07241a",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 180
+        }
+      ],
+      "expo-secure-store",
+      "expo-maps",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Pass Things Charity mở thư viện ảnh để tải ảnh phiếu quyên góp và ảnh hồ sơ."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Pass Things Charity dùng camera để quét mã QR trên giao diện. Máy chủ chưa dùng mã này để ghi nhận ca."
+        }
+      ],
+      "@react-native-community/datetimepicker",
+      "expo-web-browser"
+    ]
   }
 }
