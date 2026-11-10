@@ -252,12 +252,15 @@ export function OrgScreen() {
 }
 
 export function StationScreen() {
+  const role = useRole();
   const stations = useRows((token) => backend.listStations(token).then((data) => data.data as Row[]));
   const orgs = useRows((token) => backend.listOrganizations(token).then((data) => data.data as Row[]));
+  const managers = useRows((token) =>
+    role === "ADMIN" ? backend.listUsers(token).then((data) => data.data as Row[]) : Promise.resolve([]),
+  );
   const job = useJob();
   const approveStationJob = useJob();
   const createStationJob = useJob();
-  const role = useRole();
   const hasFocused = useRef(false);
   const [picked, setPicked] = useState("");
   const [stationFilter, setStationFilter] = useState<"ALL" | "PENDING" | "APPROVED">(
@@ -372,7 +375,7 @@ export function StationScreen() {
   return (
     <OpsGate>
       <Title>Trạm</Title>
-      <Note text={stations.error || orgs.error || staffError || (role === "ADMIN" ? "" : job.note)} />
+      <Note text={stations.error || orgs.error || managers.error || staffError || (role === "ADMIN" ? "" : job.note)} />
       {stations.rows ? (
         <StatRow
           items={[
@@ -389,7 +392,49 @@ export function StationScreen() {
           <Pill label={`${role === "ADMIN" ? "Chờ duyệt" : "Chờ kích hoạt"} (${stations.rows?.filter((row) => !row.isActive).length ?? 0})`} active={stationFilter === "PENDING"} onPress={() => { setStationFilter("PENDING"); setPicked(""); }} />
         </ScrollView>
       ) : null}
-      <PickList rows={can(role, ["ADMIN", "ORG_MANAGER"]) ? visibleStations : stations.rows} selected={picked} onPick={setPicked} detail={(row) => `${row.isActive ? "Đang mở" : "Chưa kích hoạt"} · ${row.address || ""}`} />
+      <PickList
+        rows={can(role, ["ADMIN", "ORG_MANAGER"]) ? visibleStations : stations.rows}
+        selected={picked}
+        onPick={setPicked}
+        detail={(row) => `${row.isActive ? "Đang mở" : "Chưa kích hoạt"} · ${row.address || ""}`}
+        panel={(row) => {
+          if (role !== "ADMIN") return null;
+          const organizationId = typeof row.organizationId === "string" ? row.organizationId : row.organizationId?._id;
+          const organization = typeof row.organizationId === "object"
+            ? row.organizationId.name
+            : orgs.rows?.find((org) => org._id === organizationId)?.name;
+          const managerId = typeof row.managerId === "string" ? row.managerId : row.managerId?._id;
+          const manager = typeof row.managerId === "object" && row.managerId
+            ? row.managerId
+            : managers.rows?.find((person) => person._id === managerId);
+          return (
+            <View style={{ gap: 4, paddingHorizontal: 14, paddingBottom: 12 }}>
+              <Body muted>{`Địa chỉ: ${row.address || "Chưa có"}`}</Body>
+              <Body muted>{`Tổ chức: ${organization || organizationId || "Chưa có thông tin"}`}</Body>
+              <Body muted>{`Tọa độ: ${row.latitude ?? "?"}, ${row.longitude ?? "?"}`}</Body>
+              <Body muted>{`Giờ hoạt động: ${row.openingTime || "08:00"} - ${row.closingTime || "20:00"}`}</Body>
+              <Body muted>{`Trạng thái: ${row.isActive ? "Đang mở" : "Chưa kích hoạt"}`}</Body>
+              <Body muted>{`Trưởng trạm: ${manager?.fullName || manager?.username || (managerId ? "Không tìm thấy tài khoản" : "Chưa được gán")}`}</Body>
+              {manager?.phone ? <Body muted>{`Điện thoại trưởng trạm: ${manager.phone}`}</Body> : null}
+              {manager?.email ? <Body muted>{`Email trưởng trạm: ${manager.email}`}</Body> : null}
+              <Body muted>{`ID trạm: ${row._id}`}</Body>
+              {managerId ? (
+                <Button
+                  label="Gỡ trưởng trạm khỏi trạm"
+                  tone="danger"
+                  disabled={job.busy}
+                  onPress={() => void job.run((token) => backend.removeStationManager(token, row._id)).then((ok) => {
+                    if (ok) {
+                      stations.reload();
+                      managers.reload();
+                    }
+                  })}
+                />
+              ) : null}
+            </View>
+          );
+        }}
+      />
       {picked ? (
         <View style={{ gap: 8 }}>
           {stations.rows?.find((row) => row._id === picked)?.imageUrl ? <Photo uri={stations.rows.find((row) => row._id === picked)?.imageUrl || ""} height={160} radius={14} /> : <Body muted>Trạm chưa có ảnh.</Body>}

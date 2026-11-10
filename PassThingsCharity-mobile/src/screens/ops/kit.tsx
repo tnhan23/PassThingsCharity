@@ -23,6 +23,9 @@ export type Row = {
   imageUrl?: string | null;
   isVerified?: boolean;
   isActive?: boolean;
+  organizationId?: string | { _id?: string; name?: string; code?: string };
+  managerId?: string | { _id?: string; fullName?: string; username?: string; phone?: string; email?: string } | null;
+  staffUserIds?: string[];
   unit?: string;
   fullName?: string;
   username?: string;

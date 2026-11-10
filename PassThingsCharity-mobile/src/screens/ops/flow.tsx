@@ -398,6 +398,7 @@ export function StockWork() {
     <OpsGate>
       <Title>Kho trạm</Title>
       <RoleNote />
+      <Body muted>Kho chỉ hiển thị hàng đã được tiếp nhận hoặc số dư được điều chỉnh trong kho; số mục tiêu chiến dịch không phải số tồn kho.</Body>
       <Note text={stock.error} />
       {rows ? (
         <StatRow
@@ -412,7 +413,7 @@ export function StockWork() {
           ]}
         />
       ) : null}
-      {rows && rows.length === 0 ? <Body muted>Chưa có hàng trong kho các trạm bạn được xem.</Body> : null}
+      {rows && rows.length === 0 && !stock.error ? <Body muted>Chưa có dòng hàng tồn trong các trạm được gán. Hàng được ghi vào kho khi phiếu quyên góp được tiếp nhận; chỉ tiêu chiến dịch không tự tạo tồn kho.</Body> : null}
       {rows?.map((row) => {
         const station = refName(row.stationId, "Trạm");
         const available = row.availableQuantity ?? row.quantity;

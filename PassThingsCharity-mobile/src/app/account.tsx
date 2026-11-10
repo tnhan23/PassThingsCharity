@@ -63,7 +63,6 @@ export default function AccountPage() {
   return (
     <Screen tab="profile">
       <Title>Tài khoản</Title>
-      <Body muted>{`User id ${user.id}`}</Body>
       {message ? (
         <Text selectable style={{ fontFamily: fonts.medium, fontSize: 14, color: isError ? colors.error : colors.primary }}>
           {message}
@@ -71,7 +70,7 @@ export default function AccountPage() {
       ) : null}
       <Card>
         <Title>Đổi mật khẩu</Title>
-        <Body muted>PATCH /auth/change-password. Mật khẩu mới từ 8 ký tự.</Body>
+        <Body muted>Mật khẩu mới từ 8 ký tự.</Body>
         <Field label="Mật khẩu hiện tại" value={currentPassword} onChangeText={setCurrentPassword} secure />
         <Field label="Mật khẩu mới" value={newPassword} onChangeText={setNewPassword} secure />
         {renderCardNotice("password")}
@@ -104,7 +103,6 @@ export default function AccountPage() {
       </Card>
       <Card>
         <Title>Sửa hồ sơ</Title>
-        <Body muted>PATCH /users/me/profile. Gửi ít nhất một trường.</Body>
         <Field label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" />
         <Field label="Username" value={username} onChangeText={setUsername} />
         <Field label="Họ tên" value={fullName} onChangeText={setFullName} />
@@ -182,7 +180,7 @@ export default function AccountPage() {
       </Card>
       <Card>
         <Title>Xóa tài khoản</Title>
-        <Body muted>DELETE /users/:id. Chỉ xóa đúng tài khoản đang đăng nhập.</Body>
+        <Body muted>Chỉ xóa đúng tài khoản đang đăng nhập.</Body>
         <Field label="Mật khẩu xác nhận" value={deletePassword} onChangeText={setDeletePassword} secure />
         {renderCardNotice("delete")}
         <Button

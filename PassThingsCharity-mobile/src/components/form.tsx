@@ -13,6 +13,7 @@ export function Field({
   secure,
   multiline,
   keyboardType,
+  showSoftInputOnFocus,
   autoCapitalize = "none",
 }: {
   label: string;
@@ -21,6 +22,7 @@ export function Field({
   secure?: boolean;
   multiline?: boolean;
   keyboardType?: "default" | "email-address" | "phone-pad" | "number-pad" | "decimal-pad";
+  showSoftInputOnFocus?: boolean;
   autoCapitalize?: "none" | "sentences" | "words" | "characters";
 }) {
   const [focused, setFocused] = useState(false);
@@ -34,6 +36,7 @@ export function Field({
         autoCapitalize={autoCapitalize}
         autoCorrect={false}
         keyboardType={keyboardType}
+        showSoftInputOnFocus={showSoftInputOnFocus}
         multiline={multiline}
         textAlignVertical={multiline ? "top" : "center"}
         onFocus={() => setFocused(true)}

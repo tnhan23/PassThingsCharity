@@ -37,6 +37,11 @@ router.use(async (req, res, next) => {
         const assigned = await StationStaff.find({ userId: req.user._id }).select('stationId').lean();
         allowed = assigned.map(doc => String(doc.stationId));
       }
+      if (allowed.length === 0) {
+        return res.status(403).json({
+          error: 'Tài khoản chưa được gán vào trạm nào nên không thể xem kho.',
+        });
+      }
       if (filter.stationId && !allowed.includes(String(filter.stationId))) return res.status(403).json({ error: 'Bạn không được xem kho của trạm này.' });
       if (!filter.stationId) filter.stationId = { $in: allowed };
     }
