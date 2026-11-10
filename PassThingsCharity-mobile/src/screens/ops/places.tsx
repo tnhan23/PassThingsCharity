@@ -16,6 +16,22 @@ const NativeWebView = Platform.OS === "android"
   ? (require("react-native-webview") as typeof import("react-native-webview")).WebView
   : null;
 
+function campaignDateValue(date: Date) {
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function campaignDateFromInput(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function addCampaignDays(date: Date, days: number) {
+  const result = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
 function stationPlaceMapHtml(latitude: number | null, longitude: number | null) {
   const center = latitude !== null && longitude !== null ? [latitude, longitude] : [10.7769, 106.7009];
   const zoom = latitude !== null && longitude !== null ? 16 : 13;
@@ -259,7 +275,9 @@ export function StationScreen() {
   const role = useRole();
   const hasFocused = useRef(false);
   const [picked, setPicked] = useState("");
-  const [stationFilter, setStationFilter] = useState<"ALL" | "PENDING" | "APPROVED">("ALL");
+  const [stationFilter, setStationFilter] = useState<"ALL" | "PENDING" | "APPROVED">(
+    role === "ADMIN" ? "PENDING" : "ALL",
+  );
   const [editName, setEditName] = useState("");
   const [editAddress, setEditAddress] = useState("");
   const [editLatitude, setEditLatitude] = useState("");
@@ -386,12 +404,8 @@ export function StationScreen() {
           <Pill label={`${role === "ADMIN" ? "Chờ duyệt" : "Chờ kích hoạt"} (${stations.rows?.filter((row) => !row.isActive).length ?? 0})`} active={stationFilter === "PENDING"} onPress={() => { setStationFilter("PENDING"); setPicked(""); }} />
         </ScrollView>
       ) : null}
-      <PickList
-        rows={can(role, ["ADMIN", "ORG_MANAGER"]) ? visibleStations : stations.rows}
-        selected={picked}
-        onPick={setPicked}
-        detail={(row) => `${row.isActive ? "Đang mở" : "Chưa kích hoạt"} · ${row.address || ""}`}
-        panel={() => (
+      <PickList rows={can(role, ["ADMIN", "ORG_MANAGER"]) ? visibleStations : stations.rows} selected={picked} onPick={setPicked} detail={(row) => `${row.isActive ? "Đang mở" : "Chưa kích hoạt"} · ${row.address || ""}`} />
+      {picked ? (
         <View style={{ gap: 8 }}>
           {stations.rows?.find((row) => row._id === picked)?.imageUrl ? <Photo uri={stations.rows.find((row) => row._id === picked)?.imageUrl || ""} height={160} radius={14} /> : <Body muted>Trạm chưa có ảnh.</Body>}
           {canEditPhoto ? (
@@ -450,7 +464,7 @@ export function StationScreen() {
           {can(role, ["ADMIN", "ORG_MANAGER"]) ? (
             <Button label="Xóa trạm" tone="danger" onPress={() => void job.run((token) => backend.deleteStation(token, picked)).then((ok) => { if (!ok) return; setPicked(""); stations.reload(); })} />
           ) : null}
-          {can(role, ["ADMIN", "ORG_MANAGER"]) && stations.rows?.find((row) => row._id === picked)?.isActive ? (
+          {role === "ORG_MANAGER" && stations.rows?.find((row) => row._id === picked)?.isActive ? (
             <View style={{ gap: 8 }}>
               <TextField label="Email hoặc điện thoại của trưởng trạm có sẵn" value={identifier} onChangeText={setIdentifier} />
               <Button label="Gán trưởng trạm có sẵn" tone="ghost" onPress={() => void job.run((token) => backend.assignStationManagerByContact(token, picked, identifier.trim()))} />
@@ -491,18 +505,29 @@ export function StationScreen() {
               <TextField label="Điện thoại" value={phone} onChangeText={setPhone} />
               <Button
                 label="Tạo và gán trưởng trạm"
-                onPress={() => void job.run((token) => backend.createStationManager(token, picked, {
-                  email: email.trim(),
-                  username: username.trim(),
-                  password,
-                  fullName: fullName.trim(),
-                  phone: phone.trim(),
-                }))}
+                onPress={() => {
+                  if (!email.trim() || !username.trim() || !password || !fullName.trim()) {
+                    job.fail("Vui lòng nhập đầy đủ email, username, mật khẩu và họ tên trưởng trạm.");
+                    return;
+                  }
+                  if (!/^\d{10}$/.test(phone.trim())) {
+                    job.fail("Số điện thoại trưởng trạm phải gồm đúng 10 chữ số.");
+                    return;
+                  }
+                  void job.run((token) => backend.createStationManager(token, picked, {
+                    email: email.trim(),
+                    username: username.trim(),
+                    password,
+                    fullName: fullName.trim(),
+                    phone: phone.trim(),
+                  }));
+                }}
               />
             </View>
           ) : null}
         </View>
-      {can(role, ["ADMIN", "ORG_MANAGER"]) ? (
+      ) : null}
+      {role === "ORG_MANAGER" ? (
         <>
           <View style={{ gap: 8 }}>
             <Title>Trạm mới</Title>
@@ -539,8 +564,8 @@ export function StationScreen() {
                 }}
               />
             ) : null}
-            <TextField label="Vĩ độ" value={latitude} onChangeText={setLatitude} />
-            <TextField label="Kinh độ" value={longitude} onChangeText={setLongitude} />
+            <TextField label="Vĩ độ (số thập phân, ví dụ 10.8289)" value={latitude} onChangeText={setLatitude} keyboardType="decimal-pad" />
+            <TextField label="Kinh độ (số thập phân, ví dụ 106.8172)" value={longitude} onChangeText={setLongitude} keyboardType="decimal-pad" />
             {photoUrl ? <Photo uri={photoUrl} height={140} radius={14} /> : null}
             <Button
               label={photoBusy ? "Đang tải ảnh..." : photoUrl ? "Đổi ảnh trạm" : "Tải ảnh trạm"}
@@ -571,36 +596,36 @@ export function StationScreen() {
               label="Tạo trạm"
               onPress={() => {
                 if (!orgId) {
-                  createStationJob.fail("Vui lòng chọn tổ chức sở hữu trạm.");
+                  createStationJob.fail("Vui lòng chọn tổ chức sở hữu trạm ở danh sách phía trên.");
                   return;
                 }
                 if (!name.trim() || !address.trim()) {
-                  createStationJob.fail("Vui lòng nhập đủ tên trạm và địa chỉ.");
+                  createStationJob.fail("Vui lòng nhập đầy đủ Tên trạm và Địa chỉ.");
                   return;
                 }
-                const lat = Number(latitude);
-                const lng = Number(longitude);
-                if (!latitude.trim() || !longitude.trim() || Number.isNaN(lat) || Number.isNaN(lng)) {
-                  createStationJob.fail("Tọa độ phải là số thập phân, ví dụ vĩ độ 10.8289 và kinh độ 106.8172.");
+                const cleanLat = latitude.trim().replace(",", ".");
+                const cleanLng = longitude.trim().replace(",", ".");
+                if (/[°'"]/.test(cleanLat) || /[°'"]/.test(cleanLng)) {
+                  createStationJob.fail("Tọa độ phải nhập dạng số thập phân dùng dấu chấm (ví dụ Vĩ độ: 10.8289, Kinh độ: 106.8172), không nhập độ-phút-giây (° ' \").");
                   return;
                 }
-                if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-                  createStationJob.fail("Vĩ độ phải từ -90 đến 90, kinh độ từ -180 đến 180.");
+                const numLat = Number(cleanLat);
+                const numLng = Number(cleanLng);
+                if ((cleanLat && (Number.isNaN(numLat) || numLat < -90 || numLat > 90)) || (cleanLng && (Number.isNaN(numLng) || numLng < -180 || numLng > 180))) {
+                  createStationJob.fail("Tọa độ không hợp lệ. Vĩ độ phải từ -90 đến 90 (ví dụ 10.8289) và Kinh độ từ -180 đến 180 (ví dụ 106.8172).");
                   return;
                 }
                 void createStationJob.run((token) => backend.createStationForOrganization(token, orgId, {
                   name: name.trim(),
                   address: address.trim(),
-                  latitude: latitude.trim(),
-                  longitude: longitude.trim(),
+                  latitude: cleanLat,
+                  longitude: cleanLng,
                   ...(photoUrl ? { imageUrl: photoUrl } : {}),
-                })).then((ok) => {
-                  if (ok) stations.reload();
-                });
+                })).then((ok) => ok && stations.reload());
               }}
             />
           </View>
-          <Note text={createStationJob.note} />
+          <Note text={createStationJob.note} error={createStationJob.isError} />
         </>
       ) : role === "ADMIN" ? null : <Body muted>Vai trò này không tạo trạm.</Body>}
     </OpsGate>

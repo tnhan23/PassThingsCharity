@@ -35,6 +35,7 @@ export function OrganizationScreen() {
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [note, setNote] = useState("");
+  const [isError, setIsError] = useState(false);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [address, setAddress] = useState("");
@@ -86,10 +87,12 @@ export function OrganizationScreen() {
   async function uploadEvidence() {
     if (!token) return;
     if (evidenceImageUrls.length >= 10) {
+      setIsError(true);
       setNote("Tối đa 10 ảnh minh chứng.");
       return;
     }
     setUploading(true);
+    setIsError(false);
     setNote("");
     try {
       const file = await pickImage();
@@ -100,11 +103,14 @@ export function OrganizationScreen() {
       const nextUrls = (uploaded.imageUrls ?? []).filter((url) => url && !evidenceImageUrls.includes(url));
       if (nextUrls.length > 0) {
         setEvidenceImageUrls((current) => [...current, ...nextUrls].slice(0, 10));
+        setIsError(false);
         setNote(`Đã tải lên ${Math.min(evidenceImageUrls.length + nextUrls.length, 10)} ảnh minh chứng.`);
       } else {
+        setIsError(true);
         setNote("Ảnh này đã được đính kèm hoặc máy chủ không trả đường dẫn.");
       }
     } catch (caught) {
+      setIsError(true);
       setNote(caught instanceof Error ? caught.message : "Không tải được ảnh minh chứng.");
     } finally {
       setUploading(false);
@@ -114,14 +120,32 @@ export function OrganizationScreen() {
   async function submit() {
     if (!token || !user?.id) return;
     if (!name.trim() || !code.trim() || !address.trim()) {
-      setNote("Vui lòng nhập đủ tên tổ chức, mã tổ chức và địa chỉ.");
+      setIsError(true);
+      setNote("Vui lòng nhập đầy đủ Tên tổ chức, Mã tổ chức và Địa chỉ.");
+      return;
+    }
+    if (phone.trim() && !/^\d{10}$/.test(phone.trim())) {
+      setIsError(true);
+      setNote("Số điện thoại tổ chức phải gồm đúng 10 chữ số.");
+      return;
+    }
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setIsError(true);
+      setNote("Email tổ chức không đúng định dạng (ví dụ: lienhe@tochuc.org).");
+      return;
+    }
+    if (idCardNumber.trim() && !/^\d{9}(\d{3})?$/.test(idCardNumber.trim())) {
+      setIsError(true);
+      setNote("Số CCCD/CMND người đại diện phải gồm 9 hoặc 12 chữ số.");
       return;
     }
     if (evidenceImageUrls.length === 0) {
+      setIsError(true);
       setNote("Vui lòng đính kèm ít nhất 1 ảnh minh chứng trước khi gửi hồ sơ.");
       return;
     }
     setBusy(true);
+    setIsError(false);
     setNote("");
     try {
       const data = await backend.createOrganization(token, {
@@ -138,8 +162,10 @@ export function OrganizationScreen() {
       await writeOrgRequest(user.id, data.organization._id);
       setApplication(data.organization);
       setEditing(false);
+      setIsError(false);
       setNote(data.message);
     } catch (caught) {
+      setIsError(true);
       setNote(caught instanceof ApiError ? caught.message : "Không gửi được hồ sơ.");
     } finally {
       setBusy(false);
@@ -259,14 +285,23 @@ export function OrganizationScreen() {
                 : `Đã đính kèm ${evidenceImageUrls.length} ảnh minh chứng.`}
             </Body>
           </View>
+          {note ? (
+            <Text selectable style={{ fontFamily: fonts.medium, fontSize: 14, color: isError ? colors.error : colors.primary }}>
+              {note}
+            </Text>
+          ) : null}
           <Button
             label={busy ? "Đang gửi" : "Gửi hồ sơ"}
-            disabled={busy || uploading || !name.trim() || !code.trim() || !address.trim() || evidenceImageUrls.length === 0}
+            disabled={busy || uploading}
             onPress={() => void submit()}
           />
         </Card>
       ) : null}
-      {note ? <Body>{note}</Body> : null}
+      {!showForm && note ? (
+        <Text selectable style={{ fontFamily: fonts.medium, fontSize: 14, color: isError ? colors.error : colors.primary }}>
+          {note}
+        </Text>
+      ) : null}
     </Screen>
   );
 }
