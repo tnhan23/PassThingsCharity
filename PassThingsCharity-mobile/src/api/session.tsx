@@ -17,6 +17,7 @@ type SessionValue = {
   user: SessionUser | null;
   login: (username: string, password: string) => Promise<void>;
   register: (input: RegisterInput) => Promise<void>;
+  open: (data: { token: string; user: Parameters<typeof asUser>[0] }) => Promise<void>;
   logout: () => Promise<void>;
   patchUser: (partial: Partial<SessionUser>) => void;
 };
@@ -98,6 +99,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       ready,
       token,
       user,
+      async open(data) {
+        const nextUser = await userWithRole(data.token, asUser(data.user));
+        setToken(data.token);
+        setUser(nextUser);
+        await writeSession({ token: data.token, user: nextUser });
+      },
       async login(username, password) {
         const data = await backend.login(username, password);
         const nextUser = await userWithRole(data.token, asUser(data.user));
