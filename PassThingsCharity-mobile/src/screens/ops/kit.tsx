@@ -164,9 +164,22 @@ export function formatServerMessage(raw: string) {
   if (trimmed === "You cannot manage schedules for this station.") {
     return "Tài khoản này không có quyền quản lý lịch công việc của trạm này.";
   }
-  if (trimmed === "Station not found.") return "Không tìm thấy trạm.";
-  if (trimmed === "Cannot edit this campaign.") return "Bạn không có quyền chỉnh sửa chiến dịch này.";
+  if (trimmed === "Station not found.") {
+    return "Không tìm thấy trạm.";
+  }
+  if (trimmed === "Cannot edit this campaign.") {
+    return "Bạn không có quyền chỉnh sửa chiến dịch này.";
+  }
   return trimmed;
+}
+
+export function isErrorText(text: string) {
+  if (!text) return false;
+  if (/không|lỗi|chưa|từ chối|thiếu|sai|bắt buộc|hợp lệ|tối thiểu|ít nhất|phải|trùng|quá hạn|hết hạn|vui lòng|cần|chỉ có thể|khóa|hủy|đã có lịch|đã thuộc|đã được sử dụng|đã được gán|đã gửi đơn|đã ứng tuyển|đã đủ|đã kết thúc|đã đóng|only|cannot|invalid|required|must|provide|not found|failed|error/i.test(text)) {
+    return true;
+  }
+  if (/^(đã |có \d+)/i.test(text.trim()) || /thành công/i.test(text)) return false;
+  return false;
 }
 
 export function useJob() {
@@ -212,7 +225,7 @@ export function useJob() {
 export function Note({ text, error }: { text: string; error?: boolean }) {
   if (!text) return null;
   const display = formatServerMessage(text);
-  const isErr = error ?? /không|lỗi|chưa|từ chối|thiếu|sai|bắt buộc|hợp lệ|vui lòng/i.test(display);
+  const isErr = error ?? isErrorText(display);
   return (
     <Card
       style={{

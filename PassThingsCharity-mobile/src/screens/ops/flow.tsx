@@ -361,7 +361,7 @@ export function TransferWork() {
           label={selectedItemsCount > 0 ? `Tạo lệnh (${selectedItemsCount} món)` : "Tạo lệnh"}
           onPress={() => {
             if (!campaignId || !fromId || !toId) {
-              job.fail("Vui lòng chọn đầy đủ chiến dịch, trạm đi và trạm đến.");
+              job.fail("Vui lòng chọn đầy đủ Chiến dịch, Trạm đi và Trạm đến.");
               return;
             }
             const items = stock.flatMap((row) => {
@@ -371,7 +371,7 @@ export function TransferWork() {
               return [{ itemTypeId: id, quantity, unit: row.unit }];
             });
             if (items.length === 0) {
-              job.fail("Vui lòng nhập số lượng lớn hơn 0 cho ít nhất một món cần gửi.");
+              job.fail("Vui lòng nhập số lượng lớn hơn 0 cho ít nhất một món đồ cần gửi.");
               return;
             }
             void job.run((token) => backend.createTransfer(token, {
@@ -933,7 +933,7 @@ export function CrewWork() {
             onPress={() => {
               if (startDateError || endDateError || neededError) return;
               if (!stationId) {
-                createTaskJob.fail("Vui lòng chọn trạm cho công việc.");
+                createTaskJob.fail("Vui lòng chọn trạm cho công việc tình nguyện.");
                 return;
               }
               if (!title.trim()) {
@@ -941,7 +941,7 @@ export function CrewWork() {
                 return;
               }
               if (!startDate || !startTime || !endDate || !endTime) {
-                createTaskJob.fail("Vui lòng chọn đủ ngày và giờ bắt đầu, ngày và giờ kết thúc.");
+                createTaskJob.fail("Vui lòng chọn đầy đủ cả Ngày và Giờ bắt đầu, Ngày và Giờ kết thúc.");
                 return;
               }
               const payload = {
@@ -968,7 +968,7 @@ export function CrewWork() {
               });
             }}
           />
-          <Note text={createTaskJob.note} />
+          <Note text={createTaskJob.note} error={createTaskJob.isError} />
         </Fold>
       ) : null}
       <Title>Đơn tham gia chiến dịch</Title>
