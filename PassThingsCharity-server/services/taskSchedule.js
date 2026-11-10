@@ -5,7 +5,6 @@ const Application = require('../models/taskApplication');
 const User = require('../models/user');
 const Station = require('../models/station');
 const StationStaff = require('../models/stationstaff');
-const { canEdit } = require('../utils/resourceImageAccess');
 
 const fail = (status, message) => { throw Object.assign(new Error(message), { status }); };
 
@@ -36,7 +35,8 @@ async function withSlots(tasks, session = null) {
 async function requireStationOperator(stationId, user) {
   const station = await Station.findById(stationId);
   if (!station) fail(404, 'Station not found.');
-  if (await canEdit('stations', station, user)) return station;
+  if (user.role?.name === 'ADMIN') return station;
+  if (user.role?.name === 'STATION_MANAGER' && station.managerId && String(station.managerId) === String(user._id)) return station;
   if (user.role?.name === 'STAFF' && await StationStaff.exists({ stationId, userId: user._id })) return station;
   fail(403, 'You cannot manage schedules for this station.');
 }
