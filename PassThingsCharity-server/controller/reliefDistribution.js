@@ -34,6 +34,8 @@ async function createDistribution(req, res, next) {
       notes,
       items,
       closeCampaign,
+      imageUrl,
+      images,
     } = req.body || {};
 
     if (!mongoose.isValidObjectId(campaignId)) {
@@ -121,6 +123,8 @@ async function createDistribution(req, res, next) {
       completedAt: completionDate(finalStatus, req.body.completedAt),
       status: finalStatus,
       notes: typeof notes === 'string' ? notes.trim() : '',
+      imageUrl: typeof imageUrl === 'string' && imageUrl.trim() ? imageUrl.trim() : (Array.isArray(images) && typeof images[0] === 'string' ? images[0].trim() : null),
+      images: Array.isArray(images) ? images.filter(x => typeof x === 'string' && x.trim()) : (typeof imageUrl === 'string' && imageUrl.trim() ? [imageUrl.trim()] : []),
     });
 
     const savedItems = [];
