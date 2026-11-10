@@ -227,7 +227,10 @@ export function useJob() {
 
 export function Note({ text, error }: { text: string; error?: boolean }) {
   if (!text) return null;
-  const display = formatServerMessage(text);
+  const trimmed = text.trim();
+  if (!trimmed || trimmed.startsWith("{") || trimmed.startsWith("[")) return null;
+  const display = formatServerMessage(trimmed);
+  if (!display) return null;
   const isErr = error ?? isErrorText(display);
   return (
     <Card
@@ -254,11 +257,29 @@ export function Note({ text, error }: { text: string; error?: boolean }) {
   );
 }
 
-export function Fold({ title, children }: { title: string; children: ReactNode }) {
-  const [open, setOpen] = useState(false);
+export function Fold({
+  title,
+  children,
+  open: controlledOpen,
+  onToggle,
+}: {
+  title: string;
+  children: ReactNode;
+  open?: boolean;
+  onToggle?: (open: boolean) => void;
+}) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const toggle = () => {
+    if (onToggle) {
+      onToggle(!open);
+    } else {
+      setInternalOpen(!open);
+    }
+  };
   return (
     <Card style={open ? { borderColor: colors.primary, borderWidth: 1.5 } : undefined}>
-      <Tap onPress={() => setOpen((value) => !value)} accessibilityLabel={title}>
+      <Tap onPress={toggle} accessibilityLabel={title}>
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 38, gap: 10 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
             <Icon name={open ? "remove-circle-outline" : "add-circle-outline"} size={20} color={colors.primary} />

@@ -3,7 +3,7 @@ module.exports = {
     get: {
       tags: ['Stations'],
       summary: 'Lấy mã QR điểm danh / xác nhận tại trạm',
-      description: 'Tạo mã QR có chữ ký (PTQR:...) và mã tĩnh (STATION:<id>) cùng tọa độ trạm và bán kính cho phép đứng gần trạm (mặc định 0.5 km).',
+      description: 'Tạo mã QR có chữ ký (PTQR:...) và mã tĩnh (STATION:<id>) cùng tọa độ trạm và bán kính cho phép đứng gần trạm (mặc định 50m / 0.05 km).',
       parameters: [
         { name: 'id', in: 'path', required: true, schema: { type: 'string' }, description: 'ID của trạm' },
       ],
@@ -16,9 +16,11 @@ module.exports = {
   '/stations/{id}/verify-proximity': {
     post: {
       tags: ['Stations'],
-      summary: 'Kiểm tra người dùng có đang đứng gần trạm trong bán kính cho phép hay không (kèm kiểm tra QR tùy chọn)',
+      summary: 'Kiểm tra vị trí GPS của người dùng có đang đứng gần trạm trong bán kính 50m để mở nút check-in',
+      description: 'Hỗ trợ xác thực vị trí đứng gần trạm trong bán kính tối đa 50m. Thêm query ?dryRun=true để kiểm tra trạng thái canCheckIn mà không ném lỗi 403.',
       parameters: [
         { name: 'id', in: 'path', required: true, schema: { type: 'string' }, description: 'ID của trạm' },
+        { name: 'dryRun', in: 'query', required: false, schema: { type: 'boolean' }, description: 'Nếu true, trả về data.canCheckIn: true/false thay vì trả lỗi 403 khi đứng ngoài 50m' },
       ],
       requestBody: {
         required: true,
@@ -28,8 +30,9 @@ module.exports = {
               type: 'object',
               required: ['latitude', 'longitude'],
               properties: {
-                latitude: { type: 'number', example: 10.7769 },
-                longitude: { type: 'number', example: 106.7009 },
+                latitude: { type: 'number', example: 10.7769, description: 'Vĩ độ GPS của người dùng' },
+                longitude: { type: 'number', example: 106.7009, description: 'Kinh độ GPS của người dùng' },
+                dryRun: { type: 'boolean', description: 'Kiểm tra trước điều kiện mở nút check-in' },
                 qrCode: { type: 'string', description: 'Mã QR quét tại trạm (tùy chọn)' },
               },
             },
@@ -37,9 +40,9 @@ module.exports = {
         },
       },
       responses: {
-        200: { description: 'Đứng trong phạm vi cho phép của trạm' },
-        400: { description: 'Thiếu hoặc sai tọa độ GPS / mã QR' },
-        403: { description: 'Đứng quá xa trạm hoặc mã QR không thuộc trạm này' },
+        200: { description: 'Đứng trong phạm vi 50m cho phép của trạm hoặc kết quả dryRun' },
+        400: { description: 'Thiếu hoặc sai tọa độ GPS' },
+        403: { description: 'Đứng ngoài bán kính 50m của trạm' },
       },
     },
   },

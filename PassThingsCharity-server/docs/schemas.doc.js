@@ -468,18 +468,24 @@ module.exports = {
   },
   TaskCheckInRequest: {
     type: 'object',
-    required: ['assignmentId'],
+    required: ['assignmentId', 'latitude', 'longitude'],
+    description: 'Check-in công việc tình nguyện / nhiệm vụ trạm. Yêu cầu tọa độ GPS trong bán kính 50m quanh trạm để mở quyền check-in. Không bắt buộc mã QR.',
     properties: {
       assignmentId: { type: 'string', example: '6523456789abcdef00000911' },
+      latitude: { type: 'number', example: 10.7769, description: 'Vĩ độ GPS của người làm' },
+      longitude: { type: 'number', example: 106.7009, description: 'Kinh độ GPS của người làm' },
+      qrCode: { type: 'string', description: 'Mã QR (tùy chọn, không bắt buộc)' },
     },
   },
   TaskCheckOutRequest: {
     type: 'object',
     required: ['assignmentId'],
-    description: 'Thời lượng do server tự tính từ check-in đến check-out, không nhận số giờ từ client. RewardPoints của task được cộng một lần khi người dùng hoàn thành.',
+    description: 'Thời lượng do server tự tính từ check-in đến check-out, không nhận số giờ từ client. Đối với Tình nguyện viên, hệ thống tự động cộng điểm thưởng Gamification một lần khi hoàn thành. Đối với Nhân viên, hệ thống ghi nhận hoàn thành ca trực / thời gian làm việc để tính công mà không cộng điểm thưởng cá nhân.',
     properties: {
       assignmentId: { type: 'string', example: '6523456789abcdef00000911' },
       completionNote: { type: 'string', example: 'Đã hoàn tất phân loại 20 thùng quần áo' },
+      latitude: { type: 'number', example: 10.7769, description: 'Vĩ độ GPS khi check-out (tùy chọn)' },
+      longitude: { type: 'number', example: 106.7009, description: 'Kinh độ GPS khi check-out (tùy chọn)' },
     },
   },
   TaskAbsenceRequest: {
