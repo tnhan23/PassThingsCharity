@@ -4,9 +4,10 @@ import { createElement, useCallback, useEffect, useRef, useState, type ChangeEve
 import { Platform, ScrollView, Text, View } from "react-native";
 import * as Location from "expo-location";
 import { backend } from "@/api/backend";
-import { donorLabel } from "@/api/labels";
+import { donorLabel, formatDay } from "@/api/labels";
 import { ApiError } from "@/api/client";
 import { pickImage } from "@/api/images";
+import { Field } from "@/components/form";
 import { Body, Button, Card, Photo, Pill, StatRow, Title } from "@/components/ui";
 import { colors, fonts } from "@/theme";
 import { can, Fold, nextCampaignStatuses, Note, OpsGate, PickList, RoleNote, TextField, Units, useJob, useRole, useRows, type Row } from "@/screens/ops/kit";
@@ -263,9 +264,8 @@ export function StationScreen() {
   const createStationJob = useJob();
   const hasFocused = useRef(false);
   const [picked, setPicked] = useState("");
-  const [stationFilter, setStationFilter] = useState<"ALL" | "PENDING" | "APPROVED">(
-    role === "ADMIN" ? "PENDING" : "ALL",
-  );
+  const [stationFilter, setStationFilter] = useState<"ALL" | "PENDING" | "APPROVED">("ALL");
+  const [stationPage, setStationPage] = useState(0);
   const [editName, setEditName] = useState("");
   const [editAddress, setEditAddress] = useState("");
   const [editLatitude, setEditLatitude] = useState("");
@@ -296,6 +296,10 @@ export function StationScreen() {
   const visibleStations = stations.rows?.filter((station) => (
     stationFilter === "ALL" || (stationFilter === "APPROVED" ? station.isActive : !station.isActive)
   )) ?? null;
+  const stationRows = can(role, ["ADMIN", "ORG_MANAGER"]) ? visibleStations : stations.rows;
+  const stationPageCount = Math.ceil((stationRows?.length ?? 0) / 5);
+  const currentStationPage = Math.min(stationPage, Math.max(0, stationPageCount - 1));
+  const pagedStations = stationRows?.slice(currentStationPage * 5, currentStationPage * 5 + 5) ?? null;
 
   useFocusEffect(useCallback(() => {
     if (role !== "ADMIN") return;
@@ -387,13 +391,13 @@ export function StationScreen() {
       ) : null}
       {can(role, ["ADMIN", "ORG_MANAGER"]) ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-          <Pill label={`Tất cả (${stations.rows?.length ?? 0})`} active={stationFilter === "ALL"} onPress={() => { setStationFilter("ALL"); setPicked(""); }} />
-          <Pill label={`${role === "ADMIN" ? "Đã duyệt" : "Đang mở"} (${stations.rows?.filter((row) => row.isActive).length ?? 0})`} active={stationFilter === "APPROVED"} onPress={() => { setStationFilter("APPROVED"); setPicked(""); }} />
-          <Pill label={`${role === "ADMIN" ? "Chờ duyệt" : "Chờ kích hoạt"} (${stations.rows?.filter((row) => !row.isActive).length ?? 0})`} active={stationFilter === "PENDING"} onPress={() => { setStationFilter("PENDING"); setPicked(""); }} />
+          <Pill label={`Tất cả (${stations.rows?.length ?? 0})`} active={stationFilter === "ALL"} onPress={() => { setStationFilter("ALL"); setStationPage(0); setPicked(""); }} />
+          <Pill label={`${role === "ADMIN" ? "Đã duyệt" : "Đang mở"} (${stations.rows?.filter((row) => row.isActive).length ?? 0})`} active={stationFilter === "APPROVED"} onPress={() => { setStationFilter("APPROVED"); setStationPage(0); setPicked(""); }} />
+          <Pill label={`${role === "ADMIN" ? "Chờ duyệt" : "Chờ kích hoạt"} (${stations.rows?.filter((row) => !row.isActive).length ?? 0})`} active={stationFilter === "PENDING"} onPress={() => { setStationFilter("PENDING"); setStationPage(0); setPicked(""); }} />
         </ScrollView>
       ) : null}
       <PickList
-        rows={can(role, ["ADMIN", "ORG_MANAGER"]) ? visibleStations : stations.rows}
+        rows={pagedStations}
         selected={picked}
         onPick={setPicked}
         detail={(row) => `${row.isActive ? "Đang mở" : "Chưa kích hoạt"} · ${row.address || ""}`}
@@ -435,6 +439,33 @@ export function StationScreen() {
           );
         }}
       />
+      {stationPageCount > 1 ? (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Button
+            label="Trước"
+            tone="ghost"
+            icon="chevron-left"
+            disabled={currentStationPage === 0}
+            onPress={() => {
+              setStationPage(Math.max(0, currentStationPage - 1));
+              setPicked("");
+            }}
+          />
+          <Text style={{ flex: 1, textAlign: "center", fontFamily: fonts.medium, fontSize: 13, color: colors.muted }}>
+            {`Trang ${currentStationPage + 1} / ${stationPageCount} · ${stationRows?.length ?? 0} trạm`}
+          </Text>
+          <Button
+            label="Tiếp"
+            tone="ghost"
+            icon="chevron-right"
+            disabled={currentStationPage >= stationPageCount - 1}
+            onPress={() => {
+              setStationPage(Math.min(stationPageCount - 1, currentStationPage + 1));
+              setPicked("");
+            }}
+          />
+        </View>
+      ) : null}
       {picked ? (
         <View style={{ gap: 8 }}>
           {stations.rows?.find((row) => row._id === picked)?.imageUrl ? <Photo uri={stations.rows.find((row) => row._id === picked)?.imageUrl || ""} height={160} radius={14} /> : <Body muted>Trạm chưa có ảnh.</Body>}
@@ -678,10 +709,22 @@ export function CatalogScreen() {
   const [itemId, setItemId] = useState("");
   const [categoryName, setCategoryName] = useState("");
   const [editCategoryName, setEditCategoryName] = useState("");
+  const [categoryDescription, setCategoryDescription] = useState("");
+  const [editCategoryDescription, setEditCategoryDescription] = useState("");
   const [itemName, setItemName] = useState("");
+  const [itemDescription, setItemDescription] = useState("");
   const [editItemName, setEditItemName] = useState("");
+  const [editItemDescription, setEditItemDescription] = useState("");
   const [editUnit, setEditUnit] = useState("KG");
   const [createUnit, setCreateUnit] = useState("KG");
+  const [categoryPage, setCategoryPage] = useState(0);
+  const [itemPage, setItemPage] = useState(0);
+  const categoryPageCount = Math.ceil((categories.rows?.length ?? 0) / 5);
+  const itemPageCount = Math.ceil((items.rows?.length ?? 0) / 5);
+  const currentCategoryPage = Math.min(categoryPage, Math.max(0, categoryPageCount - 1));
+  const currentItemPage = Math.min(itemPage, Math.max(0, itemPageCount - 1));
+  const visibleCategories = categories.rows?.slice(currentCategoryPage * 5, currentCategoryPage * 5 + 5) ?? null;
+  const visibleItems = items.rows?.slice(currentItemPage * 5, currentItemPage * 5 + 5) ?? null;
 
   return (
     <OpsGate>
@@ -692,63 +735,181 @@ export function CatalogScreen() {
         <StatRow
           items={[
             { label: "Nhóm đồ", value: categories.rows.length, unit: "nhóm", tone: "primary" },
-            { label: "Loại vật phẩm", value: items.rows.length, unit: "loại", tone: "coral" },
+            { label: "Loại vật phẩm", value: items.rows.length, unit: "loại", tone: "primary" },
           ]}
         />
       ) : null}
       <Body>Nhóm đồ</Body>
       <PickList
-        rows={categories.rows}
+        rows={visibleCategories}
         selected={categoryId}
         onPick={(id) => {
           setCategoryId(id);
-          setEditCategoryName(categories.rows?.find((row) => row._id === id)?.name || "");
+          const row = categories.rows?.find((category) => category._id === id);
+          setEditCategoryName(row?.name || "");
+          setEditCategoryDescription(row?.description || "");
         }}
-        detail={() => "Nhóm"}
+        detail={(row) => row.description || "Nhóm vật phẩm"}
         panel={(row) => editor ? (
           <>
             <TextField label="Tên nhóm" value={editCategoryName} onChangeText={setEditCategoryName} />
-            <Button label="Lưu tên nhóm" onPress={() => void job.run((token) => backend.updateCategory(token, row._id, { name: editCategoryName.trim() })).then((ok) => ok && categories.reload())} />
-            <Button label="Xóa nhóm" tone="danger" onPress={() => void job.run((token) => backend.deleteCategory(token, row._id)).then((ok) => ok && categories.reload())} />
+            <Field label="Mô tả nhóm đồ" value={editCategoryDescription} onChangeText={setEditCategoryDescription} multiline />
+            <Button
+              label="Lưu nhóm đồ"
+              disabled={!editCategoryName.trim() || job.busy}
+              onPress={() => void job.run((token) => backend.updateCategory(token, row._id, {
+                name: editCategoryName.trim(),
+                description: editCategoryDescription.trim(),
+              })).then((ok) => ok && categories.reload())}
+            />
+            <Button
+              label="Xóa nhóm"
+              tone="danger"
+              onPress={() => void job.run((token) => backend.deleteCategory(token, row._id)).then((ok) => {
+                if (!ok) return;
+                if (categoryId === row._id) setCategoryId("");
+                categories.reload();
+                items.reload();
+              })}
+            />
           </>
         ) : null}
       />
+      {categoryPageCount > 1 ? (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Button
+            label="Trước"
+            tone="ghost"
+            icon="chevron-left"
+            disabled={currentCategoryPage === 0}
+            onPress={() => setCategoryPage(Math.max(0, currentCategoryPage - 1))}
+          />
+          <Text style={{ flex: 1, textAlign: "center", fontFamily: fonts.medium, fontSize: 13, color: colors.muted }}>
+            {`Trang ${currentCategoryPage + 1} / ${categoryPageCount} · ${categories.rows?.length ?? 0} nhóm`}
+          </Text>
+          <Button
+            label="Tiếp"
+            tone="ghost"
+            icon="chevron-right"
+            disabled={currentCategoryPage >= categoryPageCount - 1}
+            onPress={() => setCategoryPage(Math.min(categoryPageCount - 1, currentCategoryPage + 1))}
+          />
+        </View>
+      ) : null}
       {editor ? (
-        <Fold title="Nhóm mới">
+        <Fold title="Tạo nhóm đồ">
           <TextField label="Tên nhóm mới" value={categoryName} onChangeText={setCategoryName} />
-          <Button label="Thêm nhóm" onPress={() => void job.run((token) => backend.createCategory(token, { name: categoryName.trim() })).then((ok) => ok && categories.reload())} />
+          <Field label="Mô tả nhóm đồ" value={categoryDescription} onChangeText={setCategoryDescription} multiline />
+          <Button
+            label="Thêm nhóm"
+            disabled={!categoryName.trim() || job.busy}
+            onPress={() => void job.run((token) => backend.createCategory(token, {
+              name: categoryName.trim(),
+              description: categoryDescription.trim(),
+            })).then((ok) => {
+              if (!ok) return;
+              setCategoryName("");
+              setCategoryDescription("");
+              categories.reload();
+            })}
+          />
         </Fold>
-      ) : <Body muted>Vai trò này chỉ xem danh mục.</Body>}
+      ) : null}
       <Body>Loại đồ</Body>
       <PickList
-        rows={items.rows}
+        rows={visibleItems}
         selected={itemId}
         onPick={(id) => {
           setItemId(id);
           const row = items.rows?.find((item) => item._id === id);
           setEditItemName(row?.name || "");
+          setEditItemDescription(row?.description || "");
           setEditUnit(row?.unit || "KG");
         }}
-        detail={(row) => row.unit || ""}
+        detail={(row) => [row.unit, row.description].filter(Boolean).join(" · ")}
         panel={(row) => editor ? (
           <>
             <TextField label="Tên loại đồ" value={editItemName} onChangeText={setEditItemName} />
+            <Field label="Mô tả loại đồ" value={editItemDescription} onChangeText={setEditItemDescription} multiline />
             <Units value={editUnit} onChange={setEditUnit} />
-            <Button label="Lưu loại đồ" onPress={() => void job.run((token) => backend.updateItemType(token, row._id, { name: editItemName.trim(), unit: editUnit })).then((ok) => ok && items.reload())} />
-            <Button label="Xóa loại đồ" tone="danger" onPress={() => void job.run((token) => backend.deleteItemType(token, row._id)).then((ok) => ok && items.reload())} />
+            <Button
+              label="Lưu loại đồ"
+              disabled={!editItemName.trim() || job.busy}
+              onPress={() => void job.run((token) => backend.updateItemType(token, row._id, {
+                name: editItemName.trim(),
+                description: editItemDescription.trim(),
+                unit: editUnit,
+              })).then((ok) => ok && items.reload())}
+            />
+            <Button
+              label="Xóa loại đồ"
+              tone="danger"
+              disabled={job.busy}
+              onPress={() => void job.run((token) => backend.deleteItemType(token, row._id)).then((ok) => {
+                if (!ok) return;
+                if (itemId === row._id) setItemId("");
+                items.reload();
+              })}
+            />
           </>
         ) : null}
       />
+      {itemPageCount > 1 ? (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Button
+            label="Trước"
+            tone="ghost"
+            icon="chevron-left"
+            disabled={currentItemPage === 0}
+            onPress={() => {
+              setItemPage(Math.max(0, currentItemPage - 1));
+              setItemId("");
+            }}
+          />
+          <Text style={{ flex: 1, textAlign: "center", fontFamily: fonts.medium, fontSize: 13, color: colors.muted }}>
+            {`Trang ${currentItemPage + 1} / ${itemPageCount} · ${items.rows?.length ?? 0} loại`}
+          </Text>
+          <Button
+            label="Tiếp"
+            tone="ghost"
+            icon="chevron-right"
+            disabled={currentItemPage >= itemPageCount - 1}
+            onPress={() => {
+              setItemPage(Math.min(itemPageCount - 1, currentItemPage + 1));
+              setItemId("");
+            }}
+          />
+        </View>
+      ) : null}
       {editor ? (
-        <Fold title="Loại đồ mới">
-          <TextField label="Tên loại đồ" value={itemName} onChangeText={setItemName} />
+        <Fold title="Tạo loại đồ">
+          <TextField label="Tên loại đồ mới" value={itemName} onChangeText={setItemName} />
+          <Field label="Mô tả loại đồ" value={itemDescription} onChangeText={setItemDescription} multiline />
+          <Body muted>Chọn nhóm đồ</Body>
+          <PickList
+            rows={categories.rows}
+            selected={categoryId}
+            onPick={setCategoryId}
+            detail={() => "Nhóm đồ"}
+          />
           <Units value={createUnit} onChange={setCreateUnit} />
           <Button
-            label="Thêm vào nhóm đang chọn"
-            onPress={() => void job.run((token) => backend.createItemType(token, { categoryId, name: itemName.trim(), unit: createUnit })).then((ok) => ok && items.reload())}
+            label="Thêm loại đồ"
+            disabled={!itemName.trim() || !categoryId || job.busy}
+            onPress={() => void job.run((token) => backend.createItemType(token, {
+              categoryId,
+              name: itemName.trim(),
+              description: itemDescription.trim(),
+              unit: createUnit,
+            })).then((ok) => {
+              if (!ok) return;
+              setItemName("");
+              setItemDescription("");
+              items.reload();
+            })}
           />
         </Fold>
-      ) : null}
+      ) : <Body muted>Vai trò này chỉ xem danh mục.</Body>}
     </OpsGate>
   );
 }
@@ -885,27 +1046,60 @@ export function CampaignWork() {
         rows={visibleCampaigns}
         selected={picked}
         onPick={setPicked}
-        detail={(row) => donorLabel({ status: row.status || "" })}
-        panel={(row) => editor ? (
+        selectedBackgroundColor={colors.primarySoft}
+        detail={(row) => [
+          donorLabel({ status: row.status || "" }),
+          row.startDate && row.endDate ? `${formatDay(row.startDate)} – ${formatDay(row.endDate)}` : "",
+        ].filter(Boolean).join(" · ")}
+        panel={(row) => (
           <>
-            {nextCampaignStatuses(row.status || "DRAFT").map((status) => (
-              <Button key={status} label={status === "CANCELLED" ? "Hủy chiến dịch" : row.status === "DRAFT" && status === "ACTIVE" ? "Duyệt" : donorLabel({ status })} tone={status === "CANCELLED" ? "danger" : "ghost"} onPress={() => void job.run((token) => backend.updateCampaignStatus(token, row._id, status)).then((ok) => {
-                if (!ok) return;
-                campaigns.reload();
-                if (campaignFilter === "DRAFT") draftCampaigns.reload();
-              })} />
-            ))}
-            {nextCampaignStatuses(row.status || "").length === 0 ? <Body muted>Chiến dịch này không còn trạng thái để chuyển.</Body> : null}
-            <PickList rows={items.rows} selected={itemId} onPick={setItemId} detail={(item) => item.unit || ""} />
-            <TextField label="Số mục tiêu" value={quantity} onChangeText={setQuantity} />
-            <Button label="Gắn loại đồ" onPress={() => void job.run((token) => backend.addCampaignItem(token, row._id, { itemTypeId: itemId, targetQuantity: Number(quantity), priority: "MEDIUM" }))} />
-            {itemId ? <Button label="Gỡ loại đồ đang chọn" tone="danger" onPress={() => void job.run((token) => backend.removeCampaignItem(token, row._id, itemId))} /> : null}
-            <PickList rows={stations.rows} selected={stationId} onPick={setStationId} detail={(station) => station.address || ""} />
-            <Button label="Gắn trạm" onPress={() => void job.run((token) => backend.assignCampaignStation(token, row._id, stationId))} />
-            {stationId ? <Button label="Gỡ trạm đang chọn" tone="danger" onPress={() => void job.run((token) => backend.removeCampaignStation(token, row._id, stationId))} /> : null}
-            <Note text={job.note} />
+            <View style={{ gap: 6, padding: 12, borderRadius: 12, backgroundColor: colors.card }}>
+              <Text style={{ fontFamily: fonts.bold, fontSize: 16, color: colors.ink }}>Chi tiết chiến dịch</Text>
+              <Body muted>{`Trạng thái: ${donorLabel({ status: row.status || "" })}`}</Body>
+              {row.startDate ? <Body muted>{`Bắt đầu: ${formatDay(row.startDate)}`}</Body> : null}
+              {row.endDate ? <Body muted>{`Kết thúc: ${formatDay(row.endDate)}`}</Body> : null}
+              {row.organizationId && typeof row.organizationId === "object" && row.organizationId.name
+                ? <Body muted>{`Tổ chức: ${row.organizationId.name}`}</Body>
+                : null}
+              {row.description ? <Body>{row.description}</Body> : null}
+              {row.items?.length ? (
+                <View style={{ gap: 5, paddingTop: 6, borderTopWidth: 1, borderTopColor: colors.hairline }}>
+                  <Text style={{ fontFamily: fonts.semibold, fontSize: 13, color: colors.ink }}>Nhu cầu vật phẩm</Text>
+                  {row.items.map((campaignItem, index) => {
+                    const itemType = campaignItem.itemTypeId;
+                    const itemLabel = itemType && typeof itemType === "object" ? itemType.name || "Vật phẩm" : "Vật phẩm";
+                    const unit = itemType && typeof itemType === "object" ? itemType.unit || "đơn vị" : "đơn vị";
+                    return (
+                      <Body key={campaignItem._id || `${itemLabel}-${index}`} muted>
+                        {`${itemLabel}: ${campaignItem.currentQuantity ?? 0} / ${campaignItem.targetQuantity ?? 0} ${unit}`}
+                      </Body>
+                    );
+                  })}
+                </View>
+              ) : <Body muted>Chưa có vật phẩm được gắn.</Body>}
+            </View>
+            {editor ? (
+              <>
+                {nextCampaignStatuses(row.status || "DRAFT").map((status) => (
+                  <Button key={status} label={status === "CANCELLED" ? "Hủy chiến dịch" : row.status === "DRAFT" && status === "ACTIVE" ? "Duyệt" : donorLabel({ status })} tone={status === "CANCELLED" ? "danger" : "ghost"} onPress={() => void job.run((token) => backend.updateCampaignStatus(token, row._id, status)).then((ok) => {
+                    if (!ok) return;
+                    campaigns.reload();
+                    if (campaignFilter === "DRAFT") draftCampaigns.reload();
+                  })} />
+                ))}
+                {nextCampaignStatuses(row.status || "").length === 0 ? <Body muted>Chiến dịch này không còn trạng thái để chuyển.</Body> : null}
+                <PickList rows={items.rows} selected={itemId} onPick={setItemId} detail={(item) => item.unit || ""} />
+                <TextField label="Số mục tiêu" value={quantity} onChangeText={setQuantity} />
+                <Button label="Gắn loại đồ" onPress={() => void job.run((token) => backend.addCampaignItem(token, row._id, { itemTypeId: itemId, targetQuantity: Number(quantity), priority: "MEDIUM" }))} />
+                {itemId ? <Button label="Gỡ loại đồ đang chọn" tone="danger" onPress={() => void job.run((token) => backend.removeCampaignItem(token, row._id, itemId))} /> : null}
+                <PickList rows={stations.rows} selected={stationId} onPick={setStationId} detail={(station) => station.address || ""} />
+                <Button label="Gắn trạm" onPress={() => void job.run((token) => backend.assignCampaignStation(token, row._id, stationId))} />
+                {stationId ? <Button label="Gỡ trạm đang chọn" tone="danger" onPress={() => void job.run((token) => backend.removeCampaignStation(token, row._id, stationId))} /> : null}
+                <Note text={job.note} />
+              </>
+            ) : null}
           </>
-        ) : null}
+        )}
       />
       {editor ? <Title>Chiến dịch mới</Title> : null}
       {editor ? <Body muted>Thời lượng từ 5 đến 7 ngày.</Body> : null}

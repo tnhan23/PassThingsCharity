@@ -51,6 +51,7 @@ export function AccountsScreen() {
   const [bucket, setBucket] = useState<"ALL" | "active" | "banned">("ALL");
   const [role, setRole] = useState<string>("ALL");
   const [accountSearch, setAccountSearch] = useState("");
+  const [page, setPage] = useState(0);
   const assignedManagerIds = new Set(
     (stations.rows ?? []).flatMap((station) => {
       const managerId = typeof station.managerId === "string" ? station.managerId : station.managerId?._id;
@@ -80,6 +81,9 @@ export function AccountsScreen() {
       );
     },
   );
+  const pageCount = Math.ceil(shown.length / 5);
+  const currentPage = Math.min(page, Math.max(0, pageCount - 1));
+  const pageAccounts = shown.slice(currentPage * 5, currentPage * 5 + 5);
 
   return (
     <OpsGate>
@@ -88,23 +92,27 @@ export function AccountsScreen() {
       <Field
         label="Tìm theo email hoặc số điện thoại"
         value={accountSearch}
-        onChangeText={setAccountSearch}
+        onChangeText={(value) => {
+          setAccountSearch(value);
+          setPage(0);
+          setPicked("");
+        }}
         keyboardType="default"
         showSoftInputOnFocus
       />
       <View style={{ flexDirection: "row", gap: 8 }}>
-        <Pill label="Tất cả" active={bucket === "ALL"} onPress={() => setBucket("ALL")} />
-        <Pill label="Đang dùng" active={bucket === "active"} onPress={() => setBucket("active")} />
-        <Pill label="Đã khóa" active={bucket === "banned"} onPress={() => setBucket("banned")} />
+        <Pill label="Tất cả" active={bucket === "ALL"} onPress={() => { setBucket("ALL"); setPage(0); setPicked(""); }} />
+        <Pill label="Đang dùng" active={bucket === "active"} onPress={() => { setBucket("active"); setPage(0); setPicked(""); }} />
+        <Pill label="Đã khóa" active={bucket === "banned"} onPress={() => { setBucket("banned"); setPage(0); setPicked(""); }} />
       </View>
       <View style={styles.roleFilters}>
-        <Pill label="Tất cả vai trò" active={role === "ALL"} onPress={() => setRole("ALL")} />
+        <Pill label="Tất cả vai trò" active={role === "ALL"} onPress={() => { setRole("ALL"); setPage(0); setPicked(""); }} />
         {roleFilters.map((filter) => (
           <Pill
             key={filter.value}
             label={filter.label}
             active={role === filter.value}
-            onPress={() => setRole(filter.value)}
+            onPress={() => { setRole(filter.value); setPage(0); setPicked(""); }}
           />
         ))}
       </View>
@@ -114,7 +122,7 @@ export function AccountsScreen() {
       ) : null}
       {shown.length ? (
         <View style={styles.list}>
-          {shown.map((row) => {
+          {pageAccounts.map((row) => {
             const selected = row._id === picked;
             const self = String(row._id) === String(user?.id || "");
             const locked = row.role === "ADMIN";
@@ -262,6 +270,27 @@ export function AccountsScreen() {
               </View>
             );
           })}
+        </View>
+      ) : null}
+      {pageCount > 1 ? (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Button
+            label="Trước"
+            tone="ghost"
+            icon="chevron-left"
+            disabled={currentPage === 0}
+            onPress={() => { setPage(Math.max(0, currentPage - 1)); setPicked(""); }}
+          />
+          <Text style={{ flex: 1, textAlign: "center", fontFamily: fonts.medium, fontSize: 13, color: colors.muted }}>
+            {`Trang ${currentPage + 1} / ${pageCount} · ${shown.length} tài khoản`}
+          </Text>
+          <Button
+            label="Tiếp"
+            tone="ghost"
+            icon="chevron-right"
+            disabled={currentPage >= pageCount - 1}
+            onPress={() => { setPage(Math.min(pageCount - 1, currentPage + 1)); setPicked(""); }}
+          />
         </View>
       ) : null}
     </OpsGate>

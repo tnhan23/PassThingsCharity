@@ -21,26 +21,43 @@ const urgent = [
 function OpenJobs() {
   const { token } = useSession();
   const [posts, setPosts] = useState<{ _id: string; title?: string; imageUrl?: string | null; rewardPoints?: number; slots?: { remaining?: number }; stationId?: { name?: string; imageUrl?: string | null } | string }[] | null>(null);
+  const [problem, setProblem] = useState("");
+  const [refresh, setRefresh] = useState(0);
 
   useEffect(() => {
     if (!token) {
-      setPosts([]);
       return;
     }
     let cancelled = false;
     backend.listOpenTasks(token)
-      .then((data) => {
-        if (!cancelled) setPosts(data.data ?? []);
+      .then((response) => {
+        if (!cancelled) {
+          setPosts(response.data ?? []);
+          setProblem("");
+        }
       })
-      .catch(() => {
-        if (!cancelled) setPosts([]);
+      .catch((caught) => {
+        if (!cancelled) {
+          setPosts([]);
+          setProblem(caught instanceof ApiError ? caught.message : "Không tải được danh sách việc.");
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, refresh]);
 
-  if (!token) return null;
+  if (!token) {
+    return (
+      <View style={{ gap: 12 }}>
+        <Title>Việc đang tuyển</Title>
+        <Card style={{ borderColor: colors.coralSoft }}>
+          <Body muted>Đăng nhập để xem việc tình nguyện đang tuyển.</Body>
+          <Button label="Đăng nhập để xem việc" tone="coral" onPress={() => router.push("/login")} />
+        </Card>
+      </View>
+    );
+  }
   const shown = (posts ?? []).slice(0, 3);
   return (
     <View style={{ gap: 12 }}>
@@ -54,7 +71,18 @@ function OpenJobs() {
         </View>
         <Icon name="arrow-forward" size={20} color={colors.secondary} />
       </View>
-      {posts === null ? <Body muted>Đang tải tin tuyển.</Body> : null}
+      {posts === null ? (
+        <Card style={{ borderColor: colors.coralSoft }}>
+          <ActivityIndicator color={colors.secondary} />
+          <Body muted>Đang tải tin tuyển.</Body>
+        </Card>
+      ) : null}
+      {problem ? (
+        <Card style={{ borderColor: colors.errorSoft }}>
+          <Body>{problem}</Body>
+          <Button label="Thử tải lại" tone="ghost" onPress={() => setRefresh((value) => value + 1)} />
+        </Card>
+      ) : null}
       {posts && shown.length === 0 ? <Body muted>Hiện chưa có tin tuyển tình nguyện.</Body> : null}
       {shown.map((post) => {
         const station = post.stationId && typeof post.stationId === "object" ? post.stationId : null;

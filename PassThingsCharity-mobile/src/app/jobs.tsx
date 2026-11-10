@@ -84,6 +84,8 @@ export default function JobsPage() {
   const [posts, setPosts] = useState<Post[] | null>(null);
   const [assigned, setAssigned] = useState<MyAssignedItem[]>([]);
   const [applications, setApplications] = useState<MyApplicationItem[]>([]);
+  const [openProblem, setOpenProblem] = useState("");
+  const [personalProblem, setPersonalProblem] = useState("");
   const [busyId, setBusyId] = useState("");
   const [stamp, setStamp] = useState(0);
   const [note, setNote] = useState("");
@@ -92,23 +94,37 @@ export default function JobsPage() {
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
-    Promise.all([
-      backend.listOpenTasks(token),
-      backend.myAssignments(token) as Promise<{ data?: MyAssignedItem[] }>,
-      backend.myTaskApplications(token) as Promise<{ data?: MyApplicationItem[] }>,
-    ])
-      .then(([openData, assignedData, appData]) => {
+    backend.listOpenTasks(token)
+      .then((data) => {
         if (cancelled) return;
-        setPosts(openData.data ?? []);
-        setAssigned(assignedData.data ?? []);
-        setApplications(appData.data ?? []);
+        setPosts(data.data ?? []);
+        setOpenProblem("");
       })
       .catch((caught) => {
-        if (!cancelled) {
-          setPosts([]);
-          setNote(caught instanceof ApiError ? caught.message : "Không tải được danh sách việc.");
-        }
+        if (cancelled) return;
+        setPosts([]);
+        setOpenProblem(caught instanceof ApiError ? caught.message : "Không tải được danh sách việc đang tuyển.");
       });
+    Promise.allSettled([
+      backend.myAssignments(token) as Promise<{ data?: MyAssignedItem[] }>,
+      backend.myTaskApplications(token) as Promise<{ data?: MyApplicationItem[] }>,
+    ]).then(([assignedResult, applicationResult]) => {
+      if (cancelled) return;
+      const failures: string[] = [];
+      if (assignedResult.status === "fulfilled") {
+        setAssigned(assignedResult.value.data ?? []);
+      } else {
+        setAssigned([]);
+        failures.push(assignedResult.reason instanceof ApiError ? assignedResult.reason.message : "Không tải được việc đã giao.");
+      }
+      if (applicationResult.status === "fulfilled") {
+        setApplications(applicationResult.value.data ?? []);
+      } else {
+        setApplications([]);
+        failures.push(applicationResult.reason instanceof ApiError ? applicationResult.reason.message : "Không tải được đơn ứng tuyển.");
+      }
+      setPersonalProblem(failures.join(" "));
+    });
     return () => {
       cancelled = true;
     };
@@ -116,7 +132,7 @@ export default function JobsPage() {
 
   if (!token) {
     return (
-      <Screen tab="profile">
+      <Screen tab="jobs">
         <Title>Việc tại trạm</Title>
         <Body>Đăng nhập để xem tin tuyển và bấm ứng tuyển.</Body>
         <Button label="Đăng nhập" onPress={() => router.push("/login")} />
@@ -147,7 +163,7 @@ export default function JobsPage() {
   }
 
   return (
-    <Screen tab="profile">
+    <Screen tab="jobs">
       <Title>Việc tại trạm</Title>
       <Body muted>Ứng tuyển công việc tình nguyện tại trạm, xem đơn đã được duyệt và điểm danh nhận điểm thưởng.</Body>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
@@ -173,6 +189,13 @@ export default function JobsPage() {
 
       {tab === "open" ? (
         <>
+          {openProblem ? (
+            <Card style={{ borderColor: colors.errorSoft }}>
+              <Body>{openProblem}</Body>
+              <Button label="Thử tải lại" tone="ghost" onPress={() => setStamp((value) => value + 1)} />
+            </Card>
+          ) : null}
+          {!posts && !openProblem ? <Body muted>Đang tải việc đang tuyển.</Body> : null}
           {posts ? (
             <StatRow
               items={[
@@ -182,7 +205,7 @@ export default function JobsPage() {
               ]}
             />
           ) : null}
-          {posts && posts.length === 0 ? <Body muted>Hiện chưa có tin nào đang mở.</Body> : null}
+          {posts && posts.length === 0 && !openProblem ? <Body muted>Hiện chưa có tin nào đang mở.</Body> : null}
           {posts?.map((post) => {
             const remaining = post.slots?.remaining;
             const total = post.slots?.total;
@@ -224,6 +247,7 @@ export default function JobsPage() {
         </>
       ) : (
         <>
+          {personalProblem ? <Body>{personalProblem}</Body> : null}
           <StatRow
             items={[
               { label: "Đã duyệt & giao", value: assigned.length, unit: "việc", tone: "primary" },

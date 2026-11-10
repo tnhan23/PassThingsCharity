@@ -11,7 +11,7 @@ import { useShell } from "@/api/shell";
 import { Body, Button, Icon, Tap, Title } from "@/components/ui";
 import { colors, fonts } from "@/theme";
 
-export type TabKey = "home" | "give" | "stations" | "profile";
+export type TabKey = "home" | "give" | "jobs" | "stations" | "profile";
 
 function tabRoots(role: string | undefined, signedIn: boolean, desk: boolean) {
   return new Set(tabsFor(role, signedIn, desk).map((item) => String(item.href)));
@@ -21,8 +21,10 @@ function resolvedTab(path: string, role: string | undefined, desk: boolean, fall
   const tabs = tabsFor(role, true, desk);
   const hit = tabs.find((item) => path === item.href || (item.href !== "/" && path.startsWith(String(item.href))));
   if (hit) return hit.key;
+  if (desk && path.startsWith("/desk")) return "home";
+  if (path.startsWith("/campaign") || path.startsWith("/contribution")) return "give";
+  if (path.startsWith("/jobs")) return "jobs";
   if (!desk) {
-    if (path.startsWith("/campaign") || path.startsWith("/contribution")) return "give";
     if (path.startsWith("/stations") || path.startsWith("/station")) return "stations";
     if (path.startsWith("/profile") || path.startsWith("/account") || path.startsWith("/settings")) return "profile";
     return path === "/" ? "home" : fallback;
@@ -244,13 +246,15 @@ function Header() {
   );
 }
 
-type TabIcon = "explore" | "dashboard" | "volunteer-activism" | "warehouse" | "account-circle" | "schedule" | "map";
+type TabIcon = "explore" | "dashboard" | "volunteer-activism" | "warehouse" | "account-circle" | "schedule" | "map" | "work";
 
 function tabsFor(role: string | undefined, _signedIn: boolean, desk: boolean): { key: TabKey; label: CopyKey; icon: TabIcon; href: Href }[] {
   const profile: Href = "/profile/full";
   if (!desk) {
     return [
       { key: "home", label: "nav.explore", icon: "explore", href: "/" },
+      { key: "give", label: "nav.give", icon: "volunteer-activism", href: "/campaigns" },
+      { key: "jobs", label: "nav.jobs", icon: "work", href: "/jobs" },
       { key: "profile", label: "nav.profile", icon: "account-circle", href: profile },
     ];
   }
@@ -287,9 +291,11 @@ function TabBar({ active, desk, sheet, onCreate }: { active: TabKey; desk: boole
   }
   return (
     <View style={[styles.tabBar, { paddingBottom: bottom }]}>
-      <TabItem label={t(tabs[0].label)} icon={tabs[0].icon} active={active === "home"} href={tabs[0].href} />
+      <TabItem label={t(tabs[0].label)} icon={tabs[0].icon} active={active === tabs[0].key} href={tabs[0].href} />
+      <TabItem label={t(tabs[1].label)} icon={tabs[1].icon} active={active === tabs[1].key} href={tabs[1].href} />
       <View style={{ width: 64 }} />
-      <TabItem label={t(tabs[1].label)} icon={tabs[1].icon} active={active === "profile"} href={tabs[1].href} />
+      <TabItem label={t(tabs[2].label)} icon={tabs[2].icon} active={active === tabs[2].key} href={tabs[2].href} />
+      <TabItem label={t(tabs[3].label)} icon={tabs[3].icon} active={active === tabs[3].key} href={tabs[3].href} />
       <Tap
         onPress={onCreate}
         style={[styles.plus, sheet ? { backgroundColor: colors.secondary } : null]}

@@ -189,14 +189,14 @@ function CountText({ value, light }: { value: number; light?: boolean }) {
   );
 }
 
-function Figures({ items }: { items: { key: string; value: number; label: string; href: Href }[] }) {
+function Figures({ items, loading }: { items: { key: string; value: number; label: string; href: Href }[]; loading: boolean }) {
   return (
     <View style={{ flexDirection: "row", flexWrap: "wrap", marginHorizontal: -4 }}>
       {items.map((item) => (
         <View key={item.key} style={{ width: "50%", padding: 4 }}>
           <Tap
             onPress={() => router.push(item.href)}
-            accessibilityLabel={`${item.value} ${item.label}`}
+            accessibilityLabel={loading ? `${item.label}, đang tải số liệu` : `${item.value} ${item.label}`}
             style={{
               backgroundColor: colors.primary,
               borderRadius: 16,
@@ -208,7 +208,11 @@ function Figures({ items }: { items: { key: string; value: number; label: string
             }}
           >
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-              <CountText value={item.value} light />
+              {loading ? (
+                <Text style={{ fontFamily: fonts.bold, fontSize: 30, lineHeight: 34, color: colors.primarySoft }}>—</Text>
+              ) : (
+                <CountText value={item.value} light />
+              )}
               <Icon name="chevron-right" size={18} color={colors.primarySoft} />
             </View>
             <Text style={{ fontFamily: fonts.medium, fontSize: 13, lineHeight: 18, color: colors.primarySoft }}>{item.label}</Text>
@@ -390,7 +394,9 @@ export function OpsHome() {
   const [moves, setMoves] = useState<TransferRow[]>([]);
   const [stations, setStations] = useState<StationRow[]>([]);
   const [people, setPeople] = useState<{ role?: string }[]>([]);
-  const visible = sections.filter((section) => can(role, [...deskAccess[section.key]]));
+  const visible = sections.filter((section) => (
+    (section.key !== "rewards" || role !== "ADMIN") && can(role, [...deskAccess[section.key]])
+  ));
   const seesOrgs = can(role, [...deskAccess.orgs]);
   const seesIntake = can(role, [...deskAccess.intake]);
   const seesTransfers = can(role, [...deskAccess.transfers]);
@@ -473,7 +479,7 @@ export function OpsHome() {
       <Title>{t("dash.title")}</Title>
       {loading ? <Body muted>{t("dash.loading")}</Body> : null}
       {error ? <Body>{error}</Body> : null}
-      {!loading && figures.length ? <Figures items={figures} /> : null}
+      {figures.length ? <Figures items={figures} loading={loading || Boolean(error)} /> : null}
       <Title>{t("dash.work")}</Title>
       <View style={toolGrid}>
         {visible.map((section) => (

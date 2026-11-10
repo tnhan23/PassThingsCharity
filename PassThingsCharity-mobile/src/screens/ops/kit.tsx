@@ -23,7 +23,7 @@ export type Row = {
   imageUrl?: string | null;
   isVerified?: boolean;
   isActive?: boolean;
-  organizationId?: string | { _id?: string; name?: string; code?: string };
+  organizationId?: string | { _id?: string; name?: string; code?: string; address?: string };
   managerId?: string | { _id?: string; fullName?: string; username?: string; phone?: string; email?: string } | null;
   staffUserIds?: string[];
   unit?: string;
@@ -34,6 +34,14 @@ export type Row = {
   phone?: string;
   email?: string;
   description?: string;
+  startDate?: string;
+  endDate?: string;
+  items?: {
+    _id?: string;
+    targetQuantity?: number;
+    currentQuantity?: number;
+    itemTypeId?: { name?: string; unit?: string } | string;
+  }[];
   operatingArea?: string;
   idCardNumber?: string;
   evidenceImageUrls?: string[];
@@ -282,12 +290,14 @@ export function PickList({
   onPick,
   detail,
   panel,
+  selectedBackgroundColor,
 }: {
   rows: Row[] | null;
   selected: string;
   onPick: (id: string) => void;
   detail: (row: Row) => string;
   panel?: (row: Row) => ReactNode;
+  selectedBackgroundColor?: string;
 }) {
   if (!rows) {
     return (
@@ -310,7 +320,14 @@ export function PickList({
         const open = selected === row._id;
         const subtitle = detail(row);
         return (
-          <Card key={row._id} style={open ? { borderWidth: 1.5, borderColor: colors.primary } : undefined}>
+          <Card
+            key={row._id}
+            style={open ? {
+              borderWidth: 2,
+              borderColor: colors.primary,
+              ...(selectedBackgroundColor ? { backgroundColor: selectedBackgroundColor } : {}),
+            } : undefined}
+          >
             <Tap onPress={() => onPick(open ? "" : row._id)} accessibilityLabel={labelOf(row)}>
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
                 <View style={{ flex: 1, gap: 4 }}>
