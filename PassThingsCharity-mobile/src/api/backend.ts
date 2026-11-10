@@ -142,6 +142,21 @@ export const backend = {
   assignStaff(token: Token, stationId: string, userId: string) {
     return api<{ message: string }>(`/stations/${stationId}/staff/${userId}`, withToken(token, "POST", {}));
   },
+  assignStationManagerToStation(token: Token, stationId: string, identifier: string) {
+    return api<{ message: string }>(
+      `/stations/${stationId}/manager`,
+      withToken(token, "PATCH", { identifier }),
+    );
+  },
+  assignStaffByIdentifier(token: Token, stationId: string, identifier: string) {
+    return api<{ message: string }>(
+      `/stations/${stationId}/staff`,
+      withToken(token, "PATCH", { identifier }),
+    );
+  },
+  listStationStaffAssignments(token: Token, stationId: string) {
+    return api<{ data: { userId: string }[] }>(`/stations/${stationId}/staff`, { token });
+  },
   removeStaffAssignment(token: Token, stationId: string, userId: string) {
     return api<{ message: string }>(`/stations/${stationId}/staff/${userId}`, withToken(token, "DELETE"));
   },

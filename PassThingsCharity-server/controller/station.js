@@ -37,27 +37,32 @@ function validateStation(body) {
 
 async function listStations(req, res, next) {
   try {
-    let organizationFilter = {};
-
     const roleName = req.user?.role?.name;
+    let stationFilter = {};
+
     if (roleName === 'STATION_MANAGER') {
-      organizationFilter.submittedBy = req.user._id;
-    } else if (roleName !== 'ADMIN') {
-      organizationFilter.isVerified = true;
-    }
+      const organizations = await Organization.find(
+        { submittedBy: req.user._id },
+        { _id: 1 }
+      );
+      stationFilter = {
+        $or: [
+          { managerId: req.user._id },
+          { organizationId: { $in: organizations.map((organization) => organization._id) } },
+        ],
+      };
+    } else {
+      const organizationFilter = roleName === 'ADMIN' ? {} : { isVerified: true };
+      const organizations = await Organization.find(organizationFilter, { _id: 1 });
+      const organizationIds = organizations.map((organization) => organization._id);
 
-    const organizations = await Organization.find(
-      organizationFilter,
-      { _id: 1 }
-    );
-    const organizationIds = organizations.map((organization) => organization._id);
+      stationFilter = {
+        organizationId: { $in: organizationIds },
+      };
 
-    const stationFilter = {
-      organizationId: { $in: organizationIds },
-    };
-
-    if (roleName !== 'ADMIN' && roleName !== 'STATION_MANAGER') {
-      stationFilter.isActive = true;
+      if (roleName !== 'ADMIN') {
+        stationFilter.isActive = true;
+      }
     }
 
     const stations = await Station.find(stationFilter).sort({ createdAt: -1 });
@@ -529,6 +534,26 @@ async function removeStaffFromStation(req, res, next) {
     return next(error);
   }
 }
+
+async function listStationStaffAssignments(req, res, next) {
+  try {
+    const { id: stationId } = req.params;
+    if (!mongoose.isValidObjectId(stationId)) {
+      return res.status(400).json({ error: 'Station ID không hợp lệ.' });
+    }
+
+    const station = await Station.findById(stationId);
+    if (!station) return res.status(404).json({ error: 'Không tìm thấy trạm.' });
+
+    const assignments = await StationStaff.find({ stationId: station._id }).select('userId').lean();
+    return res.status(200).json({
+      data: assignments.map(({ userId }) => ({ userId: String(userId) })),
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
 // 1. Tạo tài khoản mới trực tiếp và gán làm Trưởng trạm
 async function createAndAssignStationManager(req, res, next) {
   try {
@@ -666,11 +691,33 @@ async function removeStationManager(req, res, next) {
       return res.status(403).json({ error: 'Bạn không có quyền quản lý trạm thuộc tổ chức này.' });
     }
 
+    const managerId = station.managerId;
     station.managerId = null;
     await station.save();
 
+    if (managerId) {
+      const anotherAssignment = await Station.findOne({
+        _id: { $ne: station._id },
+        managerId,
+      });
+
+      if (!anotherAssignment) {
+        const manager = await User.findById(managerId).populate('role');
+        if (manager?.role?.name === 'STATION_MANAGER') {
+          const userRole = await Role.findOne({ name: 'USER' });
+          if (!userRole) {
+            return res.status(500).json({ error: 'Chưa cấu hình role USER trong hệ thống.' });
+          }
+          manager.role = userRole._id;
+          await manager.save();
+        }
+      }
+    }
+
     return res.status(200).json({
-      message: 'Đã gỡ Trưởng trạm khỏi trạm này.',
+      message: managerId
+        ? 'Đã gỡ Trưởng trạm khỏi trạm này và cập nhật vai trò nếu không còn trạm được gán.'
+        : 'Trạm chưa có Trưởng trạm được gán.',
       stationId: station._id,
     });
   } catch (error) {
@@ -688,6 +735,7 @@ module.exports = {
   deleteStation,
   assignStaffToStation,
   assignExistingUserAsStaff,
+  listStationStaffAssignments,
   removeStaffFromStation,
   createAndAssignStationManager, 
   assignExistingUserAsManager,  

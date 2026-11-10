@@ -195,6 +195,38 @@ module.exports = {
     },
   },
   '/stations/{id}/staff': {
+    get: {
+      tags: ['Stations'],
+      summary: 'Lấy danh sách ID nhân viên được gán vào trạm (Chỉ ADMIN)',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string' }, description: 'Station ID' },
+      ],
+      responses: {
+        200: {
+          description: 'Danh sách ID user được gán vào trạm.',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  data: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: { userId: { type: 'string' } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        400: { description: 'Station ID không hợp lệ' },
+        401: { description: 'Chưa đăng nhập hoặc token không hợp lệ' },
+        403: { description: 'Chỉ ADMIN mới có quyền thực hiện hành động này' },
+        404: { description: 'Không tìm thấy trạm' },
+      },
+    },
     patch: {
       tags: ['Stations'],
       summary: 'Cấp role STAFF cho User và gán vào trạm (Chỉ ADMIN)',
@@ -266,12 +298,12 @@ module.exports = {
     },
     delete: {
       tags: ['Stations'],
-      summary: 'Gỡ quyền Trưởng trạm khỏi trạm này (ADMIN, ORG_MANAGER)',
+      summary: 'Gỡ Trưởng trạm khỏi trạm này; hạ role về USER nếu không còn trạm nào được gán (ADMIN, ORG_MANAGER)',
       parameters: [
         { name: 'id', in: 'path', required: true, schema: { type: 'string', example: '671000000000000000000011' }, description: 'Station ID' },
       ],
       responses: {
-        200: { description: 'Đã gỡ Trưởng trạm khỏi trạm' },
+        200: { description: 'Đã gỡ Trưởng trạm; role về USER nếu không còn trạm được gán khác' },
         403: { description: 'Không có quyền quản lý trạm thuộc tổ chức này' },
         404: { description: 'Không tìm thấy trạm hoặc tổ chức' },
       },

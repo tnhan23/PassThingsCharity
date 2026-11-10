@@ -25,6 +25,14 @@ type SessionValue = {
 const SessionContext = createContext<SessionValue | null>(null);
 
 const roleNames = ["ADMIN", "ORG_MANAGER", "STATION_MANAGER", "STAFF", "VOLUNTEER", "USER"];
+const roleIds: Record<string, string> = {
+  "6523456789abcdef00000001": "ADMIN",
+  "6523456789abcdef00000002": "STATION_MANAGER",
+  "6523456789abcdef00000003": "STAFF",
+  "6523456789abcdef00000005": "USER",
+  "6523456789abcdef00000006": "ORG_MANAGER",
+  "6ad35394ec544ac2ec048ebb": "ORG_MANAGER",
+};
 
 export function isOperator(role?: string) {
   return role === "ADMIN" || role === "ORG_MANAGER" || role === "STATION_MANAGER" || role === "STAFF";
@@ -32,9 +40,16 @@ export function isOperator(role?: string) {
 
 function roleName(role: unknown) {
   if (typeof role === "string" && roleNames.includes(role)) return role;
-  if (role && typeof role === "object" && "name" in role) {
-    const name = (role as { name?: unknown }).name;
-    if (typeof name === "string" && roleNames.includes(name)) return name;
+  if (typeof role === "string") return roleIds[role];
+  if (role && typeof role === "object") {
+    if ("name" in role) {
+      const name = (role as { name?: unknown }).name;
+      if (typeof name === "string" && roleNames.includes(name)) return name;
+    }
+    if ("_id" in role) {
+      const id = (role as { _id?: unknown })._id;
+      if (typeof id === "string") return roleIds[id];
+    }
   }
   return undefined;
 }

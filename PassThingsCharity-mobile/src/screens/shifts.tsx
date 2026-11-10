@@ -86,9 +86,17 @@ export function ShiftsScreen() {
       return;
     }
     backend.listStations(token)
-      .then((data) => setStations(data.data))
+      .then((data) => {
+        setStations(data.data);
+        setStationId((current) =>
+          data.data.some((station) => station._id === current)
+            ? current
+            : data.data[0]?._id || "",
+        );
+      })
       .catch((reason: unknown) => {
         setStations([]);
+        setStationId("");
         setError(reason instanceof ApiError ? reason.message : "Không tải được trạm.");
       });
   }, [token, role, staffStations]);
@@ -209,7 +217,8 @@ export function ShiftsScreen() {
       {error ? <Body>{error}</Body> : null}
       {stations === null ? <ActivityIndicator color={colors.primary} /> : null}
       {role === "STAFF" && stations && stations.length === 0 ? <Body>Bạn chưa được gán vào trạm nào. Đăng nhập lại nếu vừa được phân trạm.</Body> : null}
-      {role !== "STAFF" && stations && stations.length === 0 ? <Body>Chưa có trạm nào tài khoản này được xem.</Body> : null}
+      {role === "STATION_MANAGER" && stations && stations.length === 0 ? <Body>Bạn chưa được gán làm trưởng trạm. Vui lòng liên hệ quản trị viên để kiểm tra phân công.</Body> : null}
+      {role !== "STAFF" && role !== "STATION_MANAGER" && stations && stations.length === 0 ? <Body>Chưa có trạm nào tài khoản này được xem.</Body> : null}
       {stations && stations.length > 0 ? (
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
           {stations.map((item) => (

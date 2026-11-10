@@ -79,6 +79,7 @@ export type StationRow = {
   name: string;
   address: string;
   isActive: boolean;
+  managerId?: string | { _id?: string } | null;
   latitude?: string | number;
   longitude?: string | number;
   openingTime?: string;

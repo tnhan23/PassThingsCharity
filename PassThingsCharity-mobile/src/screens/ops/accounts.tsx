@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import { useFocusEffect } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 import { backend } from "@/api/backend";
 import { useSession } from "@/api/session";
@@ -32,11 +33,41 @@ function accountState(status?: string) {
 export function AccountsScreen() {
   const { user } = useSession();
   const people = useRows((token) => backend.listUsers(token).then((data) => data.data as Row[]));
+  const stations = useRows(async (token) => {
+    const { data } = await backend.listStations(token);
+    const assignmentsByStation = await Promise.all(
+      data.map((station) => backend.listStationStaffAssignments(token, station._id)),
+    );
+    return data.map((station, index) => ({
+      ...station,
+      staffUserIds: assignmentsByStation[index].data.map((assignment) => assignment.userId),
+    })) as Row[];
+  });
   const job = useJob();
+  const hasFocused = useRef(false);
   const [picked, setPicked] = useState("");
+  const [managerTarget, setManagerTarget] = useState("");
+  const [staffTarget, setStaffTarget] = useState("");
   const [bucket, setBucket] = useState<"ALL" | "active" | "banned">("ALL");
   const [role, setRole] = useState<string>("ALL");
   const [accountSearch, setAccountSearch] = useState("");
+  const assignedManagerIds = new Set(
+    (stations.rows ?? []).flatMap((station) => {
+      const managerId = typeof station.managerId === "string" ? station.managerId : station.managerId?._id;
+      return managerId ? [managerId] : [];
+    }),
+  );
+  const unassignedStations = (stations.rows ?? []).filter((station) => !station.managerId);
+  const activeStations = (stations.rows ?? []).filter((station) => station.isActive);
+
+  useFocusEffect(useCallback(() => {
+    if (!hasFocused.current) {
+      hasFocused.current = true;
+      return;
+    }
+    stations.reload();
+  }, [stations.reload]));
+
   const shown = (people.rows ?? []).filter(
     (row) => {
       const query = accountSearch.trim().toLowerCase();
@@ -44,6 +75,7 @@ export function AccountsScreen() {
         (row.status === "active" || row.status === "banned") &&
         (bucket === "ALL" || row.status === bucket) &&
         (role === "ALL" || row.role === role) &&
+        (role !== "STATION_MANAGER" || assignedManagerIds.has(row._id)) &&
         ((row.email || "").toLowerCase().includes(query) || (row.phone || "").toLowerCase().includes(query))
       );
     },
@@ -52,7 +84,7 @@ export function AccountsScreen() {
   return (
     <OpsGate>
       <Title>Người dùng</Title>
-      <Note text={people.error || job.note} />
+      <Note text={people.error || stations.error || job.note} />
       <Field
         label="Tìm theo email hoặc số điện thoại"
         value={accountSearch}
@@ -86,6 +118,22 @@ export function AccountsScreen() {
             const selected = row._id === picked;
             const self = String(row._id) === String(user?.id || "");
             const locked = row.role === "ADMIN";
+            const identifier = row.email?.trim();
+            const assignedStations = row.role === "STATION_MANAGER"
+              ? (stations.rows ?? []).filter((station) => {
+                  const managerId = typeof station.managerId === "string" ? station.managerId : station.managerId?._id;
+                  return managerId === row._id;
+                })
+              : [];
+            const canAssignManager =
+              row.status === "active" &&
+              Boolean(identifier) &&
+              (row.role === "USER" ||
+                (row.role === "STATION_MANAGER" && stations.rows !== null && assignedStations.length === 0));
+            const canAssignStaff =
+              row.status === "active" &&
+              Boolean(identifier) &&
+              (row.role === "USER" || row.role === "STAFF");
             return (
               <View key={row._id} style={[styles.card, selected ? styles.cardOn : null]}>
                 <Tap
@@ -111,7 +159,91 @@ export function AccountsScreen() {
                     <Detail label="Vai trò" value={roleText[row.role || ""] || "Chưa rõ vai trò"} />
                     <Detail label="Trạng thái" value={accountState(row.status)} />
                     <Detail label="ID tài khoản" value={row._id} />
+                    {row.role === "STATION_MANAGER" ? (
+                      <Detail
+                        label="Trạm được phân công"
+                        value={assignedStations.length
+                          ? assignedStations.map((station) => `${station.name}${station.address ? ` (${station.address})` : ""}`).join(", ")
+                          : "Chưa được phân công trạm"}
+                      />
+                    ) : null}
                     {self || locked ? <Body muted>Tài khoản quản trị và tài khoản đang đăng nhập không khóa tại đây.</Body> : null}
+                    {canAssignManager ? (
+                      <>
+                        <Button
+                          label={managerTarget === row._id ? "Hủy bổ nhiệm" : "Bổ nhiệm làm trưởng trạm"}
+                          tone="ghost"
+                          onPress={() => setManagerTarget(managerTarget === row._id ? "" : row._id)}
+                        />
+                        {managerTarget === row._id ? (
+                          <View style={styles.stationChoices}>
+                            <Body muted>Chọn trạm để bổ nhiệm người dùng này.</Body>
+                            {stations.rows === null ? <Body muted>Đang tải danh sách trạm.</Body> : null}
+                            {stations.rows && unassignedStations.length === 0 ? <Body muted>Không còn trạm nào chưa có trưởng trạm.</Body> : null}
+                            {unassignedStations.map((station) => (
+                              <Button
+                                key={station._id}
+                                label={`${station.name}${station.address ? ` · ${station.address}` : ""}`}
+                                tone="ghost"
+                                disabled={job.busy}
+                                onPress={() => {
+                                  if (!identifier) return;
+                                  void job.run((token) =>
+                                    backend.assignStationManagerToStation(token, station._id, identifier),
+                                  ).then((ok) => {
+                                    if (ok) {
+                                      setManagerTarget("");
+                                      people.reload();
+                                      stations.reload();
+                                    }
+                                  });
+                                }}
+                              />
+                            ))}
+                          </View>
+                        ) : null}
+                      </>
+                    ) : null}
+                    {canAssignStaff ? (
+                      <>
+                        <Button
+                          label={staffTarget === row._id ? "Hủy gán nhân viên" : "Gán làm nhân viên trạm"}
+                          tone="ghost"
+                          onPress={() => setStaffTarget(staffTarget === row._id ? "" : row._id)}
+                        />
+                        {staffTarget === row._id ? (
+                          <View style={styles.stationChoices}>
+                            <Body muted>Chọn trạm đang hoạt động để gán tài khoản này làm nhân viên.</Body>
+                            {stations.rows === null ? <Body muted>Đang tải danh sách trạm.</Body> : null}
+                            {stations.rows && activeStations.length === 0 ? <Body muted>Chưa có trạm nào đang hoạt động; vẫn có thể gỡ phân công hiện có bên dưới.</Body> : null}
+                            {(stations.rows ?? [])
+                              .filter((station) => station.isActive || station.staffUserIds?.includes(row._id))
+                              .map((station) => (
+                              <Button
+                                key={station._id}
+                                label={`${station.staffUserIds?.includes(row._id) ? "Gỡ khỏi" : "Gán vào"} ${station.name}${station.address ? ` · ${station.address}` : ""}`}
+                                tone={station.staffUserIds?.includes(row._id) ? "danger" : "ghost"}
+                                disabled={job.busy}
+                                onPress={() => {
+                                  if (!identifier) return;
+                                  void job.run((token) =>
+                                    station.staffUserIds?.includes(row._id)
+                                      ? backend.removeStaffAssignment(token, station._id, row._id)
+                                      : backend.assignStaffByIdentifier(token, station._id, identifier),
+                                  ).then((ok) => {
+                                    if (ok) {
+                                      setStaffTarget("");
+                                      people.reload();
+                                      stations.reload();
+                                    }
+                                  });
+                                }}
+                              />
+                            ))}
+                          </View>
+                        ) : null}
+                      </>
+                    ) : null}
                     {!self && !locked && row.status !== "banned" ? (
                       <Button
                         label="Khóa vĩnh viễn"
@@ -181,6 +313,9 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.hairline,
+  },
+  stationChoices: {
+    gap: 8,
   },
   detailRow: {
     flexDirection: "row",
