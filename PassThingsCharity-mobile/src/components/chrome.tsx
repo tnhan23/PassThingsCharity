@@ -262,7 +262,7 @@ function tabsFor(role: string | undefined, _signedIn: boolean, desk: boolean): {
   if (role === "ADMIN") {
     return [
       { key: "home", label: homeLabel, icon: "dashboard", href: "/" },
-      { key: "stations", label: "nav.map", icon: "map", href: "/stations/list" },
+      { key: "stations", label: "nav.map", icon: "map", href: "/desk/stations" },
       { key: "profile", label: "nav.profile", icon: "account-circle", href: profile },
     ];
   }

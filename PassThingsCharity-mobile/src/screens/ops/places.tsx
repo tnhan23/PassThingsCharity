@@ -1,14 +1,14 @@
 import { useFocusEffect } from "expo-router";
 import DateTimePicker, { type DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { createElement, useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
-import { Platform, ScrollView, Text, View } from "react-native";
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import * as Location from "expo-location";
 import { backend } from "@/api/backend";
 import { donorLabel, formatDay } from "@/api/labels";
 import { ApiError } from "@/api/client";
 import { pickImage } from "@/api/images";
 import { Field } from "@/components/form";
-import { Body, Button, Card, Photo, Pill, StatRow, Title } from "@/components/ui";
+import { Body, Button, Card, Icon, Photo, Pill, StatRow, Tap, Title } from "@/components/ui";
 import { colors, fonts } from "@/theme";
 import { can, Fold, nextCampaignStatuses, Note, OpsGate, PickList, RoleNote, TextField, Units, useJob, useRole, useRows, type Row } from "@/screens/ops/kit";
 
@@ -274,6 +274,8 @@ export function StationScreen() {
   const [editClose, setEditClose] = useState("");
   const [staffError, setStaffError] = useState("");
   const [orgId, setOrgId] = useState("");
+  const [orgPickerVisible, setOrgPickerVisible] = useState(false);
+  const [createStationExpanded, setCreateStationExpanded] = useState(false);
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [latitude, setLatitude] = useState("");
@@ -300,6 +302,7 @@ export function StationScreen() {
   const stationPageCount = Math.ceil((stationRows?.length ?? 0) / 5);
   const currentStationPage = Math.min(stationPage, Math.max(0, stationPageCount - 1));
   const pagedStations = stationRows?.slice(currentStationPage * 5, currentStationPage * 5 + 5) ?? null;
+  const selectedOrganization = orgs.rows?.find((org) => org._id === orgId);
 
   useFocusEffect(useCallback(() => {
     if (role !== "ADMIN") return;
@@ -380,6 +383,222 @@ export function StationScreen() {
     <OpsGate>
       <Title>Trạm</Title>
       <Note text={stations.error || orgs.error || managers.error || staffError || (role === "ADMIN" ? "" : job.note)} />
+      {can(role, ["ADMIN", "ORG_MANAGER"]) ? (
+        <>
+          <Card>
+            <Tap
+              onPress={() => {
+                setCreateStationExpanded((expanded) => !expanded);
+                if (createStationExpanded) setOrgPickerVisible(false);
+              }}
+              accessibilityLabel={createStationExpanded ? "Thu gọn tạo trạm" : "Mở tạo trạm"}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                <View style={{ flex: 1, gap: 4 }}>
+                  <Title>Tạo trạm</Title>
+                  <Body muted>
+                    {createStationExpanded
+                      ? role === "ADMIN"
+                        ? "Chọn tổ chức sở hữu trạm. Trạm mới cần được duyệt để kích hoạt."
+                        : "Chọn tổ chức sở hữu trạm."
+                      : "Nhấn để mở biểu mẫu tạo trạm."}
+                  </Body>
+                </View>
+                <Icon name={createStationExpanded ? "expand-less" : "expand-more"} color={colors.primary} size={24} />
+              </View>
+            </Tap>
+            {createStationExpanded ? <View style={{ gap: 8, paddingTop: 12 }}>
+            <Body muted>Chọn tổ chức sở hữu trạm</Body>
+            <Tap
+              onPress={() => setOrgPickerVisible(true)}
+              accessibilityLabel="Chọn tổ chức sở hữu trạm"
+              style={{
+                minHeight: 52,
+                paddingHorizontal: 14,
+                borderWidth: 1,
+                borderColor: orgPickerVisible ? colors.primary : colors.line,
+                borderRadius: 12,
+                backgroundColor: colors.card,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+              }}
+            >
+              <View style={{ flex: 1, gap: 3 }}>
+                <Text style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.ink }}>
+                  {selectedOrganization?.name
+                    || (orgs.rows ? "Chọn tổ chức" : "Đang tải tổ chức...")}
+                </Text>
+                {selectedOrganization ? (
+                  <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.muted }}>
+                    {orgDetail(selectedOrganization)}
+                  </Text>
+                ) : null}
+              </View>
+              <Icon name="arrow-drop-down" color={colors.primary} size={24} />
+            </Tap>
+            <Modal
+              visible={orgPickerVisible}
+              transparent
+              animationType="slide"
+              onRequestClose={() => setOrgPickerVisible(false)}
+            >
+              <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.35)" }}>
+                <Pressable
+                  accessibilityLabel="Đóng danh sách tổ chức"
+                  onPress={() => setOrgPickerVisible(false)}
+                  style={StyleSheet.absoluteFill}
+                />
+                <View style={{
+                  maxHeight: "75%",
+                  padding: 16,
+                  gap: 12,
+                  backgroundColor: colors.surface,
+                  borderTopLeftRadius: 22,
+                  borderTopRightRadius: 22,
+                }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                    <Title>Chọn tổ chức</Title>
+                    <Tap onPress={() => setOrgPickerVisible(false)} accessibilityLabel="Đóng">
+                      <Icon name="close" color={colors.ink} size={24} />
+                    </Tap>
+                  </View>
+                  {!orgs.rows ? <Body muted>Đang tải danh sách tổ chức.</Body> : null}
+                  {orgs.rows?.length === 0 ? <Body muted>Chưa có tổ chức nào.</Body> : null}
+                  <ScrollView keyboardShouldPersistTaps="handled">
+                    <View style={{ gap: 8 }}>
+                      {orgs.rows?.map((org) => {
+                        const selected = org._id === orgId;
+                        return (
+                          <Tap
+                            key={org._id}
+                            onPress={() => {
+                              setOrgId(org._id);
+                              setOrgPickerVisible(false);
+                            }}
+                            accessibilityLabel={`Chọn ${org.name || "tổ chức"}`}
+                            style={{
+                              padding: 14,
+                              borderWidth: selected ? 2 : 1,
+                              borderColor: selected ? colors.primary : colors.line,
+                              borderRadius: 12,
+                              backgroundColor: selected ? colors.primarySoft : colors.card,
+                              gap: 4,
+                            }}
+                          >
+                            <Text style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.ink }}>
+                              {org.name || "Chưa có tên"}
+                            </Text>
+                            <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.muted }}>
+                              {orgDetail(org)}
+                            </Text>
+                          </Tap>
+                        );
+                      })}
+                    </View>
+                  </ScrollView>
+                </View>
+              </View>
+            </Modal>
+            <TextField label="Tên trạm" value={name} onChangeText={setName} />
+            <TextField
+              label="Địa chỉ"
+              value={address}
+              onChangeText={(value) => {
+                setAddress(value);
+                if (latitude || longitude) setMapFocusKey((key) => key + 1);
+                setLatitude("");
+                setLongitude("");
+                setGeocodeMessage("");
+              }}
+            />
+            <Button
+              label={geocoding ? "Đang tìm vị trí..." : "Tìm tọa độ từ địa chỉ"}
+              tone="ghost"
+              disabled={!address.trim() || geocoding}
+              onPress={() => void findStationCoordinates()}
+            />
+            {geocodeMessage ? <Body muted>{geocodeMessage}</Body> : null}
+            {Platform.OS === "android" || AppleMaps ? <Body muted>Chạm bản đồ để đặt vị trí trạm.</Body> : null}
+            {Platform.OS === "android" || AppleMaps ? (
+              <StationPlaceMap
+                key={mapFocusKey}
+                latitude={latitude}
+                longitude={longitude}
+                onPick={(lat, lng) => {
+                  setLatitude(lat);
+                  setLongitude(lng);
+                }}
+              />
+            ) : null}
+            <TextField label="Vĩ độ (số thập phân, ví dụ 10.8289)" value={latitude} onChangeText={setLatitude} keyboardType="decimal-pad" />
+            <TextField label="Kinh độ (số thập phân, ví dụ 106.8172)" value={longitude} onChangeText={setLongitude} keyboardType="decimal-pad" />
+            {photoUrl ? <Photo uri={photoUrl} height={140} radius={14} /> : null}
+            <Button
+              label={photoBusy ? "Đang tải ảnh..." : photoUrl ? "Đổi ảnh trạm" : "Tải ảnh trạm"}
+              tone="ghost"
+              disabled={photoBusy}
+              onPress={() => void (async () => {
+                if (!job.token) return;
+                setPhotoBusy(true);
+                setPhotoNote("");
+                try {
+                  const file = await pickImage();
+                  if (!file) return;
+                  const uploaded = await backend.uploadStationImage(job.token, file);
+                  if (!uploaded.imageUrl) {
+                    setPhotoNote("Máy chủ không trả đường dẫn ảnh.");
+                    return;
+                  }
+                  setPhotoUrl(uploaded.imageUrl);
+                  setPhotoNote("Ảnh sẽ được gắn khi tạo trạm.");
+                } catch (caught) {
+                  setPhotoNote(caught instanceof ApiError ? caught.message : caught instanceof Error ? caught.message : "Không tải được ảnh trạm.");
+                } finally {
+                  setPhotoBusy(false);
+                }
+              })()}
+            />
+            {photoNote ? <Body muted>{photoNote}</Body> : null}
+            <Button
+              label={createStationJob.busy ? "Đang tạo trạm..." : "Tạo trạm"}
+              disabled={createStationJob.busy}
+              onPress={() => {
+                if (!orgId) {
+                  createStationJob.fail("Vui lòng chọn tổ chức sở hữu trạm ở danh sách phía trên.");
+                  return;
+                }
+                if (!name.trim() || !address.trim()) {
+                  createStationJob.fail("Vui lòng nhập đầy đủ Tên trạm và Địa chỉ.");
+                  return;
+                }
+                const cleanLat = latitude.trim().replace(",", ".");
+                const cleanLng = longitude.trim().replace(",", ".");
+                if (/[°'"]/.test(cleanLat) || /[°'"]/.test(cleanLng)) {
+                  createStationJob.fail("Tọa độ phải nhập dạng số thập phân dùng dấu chấm (ví dụ Vĩ độ: 10.8289, Kinh độ: 106.8172), không nhập độ-phút-giây (° ' \").");
+                  return;
+                }
+                const numLat = Number(cleanLat);
+                const numLng = Number(cleanLng);
+                if ((cleanLat && (Number.isNaN(numLat) || numLat < -90 || numLat > 90)) || (cleanLng && (Number.isNaN(numLng) || numLng < -180 || numLng > 180))) {
+                  createStationJob.fail("Tọa độ không hợp lệ. Vĩ độ phải từ -90 đến 90 (ví dụ 10.8289) và Kinh độ từ -180 đến 180 (ví dụ 106.8172).");
+                  return;
+                }
+                void createStationJob.run((token) => backend.createStationForOrganization(token, orgId, {
+                  name: name.trim(),
+                  address: address.trim(),
+                  latitude: cleanLat,
+                  longitude: cleanLng,
+                  ...(photoUrl ? { imageUrl: photoUrl } : {}),
+                })).then((ok) => ok && stations.reload());
+              }}
+            />
+            </View> : null}
+          </Card>
+          <Note text={createStationJob.note} error={createStationJob.isError} />
+        </>
+      ) : null}
       {stations.rows ? (
         <StatRow
           items={[
@@ -588,107 +807,7 @@ export function StationScreen() {
           ) : null}
         </View>
       ) : null}
-      {role === "ORG_MANAGER" ? (
-        <>
-          <View style={{ gap: 8 }}>
-            <Title>Trạm mới</Title>
-            <Body muted>Chọn tổ chức sở hữu trạm.</Body>
-            <PickList rows={orgs.rows} selected={orgId} onPick={setOrgId} detail={orgDetail} />
-            <TextField label="Tên trạm" value={name} onChangeText={setName} />
-            <TextField
-              label="Địa chỉ"
-              value={address}
-              onChangeText={(value) => {
-                setAddress(value);
-                if (latitude || longitude) setMapFocusKey((key) => key + 1);
-                setLatitude("");
-                setLongitude("");
-                setGeocodeMessage("");
-              }}
-            />
-            <Button
-              label={geocoding ? "Đang tìm vị trí..." : "Tìm tọa độ từ địa chỉ"}
-              tone="ghost"
-              disabled={!address.trim() || geocoding}
-              onPress={() => void findStationCoordinates()}
-            />
-            {geocodeMessage ? <Body muted>{geocodeMessage}</Body> : null}
-            {Platform.OS === "android" || AppleMaps ? <Body muted>Chạm bản đồ để đặt vị trí trạm.</Body> : null}
-            {Platform.OS === "android" || AppleMaps ? (
-              <StationPlaceMap
-                key={mapFocusKey}
-                latitude={latitude}
-                longitude={longitude}
-                onPick={(lat, lng) => {
-                  setLatitude(lat);
-                  setLongitude(lng);
-                }}
-              />
-            ) : null}
-            <TextField label="Vĩ độ (số thập phân, ví dụ 10.8289)" value={latitude} onChangeText={setLatitude} keyboardType="decimal-pad" />
-            <TextField label="Kinh độ (số thập phân, ví dụ 106.8172)" value={longitude} onChangeText={setLongitude} keyboardType="decimal-pad" />
-            {photoUrl ? <Photo uri={photoUrl} height={140} radius={14} /> : null}
-            <Button
-              label={photoBusy ? "Đang tải ảnh..." : photoUrl ? "Đổi ảnh trạm" : "Tải ảnh trạm"}
-              tone="ghost"
-              disabled={photoBusy}
-              onPress={() => void (async () => {
-                if (!job.token) return;
-                setPhotoBusy(true);
-                setPhotoNote("");
-                try {
-                  const file = await pickImage();
-                  if (!file) return;
-                  const uploaded = await backend.uploadStationImage(job.token, file);
-                  if (!uploaded.imageUrl) {
-                    setPhotoNote("Máy chủ không trả đường dẫn ảnh.");
-                    return;
-                  }
-                  setPhotoUrl(uploaded.imageUrl);
-                  setPhotoNote("Ảnh sẽ được gắn khi tạo trạm.");
-                } catch (caught) {
-                  setPhotoNote(caught instanceof ApiError ? caught.message : caught instanceof Error ? caught.message : "Không tải được ảnh trạm.");
-                } finally {
-                  setPhotoBusy(false);
-                }
-              })()}
-            />
-            <Button
-              label="Tạo trạm"
-              onPress={() => {
-                if (!orgId) {
-                  createStationJob.fail("Vui lòng chọn tổ chức sở hữu trạm ở danh sách phía trên.");
-                  return;
-                }
-                if (!name.trim() || !address.trim()) {
-                  createStationJob.fail("Vui lòng nhập đầy đủ Tên trạm và Địa chỉ.");
-                  return;
-                }
-                const cleanLat = latitude.trim().replace(",", ".");
-                const cleanLng = longitude.trim().replace(",", ".");
-                if (/[°'"]/.test(cleanLat) || /[°'"]/.test(cleanLng)) {
-                  createStationJob.fail("Tọa độ phải nhập dạng số thập phân dùng dấu chấm (ví dụ Vĩ độ: 10.8289, Kinh độ: 106.8172), không nhập độ-phút-giây (° ' \").");
-                  return;
-                }
-                const numLat = Number(cleanLat);
-                const numLng = Number(cleanLng);
-                if ((cleanLat && (Number.isNaN(numLat) || numLat < -90 || numLat > 90)) || (cleanLng && (Number.isNaN(numLng) || numLng < -180 || numLng > 180))) {
-                  createStationJob.fail("Tọa độ không hợp lệ. Vĩ độ phải từ -90 đến 90 (ví dụ 10.8289) và Kinh độ từ -180 đến 180 (ví dụ 106.8172).");
-                  return;
-                }
-                void createStationJob.run((token) => backend.createStationForOrganization(token, orgId, {
-                  name: name.trim(),
-                  address: address.trim(),
-                  latitude: cleanLat,
-                  longitude: cleanLng,
-                  ...(photoUrl ? { imageUrl: photoUrl } : {}),
-                })).then((ok) => ok && stations.reload());
-              }}
-            />
-          </View>
-          <Note text={createStationJob.note} error={createStationJob.isError} />
-        </>
-      ) : role === "ADMIN" ? null : <Body muted>Vai trò này không tạo trạm.</Body>}
+      {!can(role, ["ADMIN", "ORG_MANAGER"]) ? <Body muted>Vai trò này không tạo trạm.</Body> : null}
     </OpsGate>
   );
 }

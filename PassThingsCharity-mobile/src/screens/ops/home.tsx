@@ -16,7 +16,7 @@ const sections = [
   { key: "users", href: "/desk/users", title: "Tài khoản", body: "Xem người dùng, khóa hoặc mở khóa." },
   { key: "alerts", href: "/desk/alerts", title: "Gửi thông báo", body: "Gửi tin khẩn cho mọi người hoặc cho nhân viên." },
   { key: "orgs", href: "/desk/orgs", title: "Tổ chức", body: "Duyệt hoặc từ chối đơn lập tổ chức." },
-  { key: "stations", href: "/desk/stations", title: "Trạm", body: "Duyệt trạm do quản lý tổ chức gửi." },
+  { key: "stations", href: "/desk/stations", title: "Trạm", body: "Tạo trạm mới và duyệt trạm do quản lý tổ chức gửi." },
   { key: "catalog", href: "/desk/catalog", title: "Danh mục đồ", body: "Thêm nhóm và loại đồ. Đơn vị nằm trên loại đồ." },
   { key: "campaigns", href: "/desk/campaigns", title: "Chiến dịch", body: "Tạo chiến dịch, phát hành, gắn đồ và gắn trạm." },
   { key: "intake", href: "/desk/intake", title: "Tiếp nhận", body: "Tìm người trao, ghi phiếu, và đổi trạng thái phiếu." },
@@ -480,6 +480,13 @@ export function OpsHome() {
       {loading ? <Body muted>{t("dash.loading")}</Body> : null}
       {error ? <Body>{error}</Body> : null}
       {figures.length ? <Figures items={figures} loading={loading || Boolean(error)} /> : null}
+      {role === "ADMIN" ? (
+        <Button
+          label="Tạo trạm mới"
+          icon="add"
+          onPress={() => router.push("/desk/stations")}
+        />
+      ) : null}
       <Title>{t("dash.work")}</Title>
       <View style={toolGrid}>
         {visible.map((section) => (
