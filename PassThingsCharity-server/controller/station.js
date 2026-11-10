@@ -417,6 +417,88 @@ async function assignStaffToStation(req, res, next) {
   }
 }
 
+async function assignExistingUserAsStaff(req, res, next) {
+  try {
+    const { id: stationId } = req.params;
+    const { identifier } = req.body || {};
+
+    if (!mongoose.isValidObjectId(stationId)) {
+      return res.status(400).json({ error: 'Station ID không hợp lệ.' });
+    }
+
+    if (!identifier || typeof identifier !== 'string' || !identifier.trim()) {
+      return res.status(400).json({ error: 'Vui lòng cung cấp email hoặc số điện thoại của người dùng.' });
+    }
+
+    const station = await Station.findById(stationId);
+    if (!station) return res.status(404).json({ error: 'Không tìm thấy trạm.' });
+
+    const organization = await Organization.findById(station.organizationId);
+    if (!organization) return res.status(404).json({ error: 'Không tìm thấy tổ chức của trạm.' });
+
+    if (!organization.isVerified || !station.isActive) {
+      return res.status(409).json({
+        error: 'Chỉ được gán Staff vào tổ chức và trạm đã được duyệt.',
+      });
+    }
+
+    const cleanIdentifier = identifier.trim();
+    const user = await User.findOne({
+      $or: [{ email: cleanIdentifier.toLowerCase() }, { phone: cleanIdentifier }],
+    }).populate('role', 'name');
+
+    if (!user) {
+      return res.status(404).json({ error: 'Không tìm thấy người dùng với email hoặc số điện thoại này.' });
+    }
+
+    if (user.role?.name !== 'USER' && user.role?.name !== 'STAFF') {
+      return res.status(409).json({
+        error: 'Chỉ có thể cấp role STAFF cho tài khoản đang có role USER hoặc STAFF.',
+      });
+    }
+
+    const staffRole = user.role.name === 'STAFF'
+      ? user.role
+      : await Role.findOne({ name: 'STAFF' });
+    if (!staffRole) {
+      return res.status(500).json({ error: 'Chưa cấu hình role STAFF trong hệ thống.' });
+    }
+
+    const assignment = await StationStaff.create({
+      stationId: station._id,
+      userId: user._id,
+    });
+
+    if (user.role.name !== 'STAFF') {
+      user.role = staffRole._id;
+      try {
+        await user.save();
+      } catch (error) {
+        await StationStaff.deleteOne({ _id: assignment._id });
+        throw error;
+      }
+    }
+
+    return res.status(200).json({
+      message: 'Đã cấp role STAFF và gán trạm.',
+      staff: {
+        id: user._id,
+        username: user.username,
+        fullName: user.fullName,
+        role: 'STAFF',
+      },
+      stationId: station._id,
+      assignment,
+    });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({ error: 'Staff đã được gán vào trạm.' });
+    }
+
+    return next(error);
+  }
+}
+
 async function removeStaffFromStation(req, res, next) {
   try {
     const { id: stationId, userId } = req.params;
@@ -605,6 +687,7 @@ module.exports = {
   updateStation,
   deleteStation,
   assignStaffToStation,
+  assignExistingUserAsStaff,
   removeStaffFromStation,
   createAndAssignStationManager, 
   assignExistingUserAsManager,  

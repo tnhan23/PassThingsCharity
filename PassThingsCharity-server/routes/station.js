@@ -8,6 +8,7 @@ const {
   updateStation,
   deleteStation,
   assignStaffToStation,
+  assignExistingUserAsStaff,
   removeStaffFromStation,
   createAndAssignStationManager, 
   assignExistingUserAsManager,  
@@ -49,6 +50,12 @@ router.post(
   '/:id/staff/:userId',
   checkRole(['ADMIN', 'STATION_MANAGER', 'ORG_MANAGER']),
   assignStaffToStation
+);
+
+router.patch(
+  '/:id/staff',
+  checkRole(['ADMIN']),
+  assignExistingUserAsStaff
 );
 
 router.delete(

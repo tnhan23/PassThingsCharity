@@ -194,6 +194,32 @@ module.exports = {
       },
     },
   },
+  '/stations/{id}/staff': {
+    patch: {
+      tags: ['Stations'],
+      summary: 'Cấp role STAFF cho User và gán vào trạm (Chỉ ADMIN)',
+      description: 'Nhận email hoặc số điện thoại của tài khoản hiện có. Chỉ tài khoản role USER hoặc STAFF được xử lý; tổ chức phải được duyệt và trạm phải đang hoạt động.',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', example: '671000000000000000000011' }, description: 'Station ID' },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/AssignStationStaffRequest' },
+          },
+        },
+      },
+      responses: {
+        200: { description: 'Đã cấp role STAFF và gán trạm thành công' },
+        400: { description: 'Station ID hoặc email/số điện thoại không hợp lệ' },
+        401: { description: 'Chưa đăng nhập hoặc token không hợp lệ' },
+        403: { description: 'Chỉ ADMIN mới có quyền thực hiện hành động này' },
+        404: { description: 'Không tìm thấy trạm, tổ chức hoặc người dùng' },
+        409: { description: 'Trạm chưa được duyệt/hoạt động, user không phù hợp hoặc đã được gán' },
+      },
+    },
+  },
   '/stations/{id}/manager': {
     post: {
       tags: ['Stations'],
