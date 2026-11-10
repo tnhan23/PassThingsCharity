@@ -75,6 +75,7 @@ export type StationRow = {
   longitude?: string;
   openingTime?: string;
   closingTime?: string;
+  imageUrl?: string | null;
   distanceKm?: number | null;
   formattedDistance?: string | null;
 };
