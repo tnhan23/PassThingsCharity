@@ -147,6 +147,23 @@ export type ReliefSummaryItem = {
   remainingInStock: number;
 };
 
+export type InventoryTransactionRow = {
+  _id: string;
+  inventoryId?: string;
+  stationId?: { _id?: string; name?: string; address?: string } | string;
+  itemTypeId?: { _id?: string; name?: string; unit?: string } | string;
+  unit: string;
+  type: string;
+  quantityDelta: number;
+  balanceBefore: number;
+  balanceAfter: number;
+  counterpartyStationId?: { _id?: string; name?: string; address?: string } | string | null;
+  campaignId?: { _id?: string; title?: string; status?: string } | string | null;
+  performedBy?: { _id?: string; fullName?: string; username?: string } | string | null;
+  description: string;
+  createdAt: string;
+};
+
 export type TaskRow = {
   _id: string;
   title: string;

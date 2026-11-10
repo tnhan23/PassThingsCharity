@@ -165,16 +165,22 @@ async function getAllTransfers(req, res, next) {
     const filter = {};
     if (req.user.role?.name !== 'ADMIN') {
       const StationStaff = require('../models/stationstaff');
-      const Shipment = require('../models/transferShipment');
       const managed = await Station.find({ managerId: req.user._id }).select('_id');
       const assigned = await StationStaff.distinct('stationId', { userId: req.user._id });
-      const carrierTransferIds = await Shipment.distinct('transferId', { carrierId: req.user._id });
       const ids = [...managed.map(station => station._id), ...assigned];
       filter.$or = [
         { fromStationId: { $in: ids } },
         { toStationId: { $in: ids } },
-        { _id: { $in: carrierTransferIds } },
       ];
+      if (req.user.role?.name === 'VOLUNTEER' || req.user.role?.name === 'USER') {
+        const Shipment = require('../models/transferShipment');
+        const carrierTransferIds = mongoose.isValidObjectId(req.user._id)
+          ? await Shipment.distinct('transferId', { carrierId: req.user._id })
+          : [];
+        if (carrierTransferIds.length > 0) {
+          filter.$or.push({ _id: { $in: carrierTransferIds } });
+        }
+      }
     }
 
     if (campaignId) {
@@ -291,7 +297,10 @@ async function updateTransferStatus(req, res, next) {
       return res.status(404).json({ error: 'Không tìm thấy lệnh điều phối.' });
     }
 
-    if (transfer.workflowVersion === 2) {
+    const Shipment = require('../models/transferShipment');
+    const shipmentsCount = await Shipment.countDocuments({ transferId: transfer._id });
+
+    if (transfer.workflowVersion === 2 && shipmentsCount > 0) {
       if (!['CANCELLED', 'COMPLETED'].includes(newStatus)) {
         return res.status(409).json({ error: 'Use approval and individual dispatch/report/receive endpoints for this transfer.' });
       }
@@ -305,7 +314,9 @@ async function updateTransferStatus(req, res, next) {
       }
       if (responsibleUserId !== undefined || receivedBy !== undefined) return res.status(400).json({ error: 'Handover actors are recorded by the individual handover endpoints.' });
     } else {
-      if (['IN_TRANSIT', 'PREPARING'].includes(newStatus) && newStatus !== transfer.status) return res.status(409).json({ error: 'Create a new transfer to use the approval workflow.' });
+      if (['IN_TRANSIT', 'PREPARING'].includes(newStatus) && newStatus !== transfer.status && shipmentsCount > 0) {
+        return res.status(409).json({ error: 'Create a new transfer to use the approval workflow.' });
+      }
       await workflow.stationAccess(['RECEIVED', 'COMPLETED'].includes(newStatus) ? transfer.toStationId : transfer.fromStationId, req.user);
     }
     const transitions = {
@@ -320,6 +331,22 @@ async function updateTransferStatus(req, res, next) {
       return res.status(409).json({ error: `Không thể chuyển từ ${transfer.status} sang ${newStatus}.` });
     }
     transfer.status = newStatus;
+    if (transfer.workflowVersion === 2 && shipmentsCount === 0) {
+      if (newStatus === 'IN_TRANSIT') {
+        const items = await CampaignTransferItem.find({ transferId: transfer._id });
+        for (const it of items) {
+          it.dispatchedQuantity = it.quantity;
+          await it.save();
+        }
+      } else if (['RECEIVED', 'COMPLETED'].includes(newStatus)) {
+        const items = await CampaignTransferItem.find({ transferId: transfer._id });
+        for (const it of items) {
+          if (!it.dispatchedQuantity) it.dispatchedQuantity = it.quantity;
+          it.receivedQuantity = it.quantity;
+          await it.save();
+        }
+      }
+    }
     if (typeof transportNote === 'string') {
       transfer.transportNote = transportNote.trim();
     }

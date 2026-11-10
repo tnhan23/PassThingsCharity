@@ -799,7 +799,7 @@ async function checkInTask(req, res, next) {
     if (assignment.status !== 'ASSIGNED') {
       return res.status(409).json({ error: `Không thể check-in khi nhiệm vụ đang ở trạng thái ${assignment.status}.` });
     }
-    await require('../services/qrAndProximity').verifyTaskQrAndProximity(assignment, req.body);
+    await require('../services/qrAndProximity').verifyTaskQrAndProximity(assignment, req.body, { isCheckIn: true });
 
     assignment.checkInTime = new Date();
     assignment.status = 'IN_PROGRESS';
@@ -841,7 +841,7 @@ async function checkOutTask(req, res, next) {
     }
 
     await require('../services/transferWorkflow').requireDeliveryConfirmed(assignment);
-    await require('../services/qrAndProximity').verifyTaskQrAndProximity(assignment, req.body);
+    await require('../services/qrAndProximity').verifyTaskQrAndProximity(assignment, req.body, { isCheckIn: false });
     if (assignment.status === 'COMPLETED') {
       let existingTransaction = await PointTransaction.findOne({
         type: 'VOLUNTEER_TASK',
@@ -926,8 +926,12 @@ async function checkOutTask(req, res, next) {
       newBadges = await checkAndUnlockAchievements(assignment.assigneeId);
     }
 
+    const successMessage = assignment.assigneeType === 'VOLUNTEER'
+      ? 'Điểm danh kết thúc ca thành công và đã ghi nhận điểm thưởng.'
+      : 'Điểm danh hoàn thành nhiệm vụ thành công.';
+
     return res.status(200).json({
-      message: 'Điểm danh kết thúc ca thành công và đã ghi nhận điểm thưởng.',
+      message: successMessage,
       assignment,
       hoursSpent: calculatedHours,
       gamification: {

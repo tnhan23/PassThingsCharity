@@ -21,7 +21,7 @@ const sections = [
   { key: "campaigns", href: "/desk/campaigns", title: "Chiến dịch", body: "Tạo chiến dịch, phát hành, gắn đồ và gắn trạm." },
   { key: "intake", href: "/desk/intake", title: "Tiếp nhận", body: "Tìm người trao, ghi phiếu, và đổi trạng thái phiếu." },
   { key: "transfers", href: "/desk/transfers", title: "Điều chuyển", body: "Chọn nhiều món trong kho trạm đi, rồi chọn trạm đến." },
-  { key: "stock", href: "/desk/stock", title: "Kho trạm", body: "Xem số tồn, số đang giữ và số còn gửi được của từng món." },
+  { key: "stock", href: "/desk/stock", title: "Kho trạm", body: "Xem số tồn, kiểm kê điều chỉnh và xem lịch sử giao dịch kho." },
   { key: "relief", href: "/desk/relief", title: "Giao hàng", body: "Ghi đợt giao. Đóng cả chiến dịch là một nút riêng." },
   { key: "crew", href: "/desk/crew", title: "Nhân sự", body: "Duyệt tình nguyện, tạo việc, và phân công." },
   { key: "rewards", href: "/desk/rewards", title: "Điểm và chứng nhận", body: "Cộng điểm, tạo mốc, và cấp chứng nhận." },
@@ -311,7 +311,7 @@ function Donut({ title, rows }: { title: string; rows: { label: string; value: n
       </View>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
         <Svg width={size} height={size}>
-          <G rotation={-90} origin={`${size / 2}, ${size / 2}`}>
+          <G transform={`rotate(-90 ${size / 2} ${size / 2})`}>
             {slices.map((slice) => (
               <Circle
                 key={slice.label}

@@ -15,10 +15,11 @@ import type {
   ShiftScheduleRow,
   NoticeRow,
   OrgApplication,
+  InventoryTransactionRow,
 } from "@/api/types";
 
 type Token = string;
-type Body = Record<string, unknown>;
+type Body = Record<string, unknown> | unknown[];
 type AuthSession = {
   token: string;
   message?: string;
@@ -30,11 +31,12 @@ function withToken(token: Token, method: string, body?: Body) {
 }
 
 export function resultText(data: unknown) {
-  if (data && typeof data === "object" && "message" in data && typeof data.message === "string") {
-    return data.message;
+  if (!data) return "";
+  if (typeof data === "string") return data;
+  if (data && typeof data === "object" && "message" in data && typeof (data as { message: unknown }).message === "string") {
+    return (data as { message: string }).message;
   }
-  const text = JSON.stringify(data);
-  return text.length > 320 ? `${text.slice(0, 320)}…` : text;
+  return "";
 }
 
 export const backend = {
@@ -353,6 +355,9 @@ export const backend = {
   updateTransferStatus(token: Token, id: string, body: Body) {
     return api<{ message: string }>(`/transfers/${id}/status`, withToken(token, "PATCH", body));
   },
+  approveTransfer(token: Token, id: string, decision: "APPROVED" | "REJECTED", note?: string) {
+    return api<{ message?: string }>(`/transfers/${id}/approval`, withToken(token, "PATCH", { decision, note }));
+  },
   createRelief(token: Token, body: Body) {
     return api<{ message: string }>("/relief", withToken(token, "POST", body));
   },
@@ -404,6 +409,39 @@ export const backend = {
     return api<{ data: { _id: string; quantity: number; reservedQuantity?: number; availableQuantity?: number; unit: string; stationId?: { _id?: string; name?: string; address?: string } | string; itemTypeId?: { _id?: string; name?: string } | string }[] }>(
       `/inventory${query}`,
       { token },
+    );
+  },
+  listInventoryHistory(token: Token, stationId?: string, page = 1, limit = 50) {
+    const params = new URLSearchParams();
+    if (stationId) params.set("stationId", stationId);
+    params.set("page", String(page));
+    params.set("limit", String(limit));
+    return api<{ total: number; page: number; totalPages: number; data: InventoryTransactionRow[] }>(
+      `/inventory/history?${params.toString()}`,
+      { token },
+    );
+  },
+  createInventory(
+    token: Token,
+    body:
+      | { stationId: string; itemTypeId: string; unit: string; quantity: number; description: string }
+      | Array<{ stationId: string; itemTypeId: string; unit: string; quantity: number; description: string }>,
+  ) {
+    return api<{ message: string; data: unknown }>(
+      "/inventory",
+      withToken(token, "POST", body),
+    );
+  },
+  updateInventory(token: Token, inventoryId: string, body: { quantity: number; description: string }) {
+    return api<{ message: string; data: unknown }>(
+      `/inventory/${inventoryId}`,
+      withToken(token, "PATCH", body),
+    );
+  },
+  deleteInventory(token: Token, inventoryId: string, body: { description: string }) {
+    return api<{ message: string; data: unknown }>(
+      `/inventory/${inventoryId}`,
+      withToken(token, "DELETE", body),
     );
   },
   listShiftSchedules(token: Token, stationId: string, date?: string) {
