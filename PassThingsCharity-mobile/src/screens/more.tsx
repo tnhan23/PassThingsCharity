@@ -10,6 +10,7 @@ import { isOperator, useSession } from "@/api/session";
 import { campaignPhase, donorLabel, formatDay } from "@/api/labels";
 import type { CampaignSummary, StationRow } from "@/api/types";
 import { Screen } from "@/components/chrome";
+import { StationLeafletPeek, StationMap } from "@/components/station-map";
 import { PasswordReset } from "@/components/form";
 import { Badge, Body, Button, Card, Eyebrow, Icon, Pill, StatRow, Tap, Title } from "@/components/ui";
 import { colors, fonts } from "@/theme";
@@ -40,6 +41,7 @@ function stationDistance(here: PlaceFix | null, station: StationRow) {
 }
 
 function StationPeek({ station }: { station: StationRow }) {
+  if (Platform.OS === "android") return <StationLeafletPeek station={station} />;
   const latitude = Number(station.latitude);
   const longitude = Number(station.longitude);
   if (!AppleMaps || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
@@ -841,6 +843,22 @@ export function StationsScreen({
       campaigns={openCampaigns}
     />
   );
+  if (state === "map" && Platform.OS === "android") {
+    return (
+      <Screen tab="stations">
+        <View style={{ gap: 10 }}>
+          {chrome}
+          {loaded.needsLogin ? <Body>Đăng nhập để xem mọi trạm, hoặc chọn một chiến dịch trong bộ lọc.</Body> : null}
+          <StationMap
+            rows={loaded.rows}
+            problem={loaded.problem}
+            initialStationId={focusId}
+            onInteractionChange={() => undefined}
+          />
+        </View>
+      </Screen>
+    );
+  }
   if (state === "map") {
     return (
       <Screen tab="stations" scroll={false}>
