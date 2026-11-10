@@ -2,7 +2,7 @@ import { Redirect, router } from "expo-router";
 import * as Google from "expo-auth-session/providers/google";
 import * as WebBrowser from "expo-web-browser";
 import { useEffect, useState } from "react";
-import { Image, ScrollView, Text, TextInput, View } from "react-native";
+import { Image, Platform, ScrollView, Text, TextInput, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { backend } from "@/api/backend";
@@ -17,6 +17,21 @@ import { colors, fonts } from "@/theme";
 WebBrowser.maybeCompleteAuthSession();
 
 const GOOGLE_IOS_CLIENT_ID = "116703453640-5pmgf0934l9ri041611mcr8qkm0oq246.apps.googleusercontent.com";
+const GOOGLE_ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
+const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+
+const googleClientIds = {
+  iosClientId: GOOGLE_IOS_CLIENT_ID,
+  androidClientId: GOOGLE_ANDROID_CLIENT_ID,
+  webClientId: GOOGLE_WEB_CLIENT_ID,
+};
+
+const hasPlatformGoogleClientId =
+  Platform.OS === "android"
+    ? Boolean(GOOGLE_ANDROID_CLIENT_ID)
+    : Platform.OS === "web"
+      ? Boolean(GOOGLE_WEB_CLIENT_ID)
+      : Boolean(GOOGLE_IOS_CLIENT_ID);
 
 export default function LoginPage() {
   const { ready, user, login, register, open } = useSession();
@@ -36,34 +51,6 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const gmailForm = form === "gmail";
-  const [googleRequest, googleResponse, promptGoogle] = Google.useAuthRequest({ iosClientId: GOOGLE_IOS_CLIENT_ID });
-
-  useEffect(() => {
-    if (googleResponse?.type !== "success") return;
-    const idToken = googleResponse.authentication?.idToken || googleResponse.params.id_token;
-    if (!idToken) {
-      setError("Google không trả mã đăng nhập.");
-      return;
-    }
-    let cancelled = false;
-    setBusy(true);
-    setError("");
-    backend.googleSignIn(idToken)
-      .then(async (data) => {
-        if (cancelled) return;
-        await open(data);
-        router.replace("/");
-      })
-      .catch((caught: unknown) => {
-        if (!cancelled) setError(caught instanceof ApiError ? caught.message : "Không đăng nhập bằng Google được.");
-      })
-      .finally(() => {
-        if (!cancelled) setBusy(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [googleResponse, open]);
 
   if (ready && user) return <Redirect href="/" />;
 
@@ -258,14 +245,29 @@ export default function LoginPage() {
         <View style={{ gap: 10 }}>
           <Button label={t("welcome.login")} onPress={() => setForm("login")} />
           <Button label={t("welcome.register")} tone="ghost" onPress={() => setForm("register")} />
-          <Tap
-            disabled={!googleRequest || busy}
-            onPress={() => void promptGoogle()}
-            style={{ minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.card, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8, paddingHorizontal: 16 }}
-          >
-            <GoogleMark />
-            <Text style={{ fontFamily: fonts.semibold, fontSize: 15, color: colors.primary }}>{t("welcome.gmail")}</Text>
-          </Tap>
+          {hasPlatformGoogleClientId ? (
+            <GoogleSignInButton
+              busy={busy}
+              setBusy={setBusy}
+              setError={setError}
+              open={open}
+              label={t("welcome.gmail")}
+            />
+          ) : (
+            <View style={{ gap: 8 }}>
+              <Tap
+                disabled
+                style={{ minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.card, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8, paddingHorizontal: 16, opacity: 0.6 }}
+              >
+                <GoogleMark />
+                <Text style={{ fontFamily: fonts.semibold, fontSize: 15, color: colors.primary }}>{t("welcome.gmail")}</Text>
+              </Tap>
+              <Body muted>
+                {`Đăng nhập Google cần cấu hình ${Platform.OS === "android" ? "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID" : "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID"}.`}
+              </Body>
+            </View>
+          )}
+          {error ? <Text style={{ fontFamily: fonts.medium, color: colors.error, fontSize: 14 }}>{error}</Text> : null}
           <Button label={t("welcome.forgot")} tone="ghost" onPress={() => setForm("forgot")} />
           <Button
             label={t("welcome.guest")}
@@ -279,6 +281,60 @@ export default function LoginPage() {
         </View>
       ) : null}
     </ScrollView>
+  );
+}
+
+function GoogleSignInButton({
+  busy,
+  setBusy,
+  setError,
+  open,
+  label,
+}: {
+  busy: boolean;
+  setBusy: (busy: boolean) => void;
+  setError: (error: string) => void;
+  open: (data: Parameters<ReturnType<typeof useSession>["open"]>[0]) => Promise<void>;
+  label: string;
+}) {
+  const [googleRequest, googleResponse, promptGoogle] = Google.useAuthRequest(googleClientIds);
+
+  useEffect(() => {
+    if (googleResponse?.type !== "success") return;
+    const idToken = googleResponse.authentication?.idToken || googleResponse.params.id_token;
+    if (!idToken) {
+      setError("Google không trả mã đăng nhập.");
+      return;
+    }
+    let cancelled = false;
+    setBusy(true);
+    setError("");
+    backend.googleSignIn(idToken)
+      .then(async (data) => {
+        if (cancelled) return;
+        await open(data);
+        router.replace("/");
+      })
+      .catch((caught: unknown) => {
+        if (!cancelled) setError(caught instanceof ApiError ? caught.message : "Không đăng nhập bằng Google được.");
+      })
+      .finally(() => {
+        if (!cancelled) setBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [googleResponse, open, setBusy, setError]);
+
+  return (
+    <Tap
+      disabled={!googleRequest || busy}
+      onPress={() => void promptGoogle()}
+      style={{ minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.card, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8, paddingHorizontal: 16 }}
+    >
+      <GoogleMark />
+      <Text style={{ fontFamily: fonts.semibold, fontSize: 15, color: colors.primary }}>{label}</Text>
+    </Tap>
   );
 }
 
