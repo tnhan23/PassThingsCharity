@@ -837,12 +837,16 @@ export function CatalogScreen() {
   const [editUnit, setEditUnit] = useState("KG");
   const [createUnit, setCreateUnit] = useState("KG");
   const [categoryPage, setCategoryPage] = useState(0);
+  const [createCategoryPage, setCreateCategoryPage] = useState(0);
   const [itemPage, setItemPage] = useState(0);
   const categoryPageCount = Math.ceil((categories.rows?.length ?? 0) / 5);
+  const createCategoryPageCount = Math.ceil((categories.rows?.length ?? 0) / 5);
   const itemPageCount = Math.ceil((items.rows?.length ?? 0) / 5);
   const currentCategoryPage = Math.min(categoryPage, Math.max(0, categoryPageCount - 1));
+  const currentCreateCategoryPage = Math.min(createCategoryPage, Math.max(0, createCategoryPageCount - 1));
   const currentItemPage = Math.min(itemPage, Math.max(0, itemPageCount - 1));
   const visibleCategories = categories.rows?.slice(currentCategoryPage * 5, currentCategoryPage * 5 + 5) ?? null;
+  const createCategoryChoices = categories.rows?.slice(currentCreateCategoryPage * 5, currentCreateCategoryPage * 5 + 5) ?? null;
   const visibleItems = items.rows?.slice(currentItemPage * 5, currentItemPage * 5 + 5) ?? null;
 
   return (
@@ -1006,11 +1010,32 @@ export function CatalogScreen() {
           <Field label="Mô tả loại đồ" value={itemDescription} onChangeText={setItemDescription} multiline />
           <Body muted>Chọn nhóm đồ</Body>
           <PickList
-            rows={categories.rows}
+            rows={createCategoryChoices}
             selected={categoryId}
             onPick={setCategoryId}
             detail={() => "Nhóm đồ"}
           />
+          {createCategoryPageCount > 1 ? (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Button
+                label="Trước"
+                tone="ghost"
+                icon="chevron-left"
+                disabled={currentCreateCategoryPage === 0}
+                onPress={() => setCreateCategoryPage(Math.max(0, currentCreateCategoryPage - 1))}
+              />
+              <Text style={{ flex: 1, textAlign: "center", fontFamily: fonts.medium, fontSize: 13, color: colors.muted }}>
+                {`Trang ${currentCreateCategoryPage + 1} / ${createCategoryPageCount} · ${categories.rows?.length ?? 0} nhóm`}
+              </Text>
+              <Button
+                label="Tiếp"
+                tone="ghost"
+                icon="chevron-right"
+                disabled={currentCreateCategoryPage >= createCategoryPageCount - 1}
+                onPress={() => setCreateCategoryPage(Math.min(createCategoryPageCount - 1, currentCreateCategoryPage + 1))}
+              />
+            </View>
+          ) : null}
           <Units value={createUnit} onChange={setCreateUnit} />
           <Button
             label="Thêm loại đồ"
@@ -1051,10 +1076,13 @@ export function CampaignWork() {
   });
   const [picked, setPicked] = useState("");
   const [campaignFilter, setCampaignFilter] = useState<"ALL" | "DRAFT" | "ACTIVE" | "COMPLETED">("ALL");
+  const [campaignPage, setCampaignPage] = useState(0);
   const [orgId, setOrgId] = useState("");
+  const [campaignOrgPickerVisible, setCampaignOrgPickerVisible] = useState(false);
   const [itemId, setItemId] = useState("");
   const [stationId, setStationId] = useState("");
   const [title, setTitle] = useState("");
+  const [createCampaignExpanded, setCreateCampaignExpanded] = useState(false);
   const [startDate, setStartDate] = useState(() => {
     const date = new Date();
     return new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -1065,7 +1093,11 @@ export function CampaignWork() {
   const visibleCampaigns = campaignFilter === "DRAFT"
     ? draftCampaigns.rows
     : campaigns.rows?.filter((campaign) => campaignFilter === "ALL" || campaign.status === campaignFilter) ?? null;
+  const campaignPageCount = Math.ceil((visibleCampaigns?.length ?? 0) / 5);
+  const currentCampaignPage = Math.min(campaignPage, Math.max(0, campaignPageCount - 1));
+  const pagedCampaigns = visibleCampaigns?.slice(currentCampaignPage * 5, currentCampaignPage * 5 + 5) ?? null;
   const draftCount = draftCampaigns.error ? "—" : draftCampaigns.rows?.length ?? "…";
+  const selectedCampaignOrganization = orgs.rows?.find((org) => org._id === orgId);
   const onCampaignDateChange = (event: DateTimePickerEvent, value?: Date) => {
     if (event.type === "dismissed") {
       setActiveCampaignDate(null);
@@ -1136,7 +1168,7 @@ export function CampaignWork() {
           <Pill
             label={`Tất cả (${campaigns.rows.length})`}
             active={campaignFilter === "ALL"}
-            onPress={() => setCampaignFilter("ALL")}
+            onPress={() => { setCampaignFilter("ALL"); setCampaignPage(0); setPicked(""); }}
           />
           {role === "ADMIN" ? (
             <Pill
@@ -1144,6 +1176,7 @@ export function CampaignWork() {
               active={campaignFilter === "DRAFT"}
               onPress={() => {
                 setCampaignFilter("DRAFT");
+                setCampaignPage(0);
                 setPicked("");
                 draftCampaigns.reload();
               }}
@@ -1152,17 +1185,17 @@ export function CampaignWork() {
           <Pill
             label={`Đang diễn ra (${campaigns.rows.filter((row) => row.status === "ACTIVE").length})`}
             active={campaignFilter === "ACTIVE"}
-            onPress={() => setCampaignFilter("ACTIVE")}
+            onPress={() => { setCampaignFilter("ACTIVE"); setCampaignPage(0); setPicked(""); }}
           />
           <Pill
             label={`Hoàn thành (${campaigns.rows.filter((row) => row.status === "COMPLETED").length})`}
             active={campaignFilter === "COMPLETED"}
-            onPress={() => setCampaignFilter("COMPLETED")}
+            onPress={() => { setCampaignFilter("COMPLETED"); setCampaignPage(0); setPicked(""); }}
           />
         </ScrollView>
       ) : null}
       <PickList
-        rows={visibleCampaigns}
+        rows={pagedCampaigns}
         selected={picked}
         onPick={setPicked}
         selectedBackgroundColor={colors.primarySoft}
@@ -1220,11 +1253,148 @@ export function CampaignWork() {
           </>
         )}
       />
-      {editor ? <Title>Chiến dịch mới</Title> : null}
-      {editor ? <Body muted>Thời lượng từ 5 đến 7 ngày.</Body> : null}
+      {campaignPageCount > 1 ? (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Button
+            label="Trước"
+            tone="ghost"
+            icon="chevron-left"
+            disabled={currentCampaignPage === 0}
+            onPress={() => {
+              setCampaignPage(Math.max(0, currentCampaignPage - 1));
+              setPicked("");
+            }}
+          />
+          <Text style={{ flex: 1, textAlign: "center", fontFamily: fonts.medium, fontSize: 13, color: colors.muted }}>
+            {`Trang ${currentCampaignPage + 1} / ${campaignPageCount} · ${visibleCampaigns?.length ?? 0} chiến dịch`}
+          </Text>
+          <Button
+            label="Tiếp"
+            tone="ghost"
+            icon="chevron-right"
+            disabled={currentCampaignPage >= campaignPageCount - 1}
+            onPress={() => {
+              setCampaignPage(Math.min(campaignPageCount - 1, currentCampaignPage + 1));
+              setPicked("");
+            }}
+          />
+        </View>
+      ) : null}
       {editor ? (
-        <View style={{ gap: 8 }}>
-          <PickList rows={orgs.rows} selected={orgId} onPick={setOrgId} detail={(row) => row.address || ""} />
+        <Card style={createCampaignExpanded ? { borderColor: colors.primary, borderWidth: 1.5 } : undefined}>
+          <Tap
+            onPress={() => {
+              setCreateCampaignExpanded((expanded) => !expanded);
+              if (createCampaignExpanded) setCampaignOrgPickerVisible(false);
+            }}
+            accessibilityLabel={createCampaignExpanded ? "Thu gọn tạo chiến dịch mới" : "Mở tạo chiến dịch mới"}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 38, gap: 10 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+                <Icon name={createCampaignExpanded ? "remove-circle-outline" : "add-circle-outline"} size={20} color={colors.primary} />
+                <Text style={{ flex: 1, fontFamily: fonts.bold, fontSize: 16, color: colors.ink }}>Chiến dịch mới</Text>
+              </View>
+              <Icon name={createCampaignExpanded ? "expand-less" : "expand-more"} color={colors.primary} size={24} />
+            </View>
+          </Tap>
+          {createCampaignExpanded ? (
+          <View style={{ gap: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.hairline }}>
+          <Body muted>Thời lượng từ 5 đến 7 ngày.</Body>
+          <Body muted>Chọn tổ chức sở hữu chiến dịch</Body>
+          <Tap
+            onPress={() => setCampaignOrgPickerVisible(true)}
+            accessibilityLabel="Chọn tổ chức sở hữu chiến dịch"
+            style={{
+              minHeight: 52,
+              paddingHorizontal: 14,
+              borderWidth: 1,
+              borderColor: campaignOrgPickerVisible ? colors.primary : colors.line,
+              borderRadius: 12,
+              backgroundColor: colors.card,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+            }}
+          >
+            <View style={{ flex: 1, gap: 3 }}>
+              <Text style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.ink }}>
+                {selectedCampaignOrganization?.name
+                  || (orgs.rows ? "Chọn tổ chức" : "Đang tải tổ chức...")}
+              </Text>
+              {selectedCampaignOrganization?.address ? (
+                <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.muted }} numberOfLines={1}>
+                  {selectedCampaignOrganization.address}
+                </Text>
+              ) : null}
+            </View>
+            <Icon name="arrow-drop-down" color={colors.primary} size={24} />
+          </Tap>
+          <Modal
+            visible={campaignOrgPickerVisible}
+            transparent
+            animationType="slide"
+            onRequestClose={() => setCampaignOrgPickerVisible(false)}
+          >
+            <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.35)" }}>
+              <Pressable
+                accessibilityLabel="Đóng danh sách tổ chức"
+                onPress={() => setCampaignOrgPickerVisible(false)}
+                style={StyleSheet.absoluteFill}
+              />
+              <View style={{
+                maxHeight: "75%",
+                padding: 16,
+                gap: 12,
+                backgroundColor: colors.surface,
+                borderTopLeftRadius: 22,
+                borderTopRightRadius: 22,
+              }}>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                  <Title>Chọn tổ chức</Title>
+                  <Tap onPress={() => setCampaignOrgPickerVisible(false)} accessibilityLabel="Đóng">
+                    <Icon name="close" color={colors.ink} size={24} />
+                  </Tap>
+                </View>
+                {!orgs.rows ? <Body muted>Đang tải danh sách tổ chức.</Body> : null}
+                {orgs.rows?.length === 0 ? <Body muted>Chưa có tổ chức nào.</Body> : null}
+                <ScrollView keyboardShouldPersistTaps="handled">
+                  <View style={{ gap: 8 }}>
+                    {orgs.rows?.map((org) => {
+                      const selected = org._id === orgId;
+                      return (
+                        <Tap
+                          key={org._id}
+                          onPress={() => {
+                            setOrgId(org._id);
+                            setCampaignOrgPickerVisible(false);
+                          }}
+                          accessibilityLabel={`Chọn ${org.name || "tổ chức"}`}
+                          style={{
+                            padding: 14,
+                            borderWidth: selected ? 2 : 1,
+                            borderColor: selected ? colors.primary : colors.line,
+                            borderRadius: 12,
+                            backgroundColor: selected ? colors.primarySoft : colors.card,
+                            gap: 4,
+                          }}
+                        >
+                          <Text style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.ink }}>
+                            {org.name || "Chưa có tên"}
+                          </Text>
+                          {org.address ? (
+                            <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.muted }}>
+                              {org.address}
+                            </Text>
+                          ) : null}
+                        </Tap>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+              </View>
+            </View>
+          </Modal>
           <TextField label="Tên chiến dịch" value={title} onChangeText={setTitle} />
           {campaignDateField("Ngày bắt đầu", startDate, "start")}
           {campaignDateField("Ngày kết thúc", endDate, "end")}
@@ -1241,7 +1411,8 @@ export function CampaignWork() {
             </View>
           ) : null}
           <Button
-            label="Tạo bản nháp"
+            label={job.busy ? "Đang tạo bản nháp..." : "Tạo bản nháp"}
+            disabled={job.busy}
             onPress={() => void job.run(async (token) => {
               const station = stations.rows?.find((row) => row._id === stationId) || stations.rows?.[0];
               const linked = (station as (Row & { organizationId?: string | { _id?: string } }) | undefined)?.organizationId;
@@ -1263,7 +1434,10 @@ export function CampaignWork() {
               return data;
             })}
           />
-        </View>
+          <Note text={job.note} />
+          </View>
+          ) : null}
+        </Card>
       ) : null}
       {editor && picked && !campaigns.rows?.some((row) => row._id === picked) ? (
         <View style={{ gap: 8 }}>
