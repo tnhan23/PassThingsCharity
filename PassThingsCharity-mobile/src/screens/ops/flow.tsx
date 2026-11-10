@@ -4,6 +4,7 @@ import { createElement, useEffect, useState, type ChangeEvent } from "react";
 import { Platform, ScrollView, Text, View } from "react-native";
 import { backend } from "@/api/backend";
 import { ApiError } from "@/api/client";
+import { pickImage } from "@/api/images";
 import { donorLabel, unitSpoken } from "@/api/labels";
 import { useSession } from "@/api/session";
 import type { ContributionDetail, StationRow } from "@/api/types";
@@ -526,12 +527,6 @@ function startOfDay(value: Date) {
   return new Date(value.getFullYear(), value.getMonth(), value.getDate());
 }
 
-function addDays(value: Date, days: number) {
-  const result = startOfDay(value);
-  result.setDate(result.getDate() + days);
-  return result;
-}
-
 function taskDateTime(date: Date | null, time: Date | null) {
   return date && time ? `${dateValue(date, "date")}T${dateValue(time, "time")}+07:00` : undefined;
 }
@@ -562,6 +557,11 @@ export function CrewWork() {
   const [deadlineDate, setDeadlineDate] = useState<Date | null>(null);
   const [deadlineTime, setDeadlineTime] = useState<Date | null>(null);
   const [points, setPoints] = useState("25");
+  const [taskImage, setTaskImage] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDetail, setEditDetail] = useState("");
+  const [editPoints, setEditPoints] = useState("");
+  const [editImage, setEditImage] = useState<string | null>(null);
   const [activePicker, setActivePicker] = useState<{ field: ScheduleField; mode: ScheduleMode } | null>(null);
   const [people, setPeople] = useState<Row[] | null>(null);
   const [peopleError, setPeopleError] = useState("");
@@ -593,12 +593,16 @@ export function CrewWork() {
     deadlineTime: setDeadlineTime,
   };
   const today = startOfDay(new Date());
-  const earliestEndDate = startDate ? addDays(startDate, 1) : null;
+  const earliestEndDate = startDate ? startOfDay(startDate) : null;
+  const startAt = startDate && startTime ? new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate(), startTime.getHours(), startTime.getMinutes()) : null;
+  const endAt = endDate && endTime ? new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), endTime.getHours(), endTime.getMinutes()) : null;
   const startDateError = startDate && startOfDay(startDate) < today
     ? "Ngày bắt đầu không thể trước hôm nay."
-    : "";
-  const endDateError = startDate && endDate && startOfDay(endDate) <= startOfDay(startDate)
-    ? "Ngày kết thúc phải sau ngày bắt đầu."
+    : startAt && startAt.getTime() <= Date.now()
+      ? "Giờ bắt đầu phải ở tương lai."
+      : "";
+  const endDateError = startAt && endAt && endAt.getTime() <= startAt.getTime()
+    ? "Giờ kết thúc phải sau giờ bắt đầu."
     : "";
   const neededError = !Number.isInteger(Number(needed)) || Number(needed) < 1
     ? "Số người cần phải lớn hơn hoặc bằng 1."
@@ -730,6 +734,13 @@ export function CrewWork() {
   }, [job.token, taskId, applyStamp]);
 
   const allTasks = tasks.rows ?? [];
+  useEffect(() => {
+    const row = allTasks.find((item) => item._id === taskId);
+    setEditTitle(row?.title || "");
+    setEditDetail(row?.description || "");
+    setEditPoints(String(row?.rewardPoints ?? 0));
+    setEditImage(row?.imageUrl || null);
+  }, [taskId, tasks.rows]);
   const pendingTotal = allTasks.reduce((sum, row) => sum + (row.slots?.pending ?? 0), 0);
   const tasksWithPending = allTasks.filter((row) => (row.slots?.pending ?? 0) > 0).length;
   const visibleTasks = tasks.rows
@@ -784,8 +795,40 @@ export function CrewWork() {
         }}
         panel={(row) => canTask ? (
           <View style={{ gap: 10 }}>
+            {editImage ? <Photo uri={editImage} height={160} radius={12} /> : <Body muted>Tin này chưa có ảnh.</Body>}
+            <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+              <Button
+                label="Chọn ảnh tin"
+                tone="ghost"
+                onPress={() => void job.run(async (token) => {
+                  const file = await pickImage();
+                  if (!file) return { message: "Chưa chọn ảnh." };
+                  const uploaded = await backend.uploadTaskImage(token, file);
+                  setEditImage(uploaded.imageUrl);
+                  return { message: "Đã tải ảnh. Bấm lưu để gắn vào tin." };
+                })}
+              />
+              {editImage ? <Button label="Gỡ ảnh" tone="danger" onPress={() => setEditImage(null)} /> : null}
+            </View>
+            <TextField label="Tên việc" value={editTitle} onChangeText={setEditTitle} />
+            <TextField label="Mô tả" value={editDetail} onChangeText={setEditDetail} />
+            <TextField label="Điểm thưởng" value={editPoints} onChangeText={(value) => setEditPoints(value.replace(/\D/g, ""))} keyboardType="number-pad" />
+            <Button
+              label="Lưu tin"
+              onPress={() => {
+                if (!editTitle.trim()) {
+                  job.fail("Vui lòng nhập tên công việc.");
+                  return;
+                }
+                void job.run((token) => backend.updateTask(token, row._id, {
+                  title: editTitle.trim(),
+                  description: editDetail.trim(),
+                  rewardPoints: Number(editPoints) || 0,
+                  imageUrl: editImage,
+                })).then((ok) => ok && tasks.reload());
+              }}
+            />
             {stationTitleOf(row.stationId) ? <Body muted>{`Trạm: ${stationTitleOf(row.stationId)}`}</Body> : null}
-            {row.description ? <Body>{row.description}</Body> : null}
             <Text style={{ fontFamily: fonts.bold, fontSize: 15, color: colors.ink }}>
               {`Tình nguyện viên ứng tuyển (${applicants ? applicants.length : "…"})`}
             </Text>
@@ -829,11 +872,13 @@ export function CrewWork() {
               </Card>
             ))}
             <View style={{ gap: 8, paddingTop: 6, borderTopWidth: 1, borderTopColor: colors.hairline }}>
-              {row.recruitmentStatus !== "OPEN" ? (
+              {row.recruitmentStatus === "OPEN" ? (
+                <Button label="Đóng tuyển" tone="ghost" onPress={() => void job.run((token) => backend.updateTask(token, row._id, { recruitmentStatus: "CLOSED" })).then((ok) => ok && tasks.reload())} />
+              ) : row.status !== "CANCELLED" ? (
                 <Button label="Mở tuyển lại" tone="ghost" onPress={() => void job.run((token) => backend.updateTask(token, row._id, { recruitmentStatus: "OPEN" })).then((ok) => ok && tasks.reload())} />
               ) : null}
               {row.status !== "CANCELLED" ? (
-                <Button label="Hủy việc này" tone="danger" onPress={() => void job.run((token) => backend.updateTask(token, row._id, { status: "CANCELLED" })).then((ok) => ok && tasks.reload())} />
+                <Button label="Hủy việc này" tone="danger" onPress={() => void job.run((token) => backend.updateTask(token, row._id, { status: "CANCELLED", recruitmentStatus: "CLOSED" })).then((ok) => ok && tasks.reload())} />
               ) : null}
             </View>
           </View>
@@ -853,6 +898,21 @@ export function CrewWork() {
           {renderScheduleField("Ngày hạn đăng ký (không bắt buộc)", "deadlineDate", "date")}
           {renderScheduleField("Giờ hạn đăng ký (không bắt buộc)", "deadlineTime", "time")}
           <TextField label="Điểm thưởng" value={points} onChangeText={(value) => setPoints(value.replace(/\D/g, ""))} keyboardType="number-pad" />
+          {taskImage ? <Photo uri={taskImage} height={160} radius={12} /> : <Body muted>Chưa chọn ảnh cho tin.</Body>}
+          <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+            <Button
+              label="Chọn ảnh tin"
+              tone="ghost"
+              onPress={() => void createTaskJob.run(async (token) => {
+                const file = await pickImage();
+                if (!file) return { message: "Chưa chọn ảnh." };
+                const uploaded = await backend.uploadTaskImage(token, file);
+                setTaskImage(uploaded.imageUrl);
+                return { message: "Đã tải ảnh. Ảnh sẽ gắn khi đăng tin." };
+              })}
+            />
+            {taskImage ? <Button label="Gỡ ảnh" tone="danger" onPress={() => setTaskImage(null)} /> : null}
+          </View>
           {activePicker && Platform.OS !== "web" ? (
             <View style={{ gap: 8 }}>
               <DateTimePicker
@@ -895,6 +955,7 @@ export function CrewWork() {
                 ...(taskDateTime(deadlineDate, deadlineTime) ? { volunteerDeadline: taskDateTime(deadlineDate, deadlineTime) } : {}),
                 recruitmentStatus: "OPEN",
                 rewardPoints: Number(points) || 0,
+                ...(taskImage ? { imageUrl: taskImage } : {}),
               };
               console.info("[Đăng tin tuyển] Submitting task", payload);
               void createTaskJob.run((token) => backend.createTask(token, payload)).then((ok) => {

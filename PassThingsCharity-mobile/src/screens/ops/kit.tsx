@@ -16,6 +16,11 @@ export type Row = {
   code?: string;
   status?: string;
   address?: string;
+  latitude?: string | number;
+  longitude?: string | number;
+  openingTime?: string;
+  closingTime?: string;
+  imageUrl?: string | null;
   isVerified?: boolean;
   isActive?: boolean;
   unit?: string;
@@ -32,6 +37,7 @@ export type Row = {
   rejectionReason?: string;
   recipientName?: string;
   recruitmentStatus?: string;
+  rewardPoints?: number;
   slots?: { total?: number; approved?: number; pending?: number; remaining?: number; isFull?: boolean };
   campaignId?: { title?: string; _id?: string } | string;
   stationId?: { _id?: string; name?: string; address?: string } | string;
@@ -150,7 +156,7 @@ export function formatServerMessage(raw: string) {
     return "Vui lòng nhập tên trạm, địa chỉ và tọa độ dạng số thập phân hợp lệ (ví dụ: 10.8289, 106.8172).";
   }
   if (trimmed === "Provide startTime and endTime, with endTime after startTime.") {
-    return "Vui lòng chọn đầy đủ ngày giờ bắt đầu và kết thúc (giờ kết thúc phải sau giờ bắt đầu).";
+    return "Vui lòng chọn đầy đủ ngày giờ bắt đầu và kết thúc. Giờ kết thúc phải sau giờ bắt đầu.";
   }
   if (trimmed === "Schedule must start in the future.") {
     return "Thời gian bắt đầu công việc phải ở trong tương lai.";
@@ -190,8 +196,7 @@ export function useJob() {
 
   async function run(job: (token: string) => Promise<unknown>) {
     if (!token) {
-      setIsError(true);
-      setNote("Vui lòng đăng nhập trước.");
+      fail("Vui lòng đăng nhập trước.");
       return false;
     }
     if (busyRef.current) return false;
@@ -202,7 +207,7 @@ export function useJob() {
     try {
       const data = await job(token);
       setIsError(false);
-      setNote(resultText(data));
+      setNote(formatServerMessage(resultText(data)));
       return true;
     } catch (caught) {
       setIsError(true);

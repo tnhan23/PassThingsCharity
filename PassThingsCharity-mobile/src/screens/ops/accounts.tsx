@@ -26,7 +26,7 @@ export function AccountsScreen() {
   const people = useRows((token) => backend.listUsers(token).then((data) => data.data as Row[]));
   const job = useJob();
   const [picked, setPicked] = useState("");
-  const [bucket, setBucket] = useState<"ALL" | "active" | "banned">("ALL");
+  const [bucket, setBucket] = useState<"ALL" | "active" | "inactive" | "banned">("ALL");
   const shown = (people.rows ?? []).filter((row) => bucket === "ALL" || row.status === bucket);
 
   return (
@@ -36,6 +36,7 @@ export function AccountsScreen() {
       <View style={{ flexDirection: "row", gap: 8 }}>
         <Pill label="Tất cả" active={bucket === "ALL"} onPress={() => setBucket("ALL")} />
         <Pill label="Đang dùng" active={bucket === "active"} onPress={() => setBucket("active")} />
+        <Pill label="Ngưng" active={bucket === "inactive"} onPress={() => setBucket("inactive")} />
         <Pill label="Đã khóa" active={bucket === "banned"} onPress={() => setBucket("banned")} />
       </View>
       {people.rows === null ? <Body muted>Đang tải danh sách.</Body> : null}

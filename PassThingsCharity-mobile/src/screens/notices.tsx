@@ -4,6 +4,7 @@ import { ActivityIndicator } from "react-native";
 import { ApiError } from "@/api/client";
 import { backend } from "@/api/backend";
 import type { NoticeRow } from "@/api/types";
+import { publishUnread } from "@/api/unread";
 import { useLocale, type CopyKey } from "@/api/locale";
 import { useSession } from "@/api/session";
 import { Screen } from "@/components/chrome";
@@ -33,8 +34,11 @@ export function NoticesScreen() {
     setError("");
     backend.myNotifications(token)
       .then((data) => {
-        setRows(data.data);
-        setUnread(data.unreadCount);
+        const nextRows = data.data ?? [];
+        const nextUnread = nextRows.filter((item) => !item.isRead).length;
+        setRows(nextRows);
+        setUnread(nextUnread);
+        publishUnread(nextUnread);
       })
       .catch((reason: unknown) => {
         setRows([]);
@@ -51,7 +55,12 @@ export function NoticesScreen() {
     setNote("");
     try {
       const data = await backend.markNotificationRead(token, id);
+      const next = (rows ?? []).map((item) => (item._id === id ? { ...item, isRead: true } : item));
+      const nextUnread = next.filter((item) => !item.isRead).length;
       setNote(data.message);
+      setRows(next);
+      setUnread(nextUnread);
+      publishUnread(nextUnread);
       load();
     } catch (reason) {
       setNote(reason instanceof ApiError ? reason.message : "Không đánh dấu được.");
@@ -64,6 +73,9 @@ export function NoticesScreen() {
     try {
       const data = await backend.markAllNotificationsRead(token);
       setNote(data.message);
+      setRows((rows ?? []).map((item) => ({ ...item, isRead: true })));
+      setUnread(0);
+      publishUnread(0);
       load();
     } catch (reason) {
       setNote(reason instanceof ApiError ? reason.message : "Không đánh dấu được.");

@@ -1,5 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
+import { Image, type ImageRef } from "expo-image";
 import { ActivityIndicator, Linking, Platform, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Location from "expo-location";
@@ -12,7 +13,7 @@ import type { CampaignSummary, StationRow } from "@/api/types";
 import { Screen } from "@/components/chrome";
 import { StationLeafletPeek, StationMap } from "@/components/station-map";
 import { PasswordReset } from "@/components/form";
-import { Badge, Body, Button, Card, Eyebrow, Icon, Pill, StatRow, Tap, Title } from "@/components/ui";
+import { Badge, Body, Button, Card, Eyebrow, Icon, Photo, Pill, StatRow, Tap, Title } from "@/components/ui";
 import { colors, fonts } from "@/theme";
 
 const AppleMaps = Platform.OS === "ios" ? (require("expo-maps") as typeof import("expo-maps")).AppleMaps : null;
@@ -40,24 +41,83 @@ function stationDistance(here: PlaceFix | null, station: StationRow) {
   return distanceKm(here, latitude, longitude);
 }
 
-function StationPeek({ station }: { station: StationRow }) {
-  if (Platform.OS === "android") return <StationLeafletPeek station={station} />;
+function roundStationMarker(uri: string) {
+  try {
+    const url = new URL(uri);
+    if (url.hostname !== "res.cloudinary.com") return uri;
+    const marker = "/upload/";
+    const index = url.pathname.indexOf(marker);
+    if (index < 0) return uri;
+    const insertAt = index + marker.length;
+    url.pathname = `${url.pathname.slice(0, insertAt)}c_fill,g_auto,w_160,h_160,r_max,bo_8px_solid_white,f_png/${url.pathname.slice(insertAt)}`;
+    return url.toString();
+  } catch {
+    return uri;
+  }
+}
+
+async function loadRoundMarker(uri: string) {
+  const round = roundStationMarker(uri);
+  try {
+    return await Image.loadAsync(round, { maxWidth: 160, maxHeight: 160 });
+  } catch (error) {
+    if (round === uri) throw error;
+    return Image.loadAsync(uri, { maxWidth: 160, maxHeight: 160 });
+  }
+}
+
+function StationPeekMap({ station, icon }: { station: StationRow; icon: ImageRef | null }) {
   const latitude = Number(station.latitude);
   const longitude = Number(station.longitude);
   if (!AppleMaps || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
     return <Body muted>Bản đồ Apple mở trên iPhone.</Body>;
   }
+  const pin = { id: station._id, title: station.name, coordinates: { latitude, longitude }, tintColor: colors.primary };
   return (
     <View style={{ height: 168, borderRadius: 14, overflow: "hidden" }}>
       <AppleMaps.View
         style={{ flex: 1, width: "100%" }}
         cameraPosition={{ coordinates: { latitude, longitude }, zoom: 16 }}
-        markers={[{ id: station._id, title: station.name, coordinates: { latitude, longitude }, tintColor: colors.primary }]}
+        markers={icon ? [] : [pin]}
+        annotations={icon ? [{ ...pin, icon, anchor: { x: 0.5, y: 0.5 } }] : []}
         uiSettings={{ myLocationButtonEnabled: false, compassEnabled: false, scaleBarEnabled: false }}
         colorScheme={AppleMaps.MapColorScheme.LIGHT}
       />
     </View>
   );
+}
+
+function StationPeekPhoto({ station }: { station: StationRow }) {
+  const icon = useStationPortrait(station.imageUrl);
+  return <StationPeekMap station={station} icon={icon} />;
+}
+
+function StationPeek({ station }: { station: StationRow }) {
+  if (Platform.OS === "android") return <StationLeafletPeek station={station} />;
+  if (station.imageUrl) return <StationPeekPhoto station={station} />;
+  return <StationPeekMap station={station} icon={null} />;
+}
+
+function useStationPortrait(uri?: string | null) {
+  const [icon, setIcon] = useState<ImageRef | null>(null);
+  useEffect(() => {
+    if (!uri) {
+      setIcon(null);
+      return;
+    }
+    let cancelled = false;
+    loadRoundMarker(uri)
+      .then((image) => {
+        if (!cancelled) setIcon(image);
+      })
+      .catch(() => {
+        if (!cancelled) setIcon(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [uri]);
+  return icon;
 }
 
 function StationCards({
@@ -138,6 +198,7 @@ function StationCards({
                   <Badge label={station.isActive ? "Đang mở" : "Chưa kích hoạt"} tone={station.isActive ? "primary" : "neutral"} />
                   {distLabel ? <Badge label={distLabel} tone="coral" /> : null}
                 </View>
+                {station.imageUrl ? <Photo uri={station.imageUrl} height={140} radius={14} /> : null}
                 <Text style={{ fontFamily: fonts.bold, fontSize: 17, color: colors.ink }}>{station.name}</Text>
                 <Body muted>{station.address}</Body>
                 {station.openingTime || station.closingTime ? (
@@ -285,13 +346,47 @@ function edgePoints(
   return placed;
 }
 
-function stationFixes(rows: StationRow[] | null) {
-  return (rows ?? []).flatMap((station) => {
+function stationFixes(rows: StationRow[] | null, icons: Record<string, ImageRef>) {
+  const pins: { id: string; title: string; coordinates: { latitude: number; longitude: number }; tintColor: string }[] = [];
+  const photos: { id: string; title: string; coordinates: { latitude: number; longitude: number }; icon: ImageRef; anchor: { x: number; y: number } }[] = [];
+  for (const station of rows ?? []) {
     const latitude = Number(station.latitude);
     const longitude = Number(station.longitude);
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return [];
-    return [{ id: station._id, title: station.name, coordinates: { latitude, longitude }, tintColor: colors.primary }];
-  });
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) continue;
+    const pin = { id: station._id, title: station.name, coordinates: { latitude, longitude } };
+    const icon = icons[station._id];
+    if (icon) photos.push({ ...pin, icon, anchor: { x: 0.5, y: 0.5 } });
+    else pins.push({ ...pin, tintColor: colors.primary });
+  }
+  return { pins, photos };
+}
+
+function useStationIcons(rows: StationRow[] | null) {
+  const [icons, setIcons] = useState<Record<string, ImageRef>>({});
+  const signature = (rows ?? []).map((station) => `${station._id}:${station.imageUrl || ""}`).join("|");
+  useEffect(() => {
+    let cancelled = false;
+    const targets = (rows ?? []).filter((station) => station.imageUrl);
+    Promise.all(targets.map(async (station) => {
+      try {
+        const image = await loadRoundMarker(station.imageUrl || "");
+        return [station._id, image] as const;
+      } catch {
+        return null;
+      }
+    })).then((pairs) => {
+      if (cancelled) return;
+      const next: Record<string, ImageRef> = {};
+      for (const pair of pairs) {
+        if (pair) next[pair[0]] = pair[1];
+      }
+      setIcons(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [signature]);
+  return icons;
 }
 
 function MapAction({
@@ -357,6 +452,7 @@ function StationFacts({
   if (!dock) {
     return (
       <Card>
+        {station.imageUrl ? <Photo uri={station.imageUrl} height={140} radius={14} /> : null}
         <Title>{station.name}</Title>
         <Body>{station.address}</Body>
         <Body muted>{hours}</Body>
@@ -390,6 +486,7 @@ function StationFacts({
       </View>
       {open ? (
         <View style={{ gap: 2 }}>
+          {station.imageUrl ? <Photo uri={station.imageUrl} height={120} radius={12} /> : null}
           <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.ink }}>{station.address}</Text>
           <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.muted }}>{hours}</Text>
           {routeProblem ? <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.ink }}>{routeProblem}</Text> : null}
@@ -467,7 +564,15 @@ function PlaceMap({ here, focusId, rows }: { here: PlaceFix | null; focusId: str
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
     glide(latitude, longitude);
   }, [focusId, rows]);
-  const markers = stationFixes(rows);
+  const icons = useStationIcons(rows);
+  const { pins, photos } = stationFixes(rows, icons);
+  function openStation(id: string, latitude?: number | null, longitude?: number | null) {
+    setInfoId(id);
+    setRoute(null);
+    setRouteProblem("");
+    if (latitude == null || longitude == null) return;
+    glide(latitude, longitude);
+  }
   const infoStation = rows?.find((row) => row._id === infoId) ?? null;
   const camera = liveCamera ?? anchor.current;
   const outside = edgePoints(rows, here, camera, mapSize, infoStation ? 92 : 36);
@@ -540,7 +645,8 @@ function PlaceMap({ here, focusId, rows }: { here: PlaceFix | null; focusId: str
           coordinates: { latitude: anchor.current.latitude, longitude: anchor.current.longitude },
           zoom: anchor.current.zoom,
         }}
-        markers={markers}
+        markers={pins}
+        annotations={photos}
         polylines={route ? [{ id: "route", coordinates: route.coordinates, color: colors.secondary, width: 5 }] : []}
         properties={{ isMyLocationEnabled: Boolean(here) }}
         uiSettings={{ myLocationButtonEnabled: true, compassEnabled: true, scaleBarEnabled: true }}
@@ -553,16 +659,8 @@ function PlaceMap({ here, focusId, rows }: { here: PlaceFix | null; focusId: str
             zoom: event.zoom,
           });
         }}
-        onMarkerClick={(marker) => {
-          const id = marker.id || "";
-          setInfoId(id);
-          setRoute(null);
-          setRouteProblem("");
-          const latitude = marker.coordinates?.latitude;
-          const longitude = marker.coordinates?.longitude;
-          if (latitude == null || longitude == null) return;
-          glide(latitude, longitude);
-        }}
+        onMarkerClick={(marker) => openStation(marker.id || "", marker.coordinates?.latitude, marker.coordinates?.longitude)}
+        onAnnotationClick={(annotation) => openStation(annotation.id || "", annotation.coordinates?.latitude, annotation.coordinates?.longitude)}
         onMapClick={() => {
           setInfoId("");
           setRoute(null);

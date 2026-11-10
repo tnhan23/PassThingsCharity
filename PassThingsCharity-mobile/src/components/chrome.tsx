@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { backend } from "@/api/backend";
 import { type CopyKey, useLocale } from "@/api/locale";
 import { useSession } from "@/api/session";
+import { subscribeUnread } from "@/api/unread";
 import { useShell } from "@/api/shell";
 import { Body, Button, Icon, Tap, Title } from "@/components/ui";
 import { colors, fonts } from "@/theme";
@@ -64,7 +65,7 @@ export function Screen({
             contentContainerStyle={{
               paddingHorizontal: 16,
               paddingTop: 12,
-              paddingBottom: insets.bottom + (desk ? 58 : 112),
+              paddingBottom: insets.bottom + (desk ? 128 : 112),
               gap: 14,
             }}
           >
@@ -137,6 +138,7 @@ function Bell({ ink }: { ink: string }) {
       cancelled = true;
     };
   }, [token, path]);
+  useEffect(() => subscribeUnread(setUnread), []);
   const count = unread > 99 ? "99+" : String(unread);
   return (
     <Tap onPress={() => router.push("/notifications")} style={styles.iconBtn} accessibilityLabel={unread > 0 ? `${t("nav.bell")} ${count}` : t("nav.bell")}>

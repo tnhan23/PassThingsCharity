@@ -6,6 +6,7 @@ import * as Location from "expo-location";
 import { backend } from "@/api/backend";
 import { donorLabel } from "@/api/labels";
 import { ApiError } from "@/api/client";
+import { pickImage } from "@/api/images";
 import { Body, Button, Card, Photo, Pill, StatRow, Title } from "@/components/ui";
 import { colors, fonts } from "@/theme";
 import { can, Fold, nextCampaignStatuses, Note, OpsGate, PickList, RoleNote, TextField, Units, useJob, useRole, useRows, type Row } from "@/screens/ops/kit";
@@ -78,6 +79,22 @@ function stationPlaceMapHtml(latitude: number | null, longitude: number | null) 
 </html>`;
 }
 
+function campaignDateValue(date: Date) {
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function campaignDateFromInput(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function addCampaignDays(date: Date, days: number) {
+  const result = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
 function StationPlaceMap({
   latitude,
   longitude,
@@ -92,7 +109,9 @@ function StationPlaceMap({
   const lng = hasCoordinates ? Number(longitude) : null;
   const picked = lat !== null && lng !== null && Number.isFinite(lat) && Number.isFinite(lng);
   const androidMapHtml = useRef(stationPlaceMapHtml(picked ? lat : null, picked ? lng : null)).current;
-  const camera = useRef({ coordinates: { latitude: 10.7769, longitude: 106.7009 }, zoom: 13 }).current;
+  const camera = useRef(picked && lat !== null && lng !== null
+    ? { coordinates: { latitude: lat, longitude: lng }, zoom: 16 }
+    : { coordinates: { latitude: 10.7769, longitude: 106.7009 }, zoom: 13 }).current;
   if (Platform.OS === "android" && NativeWebView) {
     return (
       <View style={{ height: 220, borderRadius: 14, overflow: "hidden" }}>
@@ -259,6 +278,12 @@ export function StationScreen() {
   const [stationFilter, setStationFilter] = useState<"ALL" | "PENDING" | "APPROVED">(
     role === "ADMIN" ? "PENDING" : "ALL",
   );
+  const [editName, setEditName] = useState("");
+  const [editAddress, setEditAddress] = useState("");
+  const [editLatitude, setEditLatitude] = useState("");
+  const [editLongitude, setEditLongitude] = useState("");
+  const [editOpen, setEditOpen] = useState("");
+  const [editClose, setEditClose] = useState("");
   const [staffError, setStaffError] = useState("");
   const [orgId, setOrgId] = useState("");
   const [name, setName] = useState("");
@@ -268,6 +293,10 @@ export function StationScreen() {
   const [geocoding, setGeocoding] = useState(false);
   const [geocodeMessage, setGeocodeMessage] = useState("");
   const [mapFocusKey, setMapFocusKey] = useState(0);
+  const [photoUrl, setPhotoUrl] = useState("");
+  const [photoNote, setPhotoNote] = useState("");
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const canEditPhoto = role === "ADMIN" || role === "ORG_MANAGER" || role === "STATION_MANAGER";
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -290,10 +319,19 @@ export function StationScreen() {
   }, [role, stations.reload]));
 
   useEffect(() => {
-    if (!job.token || !picked) return;
-    if (!can(role, ["STATION_MANAGER", "ORG_MANAGER"])) {
+    const selected = stations.rows?.find((row) => row._id === picked);
+    setEditName(selected?.name || "");
+    setEditAddress(selected?.address || "");
+    setEditLatitude(selected?.latitude != null ? String(selected.latitude) : "");
+    setEditLongitude(selected?.longitude != null ? String(selected.longitude) : "");
+    setEditOpen(selected?.openingTime || "");
+    setEditClose(selected?.closingTime || "");
+  }, [picked, stations.rows]);
+
+  useEffect(() => {
+    if (!job.token || !picked || !can(role, ["STATION_MANAGER", "ORG_MANAGER"])) {
       setStaff(null);
-      setStaffError(role === "ADMIN" ? "Server chỉ cho quản lý trạm hoặc quản lý tổ chức xem nhân viên." : "");
+      setStaffError("");
       return;
     }
     let cancelled = false;
@@ -369,8 +407,63 @@ export function StationScreen() {
       <PickList rows={can(role, ["ADMIN", "ORG_MANAGER"]) ? visibleStations : stations.rows} selected={picked} onPick={setPicked} detail={(row) => `${row.isActive ? "Đang mở" : "Chưa kích hoạt"} · ${row.address || ""}`} />
       {picked ? (
         <View style={{ gap: 8 }}>
+          {stations.rows?.find((row) => row._id === picked)?.imageUrl ? <Photo uri={stations.rows.find((row) => row._id === picked)?.imageUrl || ""} height={160} radius={14} /> : <Body muted>Trạm chưa có ảnh.</Body>}
+          {canEditPhoto ? (
+            <Button
+              label={photoBusy ? "Đang tải ảnh..." : "Tải ảnh trạm"}
+              tone="ghost"
+              disabled={photoBusy}
+              onPress={() => void (async () => {
+                if (!job.token) return;
+                setPhotoBusy(true);
+                setPhotoNote("");
+                try {
+                  const file = await pickImage();
+                  if (!file) return;
+                  const uploaded = await backend.uploadStationImage(job.token, file);
+                  if (!uploaded.imageUrl) {
+                    setPhotoNote("Máy chủ không trả đường dẫn ảnh.");
+                    return;
+                  }
+                  await backend.updateStation(job.token, picked, { imageUrl: uploaded.imageUrl });
+                  stations.reload();
+                  setPhotoNote("Đã lưu ảnh trạm.");
+                } catch (caught) {
+                  setPhotoNote(caught instanceof ApiError ? caught.message : caught instanceof Error ? caught.message : "Không tải được ảnh trạm.");
+                } finally {
+                  setPhotoBusy(false);
+                }
+              })()}
+            />
+          ) : null}
+          {photoNote ? <Body>{photoNote}</Body> : null}
+          {can(role, ["ADMIN", "ORG_MANAGER", "STATION_MANAGER"]) ? (
+            <View style={{ gap: 8 }}>
+              <Title>Sửa trạm</Title>
+              <TextField label="Tên trạm" value={editName} onChangeText={setEditName} />
+              <TextField label="Địa chỉ" value={editAddress} onChangeText={setEditAddress} />
+              <TextField label="Vĩ độ" value={editLatitude} onChangeText={setEditLatitude} />
+              <TextField label="Kinh độ" value={editLongitude} onChangeText={setEditLongitude} />
+              <TextField label="Giờ mở" value={editOpen} onChangeText={setEditOpen} />
+              <TextField label="Giờ đóng" value={editClose} onChangeText={setEditClose} />
+              <Button
+                label="Lưu thay đổi"
+                onPress={() => void job.run((token) => backend.updateStation(token, picked, {
+                  name: editName.trim(),
+                  address: editAddress.trim(),
+                  latitude: editLatitude.trim(),
+                  longitude: editLongitude.trim(),
+                  openingTime: editOpen.trim(),
+                  closingTime: editClose.trim(),
+                })).then((ok) => ok && stations.reload())}
+              />
+            </View>
+          ) : null}
           {can(role, ["ADMIN"]) && stations.rows?.find((row) => row._id === picked)?.isActive ? <Body>Trạm này đã được duyệt.</Body> : null}
           {can(role, ["ADMIN"]) && !stations.rows?.find((row) => row._id === picked)?.isActive ? <Button label={approveStationJob.busy ? "Đang gửi" : "Duyệt trạm"} onPress={() => void approveStationJob.run((token) => backend.approveStation(token, picked)).then((ok) => ok && stations.reload())} /> : null}
+          {can(role, ["ADMIN", "ORG_MANAGER"]) ? (
+            <Button label="Xóa trạm" tone="danger" onPress={() => void job.run((token) => backend.deleteStation(token, picked)).then((ok) => { if (!ok) return; setPicked(""); stations.reload(); })} />
+          ) : null}
           {role === "ORG_MANAGER" && stations.rows?.find((row) => row._id === picked)?.isActive ? (
             <View style={{ gap: 8 }}>
               <TextField label="Email hoặc điện thoại của trưởng trạm có sẵn" value={identifier} onChangeText={setIdentifier} />
@@ -446,23 +539,19 @@ export function StationScreen() {
               value={address}
               onChangeText={(value) => {
                 setAddress(value);
-                if (Platform.OS === "android") {
-                  if (latitude || longitude) setMapFocusKey((key) => key + 1);
-                  setLatitude("");
-                  setLongitude("");
-                  setGeocodeMessage("");
-                }
+                if (latitude || longitude) setMapFocusKey((key) => key + 1);
+                setLatitude("");
+                setLongitude("");
+                setGeocodeMessage("");
               }}
             />
-            {Platform.OS === "android" ? (
-              <Button
-                label={geocoding ? "Đang tìm vị trí..." : "Tìm tọa độ từ địa chỉ"}
-                tone="ghost"
-                disabled={!address.trim() || geocoding}
-                onPress={() => void findStationCoordinates()}
-              />
-            ) : null}
-            {Platform.OS === "android" && geocodeMessage ? <Body muted>{geocodeMessage}</Body> : null}
+            <Button
+              label={geocoding ? "Đang tìm vị trí..." : "Tìm tọa độ từ địa chỉ"}
+              tone="ghost"
+              disabled={!address.trim() || geocoding}
+              onPress={() => void findStationCoordinates()}
+            />
+            {geocodeMessage ? <Body muted>{geocodeMessage}</Body> : null}
             {Platform.OS === "android" || AppleMaps ? <Body muted>Chạm bản đồ để đặt vị trí trạm.</Body> : null}
             {Platform.OS === "android" || AppleMaps ? (
               <StationPlaceMap
@@ -477,6 +566,32 @@ export function StationScreen() {
             ) : null}
             <TextField label="Vĩ độ (số thập phân, ví dụ 10.8289)" value={latitude} onChangeText={setLatitude} keyboardType="decimal-pad" />
             <TextField label="Kinh độ (số thập phân, ví dụ 106.8172)" value={longitude} onChangeText={setLongitude} keyboardType="decimal-pad" />
+            {photoUrl ? <Photo uri={photoUrl} height={140} radius={14} /> : null}
+            <Button
+              label={photoBusy ? "Đang tải ảnh..." : photoUrl ? "Đổi ảnh trạm" : "Tải ảnh trạm"}
+              tone="ghost"
+              disabled={photoBusy}
+              onPress={() => void (async () => {
+                if (!job.token) return;
+                setPhotoBusy(true);
+                setPhotoNote("");
+                try {
+                  const file = await pickImage();
+                  if (!file) return;
+                  const uploaded = await backend.uploadStationImage(job.token, file);
+                  if (!uploaded.imageUrl) {
+                    setPhotoNote("Máy chủ không trả đường dẫn ảnh.");
+                    return;
+                  }
+                  setPhotoUrl(uploaded.imageUrl);
+                  setPhotoNote("Ảnh sẽ được gắn khi tạo trạm.");
+                } catch (caught) {
+                  setPhotoNote(caught instanceof ApiError ? caught.message : caught instanceof Error ? caught.message : "Không tải được ảnh trạm.");
+                } finally {
+                  setPhotoBusy(false);
+                }
+              })()}
+            />
             <Button
               label="Tạo trạm"
               onPress={() => {
@@ -505,6 +620,7 @@ export function StationScreen() {
                   address: address.trim(),
                   latitude: cleanLat,
                   longitude: cleanLng,
+                  ...(photoUrl ? { imageUrl: photoUrl } : {}),
                 })).then((ok) => ok && stations.reload());
               }}
             />
@@ -700,7 +816,7 @@ export function CampaignWork() {
         <StatRow
           items={[
             { label: "Đang nhận", value: campaigns.rows.filter((r) => r.status === "ACTIVE").length, unit: "đợt", tone: "primary" },
-            { label: "Sắp mở", value: campaigns.rows.filter((r) => r.status === "PUBLISHED").length, unit: "đợt", tone: "coral" },
+            { label: "Hoàn thành", value: campaigns.rows.filter((r) => r.status === "COMPLETED").length, unit: "đợt", tone: "coral" },
             { label: "Tổng cộng", value: campaigns.rows.length, unit: "đợt", tone: "ink" },
           ]}
         />
@@ -808,7 +924,7 @@ export function CampaignWork() {
       ) : null}
       {editor && picked && !campaigns.rows?.some((row) => row._id === picked) ? (
         <View style={{ gap: 8 }}>
-          <Body muted>Bản nháp vừa tạo chưa hiện trong danh sách công khai. Gắn trạm đang hoạt động, rồi phát hành. Không cần admin duyệt.</Body>
+          <Body muted>Bản nháp vừa tạo chưa hiện trong danh sách công khai. Gắn trạm đang hoạt động, rồi duyệt để chiến dịch chạy.</Body>
           <PickList rows={items.rows} selected={itemId} onPick={setItemId} detail={(item) => item.unit || ""} />
           <TextField label="Số mục tiêu" value={quantity} onChangeText={setQuantity} />
           <Button label="Gắn loại đồ" onPress={() => void job.run((token) => backend.addCampaignItem(token, picked, { itemTypeId: itemId, targetQuantity: Number(quantity), priority: "MEDIUM" }))} />

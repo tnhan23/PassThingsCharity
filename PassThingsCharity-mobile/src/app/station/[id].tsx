@@ -3,11 +3,12 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator } from "react-native";
 import { backend } from "@/api/backend";
 import { ApiError } from "@/api/client";
+import { pickImage } from "@/api/images";
 import { donorLabel, formatDay, itemName, itemUnit } from "@/api/labels";
 import { useSession } from "@/api/session";
 import type { CampaignDetail, StationRow, TaskRow } from "@/api/types";
 import { Screen } from "@/components/chrome";
-import { Body, Button, Card, Eyebrow, Meter, Title } from "@/components/ui";
+import { Body, Button, Card, Eyebrow, Meter, Photo, Title } from "@/components/ui";
 import { colors } from "@/theme";
 
 function hasStation(detail: CampaignDetail, stationId: string) {
@@ -17,11 +18,14 @@ function hasStation(detail: CampaignDetail, stationId: string) {
 export default function StationDetailPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const stationId = typeof id === "string" ? id : "";
-  const { token } = useSession();
+  const { token, user } = useSession();
   const [station, setStation] = useState<StationRow | null>(null);
   const [campaigns, setCampaigns] = useState<CampaignDetail[] | null>(null);
   const [tasks, setTasks] = useState<TaskRow[] | null>(null);
   const [problem, setProblem] = useState("");
+  const [photoNote, setPhotoNote] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const canEditPhoto = user?.role === "ADMIN" || user?.role === "ORG_MANAGER" || user?.role === "STATION_MANAGER";
 
   useEffect(() => {
     if (!token || !stationId) return;
@@ -84,6 +88,28 @@ export default function StationDetailPage() {
     );
   }
 
+  async function changePhoto() {
+    if (!token || !stationId) return;
+    setUploading(true);
+    setPhotoNote("");
+    try {
+      const file = await pickImage();
+      if (!file) return;
+      const uploaded = await backend.uploadStationImage(token, file);
+      if (!uploaded.imageUrl) {
+        setPhotoNote("Máy chủ không trả đường dẫn ảnh.");
+        return;
+      }
+      await backend.updateStation(token, stationId, { imageUrl: uploaded.imageUrl });
+      setStation((current) => (current ? { ...current, imageUrl: uploaded.imageUrl } : current));
+      setPhotoNote("Đã lưu ảnh trạm.");
+    } catch (caught) {
+      setPhotoNote(caught instanceof ApiError ? caught.message : caught instanceof Error ? caught.message : "Không tải được ảnh trạm.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
   const active = campaigns.filter((detail) => detail.campaign.status === "ACTIVE" || detail.campaign.status === "PUBLISHED");
   const hours = station.openingTime || station.closingTime
     ? `${station.openingTime || "?"} đến ${station.closingTime || "?"}`
@@ -93,8 +119,13 @@ export default function StationDetailPage() {
     <Screen tab="stations">
       <Eyebrow>{station.isActive ? "Đang mở" : "Chưa kích hoạt"}</Eyebrow>
       <Title>{station.name}</Title>
+      {station.imageUrl ? <Photo uri={station.imageUrl} height={200} radius={18} /> : <Body muted>Trạm chưa có ảnh.</Body>}
       <Body>{station.address}</Body>
       <Body muted>{hours}</Body>
+      {canEditPhoto ? (
+        <Button label={uploading ? "Đang tải ảnh..." : station.imageUrl ? "Đổi ảnh trạm" : "Tải ảnh trạm"} disabled={uploading} onPress={() => void changePhoto()} />
+      ) : null}
+      {photoNote ? <Body>{photoNote}</Body> : null}
       <Title>Chiến dịch tại trạm</Title>
       {active.length === 0 ? <Body>Trạm này chưa gắn chiến dịch đang diễn ra.</Body> : null}
       {active.map((detail) => (
@@ -124,6 +155,7 @@ export default function StationDetailPage() {
       {tasks.length === 0 ? <Body>Chưa có việc được giao cho trạm này.</Body> : null}
       {tasks.map((task) => (
         <Card key={task._id}>
+          {task.imageUrl ? <Photo uri={task.imageUrl} height={140} radius={12} /> : null}
           <Eyebrow>{task.recruitmentStatus === "OPEN" ? "Đang tuyển" : task.status}</Eyebrow>
           <Title>{task.title}</Title>
           <Body muted>{typeof task.rewardPoints === "number" ? `${task.rewardPoints} điểm khi hoàn thành.` : "Điểm cộng lúc check-out."}</Body>

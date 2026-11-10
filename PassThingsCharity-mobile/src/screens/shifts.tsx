@@ -6,6 +6,7 @@ import { backend } from "@/api/backend";
 import type { ShiftScheduleRow, StationRow } from "@/api/types";
 import { useSession } from "@/api/session";
 import { Screen } from "@/components/chrome";
+import { StationProofScan, StationQrCard, type StationProof } from "@/components/station-proof";
 import { Badge, Body, Button, Card, Icon, Pill, StatRow, Tap, Title } from "@/components/ui";
 import { colors, fonts } from "@/theme";
 
@@ -71,6 +72,7 @@ export function ShiftsScreen() {
   const [error, setError] = useState("");
   const [staffError, setStaffError] = useState("");
   const [note, setNote] = useState("");
+  const [pending, setPending] = useState<{ id: string; kind: "in" | "out" } | null>(null);
   const [dayKey, setDayKey] = useState(localDate(new Date()));
   const [templateId, setTemplateId] = useState("");
   const [staffIds, setStaffIds] = useState<string[]>([]);
@@ -154,11 +156,11 @@ export function ShiftsScreen() {
     }
   }
 
-  async function punch(id: string, kind: "in" | "out") {
+  async function punch(id: string, kind: "in" | "out", proof: StationProof) {
     if (!token) return;
     setNote("");
     try {
-      const data = kind === "in" ? await backend.checkInShift(token, id) : await backend.checkOutShift(token, id);
+      const data = kind === "in" ? await backend.checkInShift(token, id, proof) : await backend.checkOutShift(token, id, proof);
       setNote(data.message);
       await refresh();
     } catch (reason) {
@@ -192,6 +194,18 @@ export function ShiftsScreen() {
       <Title>Ca trực</Title>
       {role === "STAFF" ? <Body muted>Bảy ngày tới. Chọn một ngày để xem ca của bạn.</Body> : <Body muted>Điểm danh chỉ ghi giờ vào và giờ ra. Server không tính công và không cộng điểm.</Body>}
       {note ? <Body>{note}</Body> : null}
+      {pending ? (
+        <StationProofScan
+          title={pending.kind === "in" ? "Vào ca" : "Tan ca"}
+          onCancel={() => setPending(null)}
+          onDone={(proof) => {
+            const next = pending;
+            setPending(null);
+            void punch(next.id, next.kind, proof);
+          }}
+        />
+      ) : null}
+      {canWrite && token && stationId ? <StationQrCard token={token} stationId={stationId} /> : null}
       {error ? <Body>{error}</Body> : null}
       {stations === null ? <ActivityIndicator color={colors.primary} /> : null}
       {role === "STAFF" && stations && stations.length === 0 ? <Body>Bạn chưa được gán vào trạm nào. Đăng nhập lại nếu vừa được phân trạm.</Body> : null}
@@ -262,8 +276,8 @@ export function ShiftsScreen() {
                     />
                   </View>
                   <Text style={{ fontFamily: fonts.semibold, fontSize: 15, color: colors.ink }}>{templateName(item.templateId)}</Text>
-                  {item.status === "SCHEDULED" ? <Button label="Vào ca" onPress={() => punch(item._id, "in")} /> : null}
-                  {item.status === "IN_PROGRESS" ? <Button label="Tan ca" tone="ghost" onPress={() => punch(item._id, "out")} /> : null}
+                  {item.status === "SCHEDULED" ? <Button label="Vào ca" onPress={() => setPending({ id: item._id, kind: "in" })} /> : null}
+                  {item.status === "IN_PROGRESS" ? <Button label="Tan ca" tone="ghost" onPress={() => setPending({ id: item._id, kind: "out" })} /> : null}
                 </View>
               </View>
             ))}

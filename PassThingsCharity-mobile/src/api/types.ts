@@ -142,6 +142,8 @@ export type ReliefSummaryItem = {
 export type TaskRow = {
   _id: string;
   title: string;
+  description?: string;
+  imageUrl?: string | null;
   status: string;
   recruitmentStatus?: string;
   rewardPoints?: number;
