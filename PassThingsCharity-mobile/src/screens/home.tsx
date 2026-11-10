@@ -5,6 +5,7 @@ import * as Location from "expo-location";
 import { backend } from "@/api/backend";
 import { ApiError } from "@/api/client";
 import { campaignPhase, donorLabel, formatDay, itemName, itemUnit, orgName } from "@/api/labels";
+import { useSession } from "@/api/session";
 import type { CampaignDetail, CampaignSummary } from "@/api/types";
 import { Screen } from "@/components/chrome";
 import { Badge, Body, Button, Card, Eyebrow, Icon, Meter, Photo, Pill, StatRow, Tap, Title } from "@/components/ui";
@@ -16,6 +17,56 @@ const urgent = [
   { title: "Mì gói và lương khô", meta: "Đồ hộp, mì gói vùng lũ", gap: "Thiếu 60 thùng", photo: photos.noodles, href: "/campaign" as const },
   { title: "Thuốc và vật phẩm y tế", meta: "Bông băng, dầu gió", gap: "Thiếu 18 hộp", photo: photos.medicine, href: "/campaign" as const },
 ];
+
+function OpenJobs() {
+  const { token } = useSession();
+  const [posts, setPosts] = useState<{ _id: string; title?: string; imageUrl?: string | null; rewardPoints?: number; slots?: { remaining?: number }; stationId?: { name?: string; imageUrl?: string | null } | string }[] | null>(null);
+
+  useEffect(() => {
+    if (!token) {
+      setPosts([]);
+      return;
+    }
+    let cancelled = false;
+    backend.listOpenTasks(token)
+      .then((data) => {
+        if (!cancelled) setPosts(data.data ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setPosts([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  if (!token) return null;
+  const shown = (posts ?? []).slice(0, 3);
+  return (
+    <View style={{ gap: 10 }}>
+      <Title>Việc đang tuyển</Title>
+      {posts === null ? <Body muted>Đang tải tin tuyển.</Body> : null}
+      {posts && shown.length === 0 ? <Body muted>Hiện chưa có tin tuyển tình nguyện.</Body> : null}
+      {shown.map((post) => {
+        const station = post.stationId && typeof post.stationId === "object" ? post.stationId : null;
+        const remaining = post.slots?.remaining;
+        const image = post.imageUrl || station?.imageUrl || "";
+        return (
+          <Card key={post._id}>
+            {image ? <Photo uri={image} height={140} radius={12} /> : null}
+            <Eyebrow>{station?.name || "Trạm"}</Eyebrow>
+            <Title>{post.title || "Việc chưa đặt tên"}</Title>
+            <Body muted>{`${typeof remaining === "number" ? `Còn ${remaining} chỗ` : "Đang tuyển"} · +${post.rewardPoints || 0} điểm`}</Body>
+            <Button label="Xem và ứng tuyển" tone="ghost" onPress={() => router.push("/jobs")} />
+          </Card>
+        );
+      })}
+      {posts && posts.length > 3 ? (
+        <Button label={`Xem thêm ${posts.length - 3} tin`} tone="ghost" onPress={() => router.push("/jobs")} />
+      ) : null}
+    </View>
+  );
+}
 
 export function HomeScreen({ state = "content" }: { state?: "content" | "loading" | "offline" | "empty" | "results" | "none" }) {
   if (state === "loading") {
@@ -135,6 +186,7 @@ export function HomeScreen({ state = "content" }: { state?: "content" | "loading
           </Tap>
         ))}
       </View>
+      <OpenJobs />
       <FeaturedCampaigns />
     </Screen>
   );
