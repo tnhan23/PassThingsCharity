@@ -4,6 +4,7 @@ import { ActivityIndicator, Text, View, type StyleProp, type ViewStyle } from "r
 import { ApiError } from "@/api/client";
 import { resultText } from "@/api/backend";
 import { isOperator, useSession } from "@/api/session";
+import { toastToneFromError, useToast } from "@/api/toast";
 import { Screen } from "@/components/chrome";
 import { Field } from "@/components/form";
 import { Badge, Body, Button, Card, Icon, Pill, Tap, Title } from "@/components/ui";
@@ -48,6 +49,11 @@ export type Row = {
   evidenceImageUrls?: string[];
   rejectionReason?: string;
   recipientName?: string;
+  startDate?: string;
+  endDate?: string;
+  scheduledDate?: string;
+  actualDeliveryDate?: string;
+  distributionDate?: string;
   recruitmentStatus?: string;
   rewardPoints?: number;
   slots?: { total?: number; approved?: number; pending?: number; remaining?: number; isFull?: boolean };
@@ -55,6 +61,9 @@ export type Row = {
   stationId?: { _id?: string; name?: string; address?: string } | string;
   fromStationId?: { name?: string } | string;
   toStationId?: { name?: string } | string;
+  images?: string[];
+  transportNote?: string;
+  transportMethod?: string;
 };
 
 export function labelOf(row: Row) {
@@ -173,6 +182,9 @@ export function formatServerMessage(raw: string) {
   if (trimmed === "Schedule must start in the future.") {
     return "Thời gian bắt đầu công việc phải ở trong tương lai.";
   }
+  if (trimmed === "Registration deadline must be in the future and no later than startTime.") {
+    return "Hạn đăng ký phải ở tương lai và không được sau thời gian bắt đầu.";
+  }
   if (trimmed === "You cannot manage schedules for this station.") {
     return "Tài khoản này không có quyền quản lý lịch công việc của trạm này.";
   }
@@ -196,14 +208,17 @@ export function isErrorText(text: string) {
 
 export function useJob() {
   const { token } = useSession();
+  const toast = useToast();
   const [note, setNote] = useState("");
   const [isError, setIsError] = useState(false);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
 
   function fail(message: string) {
+    const display = formatServerMessage(message);
     setIsError(true);
-    setNote(formatServerMessage(message));
+    setNote(display);
+    toast.show(display, "error");
   }
 
   async function run(job: (token: string) => Promise<unknown>) {
@@ -218,12 +233,16 @@ export function useJob() {
     setNote("");
     try {
       const data = await job(token);
+      const display = formatServerMessage(resultText(data));
       setIsError(false);
-      setNote(formatServerMessage(resultText(data)));
+      setNote(display);
+      toast.show(display, "success");
       return true;
     } catch (caught) {
+      const display = formatServerMessage(caught instanceof Error ? caught.message : "Máy chủ từ chối yêu cầu.");
       setIsError(true);
-      setNote(formatServerMessage(caught instanceof Error ? caught.message : "Máy chủ từ chối yêu cầu."));
+      setNote(display);
+      toast.show(display, "error");
       return false;
     } finally {
       busyRef.current = false;

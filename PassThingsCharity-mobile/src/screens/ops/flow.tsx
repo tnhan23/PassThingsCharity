@@ -1,14 +1,14 @@
 import { router } from "expo-router";
 import DateTimePicker, { type DateTimePickerEvent } from "@react-native-community/datetimepicker";
-import { createElement, useEffect, useMemo, useState, type ChangeEvent } from "react";
-import { Platform, ScrollView, Text, View } from "react-native";
+import { createElement, useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { ActivityIndicator, Modal, Platform, ScrollView, Text, TextInput, View } from "react-native";
 import { backend } from "@/api/backend";
 import { ApiError } from "@/api/client";
 import { pickImage } from "@/api/images";
 import { donorLabel, unitSpoken } from "@/api/labels";
 import { useSession } from "@/api/session";
 import type { ContributionDetail, InventoryTransactionRow, StationRow } from "@/api/types";
-import { Badge, Body, Button, Card, Photo, Pill, StatRow, Tap, Title } from "@/components/ui";
+import { Badge, Body, Button, Card, Icon, Photo, Pill, StatRow, Tap, Title } from "@/components/ui";
 import { can, Fold, labelOf, Note, OpsGate, PickList, RoleNote, TextField, useJob, useRole, useRows, type Row } from "@/screens/ops/kit";
 import { colors, fonts } from "@/theme";
 
@@ -2229,24 +2229,190 @@ export function StockWork() {
   );
 }
 
+type ReliefDetailResponse = {
+  distribution: {
+    _id: string;
+    code?: string;
+    status?: string;
+    scheduledDate?: string;
+    actualDeliveryDate?: string;
+    distributionDate?: string;
+    recipientName?: string;
+    recipientRole?: string;
+    recipientPhone?: string;
+    recipientAddress?: string;
+    deliveryAddress?: string;
+    stationId?: { _id?: string; name?: string; address?: string; phone?: string } | string;
+    campaignId?: { _id?: string; title?: string; status?: string; description?: string; startDate?: string; endDate?: string } | string;
+    handledBy?: { _id?: string; fullName?: string; username?: string; email?: string; phone?: string } | string;
+    notes?: string;
+    imageUrl?: string | null;
+    images?: string[];
+    closeCampaign?: boolean;
+    createdAt?: string;
+  };
+  items: Array<{
+    _id: string;
+    quantity: number;
+    unit: string;
+    itemTypeId?: { _id?: string; name?: string; unit?: string } | string;
+    notes?: string;
+  }>;
+};
+
 export function ReliefWork() {
   const lots = useRows((token) => backend.listRelief(token).then((data) => data.data as Row[]));
   const campaigns = useRows(async () => (await backend.listCampaigns()).campaigns as Row[]);
   const stations = useRows((token) => backend.listStations(token).then((data) => data.data as Row[]));
   const items = useRows(async () => (await backend.listItemTypes()).itemTypes as Row[]);
   const job = useJob();
+  const createReliefJob = useJob();
   const role = useRole();
   const canWrite = can(role, ["ADMIN", "STATION_MANAGER", "STAFF"]);
+
   const [picked, setPicked] = useState("");
+  const [detailData, setDetailData] = useState<ReliefDetailResponse | null>(null);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  const [detailError, setDetailError] = useState("");
+
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [campaignId, setCampaignId] = useState("");
+  const [isCampaignDropdownOpen, setIsCampaignDropdownOpen] = useState(false);
   const [stationId, setStationId] = useState("");
-  const [itemId, setItemId] = useState("");
-  const [recipient, setRecipient] = useState("");
-  const [quantity, setQuantity] = useState("1");
+  const [isStationDropdownOpen, setIsStationDropdownOpen] = useState(false);
+  const [recipientName, setRecipientName] = useState("");
+  const [recipientRole, setRecipientRole] = useState("");
+  const [recipientPhone, setRecipientPhone] = useState("");
+  const [recipientAddress, setRecipientAddress] = useState("");
+  const [notes, setNotes] = useState("");
+  const [reliefImages, setReliefImages] = useState<string[]>([]);
+  const [selectedItemsMap, setSelectedItemsMap] = useState<Record<string, { quantity: string; unit: string; name: string }>>({});
+  const [isItemsDropdownOpen, setIsItemsDropdownOpen] = useState(true);
+
+  useEffect(() => {
+    if (!picked || !job.token) {
+      setDetailData(null);
+      setIsLoadingDetail(false);
+      setDetailError("");
+      return;
+    }
+    let cancelled = false;
+    setIsLoadingDetail(true);
+    setDetailError("");
+    backend.getRelief(job.token, picked)
+      .then((res) => {
+        if (!cancelled) setDetailData(res as ReliefDetailResponse);
+      })
+      .catch((err) => {
+        if (!cancelled) setDetailError(err instanceof Error ? err.message : "Không tải được chi tiết đợt giao.");
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingDetail(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [picked, job.token]);
+
+  // Lọc chiến dịch: ẩn chiến dịch hoàn thành, kết thúc, hết hạn
+  const now = Date.now();
+  const activeCampaigns = (campaigns.rows ?? []).filter((c) => {
+    const st = (c.status || "").toUpperCase();
+    if (["COMPLETED", "CLOSED", "ENDED", "CANCELLED"].includes(st)) return false;
+    if (c.endDate) {
+      const end = new Date(c.endDate).getTime();
+      if (!isNaN(end) && end < now) return false;
+    }
+    return true;
+  });
+
+  const selectedCampaign = activeCampaigns.find((c) => c._id === campaignId);
+  const selectedStation = (stations.rows ?? []).find((s) => s._id === stationId);
+
+  const toggleItem = (item: Row) => {
+    setSelectedItemsMap((prev) => {
+      const next = { ...prev };
+      if (next[item._id]) {
+        delete next[item._id];
+      } else {
+        next[item._id] = {
+          quantity: "1",
+          unit: item.unit || "PIECE",
+          name: item.name || "Vật phẩm",
+        };
+      }
+      return next;
+    });
+  };
+
+  const submitCreateRelief = () => {
+    if (!campaignId) {
+      createReliefJob.fail("Vui lòng chọn chiến dịch cứu trợ.");
+      return;
+    }
+    if (!stationId) {
+      createReliefJob.fail("Vui lòng chọn trạm xuất hàng.");
+      return;
+    }
+    if (!recipientName.trim()) {
+      createReliefJob.fail("Vui lòng nhập tên người nhận hàng.");
+      return;
+    }
+    const itemsPayload = Object.entries(selectedItemsMap).map(([id, info]) => ({
+      itemTypeId: id,
+      quantity: Math.max(1, Number(info.quantity) || 1),
+      unit: info.unit || "PIECE",
+    }));
+    if (itemsPayload.length === 0) {
+      createReliefJob.fail("Vui lòng chọn ít nhất 1 vật phẩm giao hàng.");
+      return;
+    }
+
+    const payload = {
+      campaignId,
+      stationId,
+      recipientName: recipientName.trim(),
+      ...(recipientRole.trim() ? { recipientRole: recipientRole.trim() } : {}),
+      ...(recipientPhone.trim() ? { recipientPhone: recipientPhone.trim() } : {}),
+      ...(recipientAddress.trim() ? { recipientAddress: recipientAddress.trim() } : {}),
+      ...(notes.trim() ? { notes: notes.trim() } : {}),
+      ...(reliefImages.length > 0 ? {
+        imageUrl: reliefImages[0],
+        images: reliefImages,
+      } : {}),
+      closeCampaign: false,
+      items: itemsPayload,
+    };
+
+    void createReliefJob.run((token) => backend.createRelief(token, payload)).then((ok) => {
+      if (ok) {
+        setIsCreateModalOpen(false);
+        setCampaignId("");
+        setStationId("");
+        setRecipientName("");
+        setRecipientRole("");
+        setRecipientPhone("");
+        setRecipientAddress("");
+        setNotes("");
+        setReliefImages([]);
+        setSelectedItemsMap({});
+        lots.reload();
+      }
+    });
+  };
 
   return (
     <OpsGate>
-      <Title>Giao hàng</Title>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <Title>Giao hàng</Title>
+        {canWrite ? (
+          <Button
+            label="+ Đợt mới"
+            tone="primary"
+            onPress={() => setIsCreateModalOpen(true)}
+          />
+        ) : null}
+      </View>
       <RoleNote />
       <Note text={lots.error || job.note} />
       <PickList
@@ -2254,34 +2420,608 @@ export function ReliefWork() {
         selected={picked}
         onPick={setPicked}
         detail={(row) => `${row.code || ""} · ${reliefLabel(row.status || "")} · ${row.recipientName || ""}`}
-        panel={(row) => canWrite ? (
-          <>
-            {(reliefNext[row.status || ""] || []).map((status) => (
-              <Button key={status} label={reliefLabel(status)} tone={status === "CANCELLED" ? "danger" : "ghost"} onPress={() => void job.run((token) => backend.updateReliefStatus(token, row._id, { status, closeCampaign: false })).then((ok) => ok && lots.reload())} />
-            ))}
-            {["PLANNED", "IN_PROGRESS"].includes(row.status || "") ? <Button label="Hoàn tất và đóng chiến dịch" tone="danger" onPress={() => void job.run((token) => backend.updateReliefStatus(token, row._id, { status: "COMPLETED", closeCampaign: true })).then((ok) => ok && lots.reload())} /> : null}
-          </>
-        ) : null}
+        panel={(row) => {
+          const dist = detailData?.distribution;
+          const distItems = detailData?.items;
+          const distImages = (dist?.images && dist.images.length > 0)
+            ? dist.images
+            : (dist?.imageUrl ? [dist.imageUrl] : (row.images && row.images.length > 0 ? row.images : (row.imageUrl ? [row.imageUrl] : [])));
+          const stationObj = typeof dist?.stationId === "object" ? dist.stationId : stations.rows?.find((s) => s._id === dist?.stationId);
+          const campaignObj = typeof dist?.campaignId === "object" ? dist.campaignId : campaigns.rows?.find((c) => c._id === dist?.campaignId);
+          const handlerName = typeof dist?.handledBy === "object" ? (dist.handledBy?.fullName || dist.handledBy?.username) : "";
+
+          return (
+            <View style={{ gap: 12 }}>
+              {isLoadingDetail ? (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 8 }}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Body muted>Đang tải chi tiết đợt giao...</Body>
+                </View>
+              ) : detailError ? (
+                <Note text={detailError} error />
+              ) : null}
+
+              {/* Thông tin đợt & Trạng thái */}
+              <View style={{ backgroundColor: colors.surfaceLow, padding: 12, borderRadius: 12, gap: 8 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                  <Text style={{ fontFamily: fonts.bold, fontSize: 16, color: colors.ink }}>
+                    {`Mã đợt: ${dist?.code || row.code || ""}`}
+                  </Text>
+                  <Badge
+                    label={reliefLabel(dist?.status || row.status || "")}
+                    tone={(dist?.status || row.status) === "COMPLETED" ? "primary" : (dist?.status || row.status) === "CANCELLED" ? "danger" : "coral"}
+                  />
+                </View>
+
+                {/* Ngày giao & Ngày hoàn tất */}
+                <View style={{ gap: 4 }}>
+                  {(dist?.scheduledDate || row.scheduledDate || dist?.distributionDate) ? (
+                    <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.muted }}>
+                      {`Ngày giao dự kiến: ${new Date(dist?.scheduledDate || row.scheduledDate || dist?.distributionDate || "").toLocaleDateString("vi-VN")}`}
+                    </Text>
+                  ) : null}
+                  {dist?.actualDeliveryDate ? (
+                    <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.primary }}>
+                      {`Ngày hoàn tất: ${new Date(dist.actualDeliveryDate).toLocaleString("vi-VN")}`}
+                    </Text>
+                  ) : null}
+                </View>
+
+                {/* Người nhận */}
+                <View style={{ borderTopWidth: 1, borderTopColor: colors.hairline, paddingTop: 6, gap: 4 }}>
+                  <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: colors.ink }}>
+                    {`Người nhận: ${dist?.recipientName || row.recipientName || "Chưa có tên"}`}
+                    {dist?.recipientRole ? ` (${dist.recipientRole})` : ""}
+                  </Text>
+                  {dist?.recipientPhone ? (
+                    <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.muted }}>
+                      {`Số điện thoại: ${dist.recipientPhone}`}
+                    </Text>
+                  ) : null}
+                  {(dist?.deliveryAddress || dist?.recipientAddress) ? (
+                    <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.muted }}>
+                      {`Địa chỉ: ${dist.deliveryAddress || dist.recipientAddress}`}
+                    </Text>
+                  ) : null}
+                </View>
+
+                {/* Trạm & Chiến dịch & Người xử lý */}
+                <View style={{ borderTopWidth: 1, borderTopColor: colors.hairline, paddingTop: 6, gap: 4 }}>
+                  {stationObj?.name ? (
+                    <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.ink }}>
+                      <Text style={{ fontFamily: fonts.medium, color: colors.muted }}>Trạm xuất: </Text>
+                      {stationObj.name}
+                      {stationObj.address ? ` · ${stationObj.address}` : ""}
+                    </Text>
+                  ) : null}
+                  {campaignObj?.title ? (
+                    <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.primary }}>
+                      <Text style={{ fontFamily: fonts.medium, color: colors.muted }}>Chiến dịch: </Text>
+                      {campaignObj.title}
+                    </Text>
+                  ) : null}
+                  {handlerName ? (
+                    <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.muted }}>
+                      {`Người xử lý: ${handlerName}`}
+                    </Text>
+                  ) : null}
+                </View>
+
+                {dist?.notes ? (
+                  <View style={{ borderTopWidth: 1, borderTopColor: colors.hairline, paddingTop: 6 }}>
+                    <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.ink, fontStyle: "italic" }}>
+                      {`Ghi chú: "${dist.notes}"`}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+
+              {/* Ảnh chứng từ / hàng giao */}
+              {distImages.length > 0 ? (
+                <View style={{ gap: 6 }}>
+                  <Text style={{ fontFamily: fonts.bold, fontSize: 15, color: colors.ink }}>
+                    {`Ảnh chứng từ bàn giao (${distImages.length})`}
+                  </Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                    {distImages.map((uri, idx) => (
+                      <Photo key={idx} uri={uri} width={160} height={110} radius={8} />
+                    ))}
+                  </ScrollView>
+                </View>
+              ) : null}
+
+              {/* Danh sách hàng giao */}
+              {distItems && distItems.length > 0 ? (
+                <View style={{ gap: 6 }}>
+                  <Text style={{ fontFamily: fonts.bold, fontSize: 15, color: colors.ink }}>
+                    {`Danh sách hàng giao (${distItems.length} món)`}
+                  </Text>
+                  <View style={{ gap: 6 }}>
+                    {distItems.map((it, idx) => {
+                      const itemName = typeof it.itemTypeId === "object" ? it.itemTypeId?.name : items.rows?.find((r) => r._id === it.itemTypeId)?.name || "Vật phẩm";
+                      const unitStr = unitSpoken(it.unit || (typeof it.itemTypeId === "object" ? it.itemTypeId?.unit : "") || "");
+                      return (
+                        <View
+                          key={it._id || String(idx)}
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            paddingVertical: 8,
+                            paddingHorizontal: 12,
+                            backgroundColor: colors.surface,
+                            borderRadius: 8,
+                            borderWidth: 1,
+                            borderColor: colors.hairline,
+                          }}
+                        >
+                          <Text style={{ fontFamily: fonts.medium, fontSize: 14, color: colors.ink }}>
+                            {itemName}
+                          </Text>
+                          <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: colors.primary }}>
+                            {`${it.quantity} ${unitStr}`}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+              ) : null}
+
+              {/* Nút chuyển trạng thái */}
+              {canWrite && (reliefNext[row.status || ""] || []).length > 0 ? (
+                <View style={{ gap: 8, borderTopWidth: 1, borderTopColor: colors.hairline, paddingTop: 8 }}>
+                  {(reliefNext[row.status || ""] || []).map((status) => (
+                    <Button
+                      key={status}
+                      label={reliefLabel(status)}
+                      tone={status === "CANCELLED" ? "danger" : "ghost"}
+                      onPress={() => void job.run((token) => backend.updateReliefStatus(token, row._id, { status, closeCampaign: false })).then((ok) => {
+                        if (ok) {
+                          lots.reload();
+                          if (picked && job.token) backend.getRelief(job.token, picked).then((res) => setDetailData(res as ReliefDetailResponse)).catch(() => {});
+                        }
+                      })}
+                    />
+                  ))}
+                  {["PLANNED", "IN_PROGRESS"].includes(row.status || "") ? (
+                    <Button
+                      label="Hoàn tất và đóng chiến dịch"
+                      tone="danger"
+                      onPress={() => void job.run((token) => backend.updateReliefStatus(token, row._id, { status: "COMPLETED", closeCampaign: true })).then((ok) => {
+                        if (ok) {
+                          lots.reload();
+                          if (picked && job.token) backend.getRelief(job.token, picked).then((res) => setDetailData(res as ReliefDetailResponse)).catch(() => {});
+                        }
+                      })}
+                    />
+                  ) : null}
+                </View>
+              ) : null}
+            </View>
+          );
+        }}
       />
-      {canWrite ? (
-        <Fold title="Đợt mới">
-          <PickList rows={campaigns.rows} selected={campaignId} onPick={setCampaignId} detail={(row) => donorLabel({ status: row.status || "" })} />
-          <PickList rows={stations.rows} selected={stationId} onPick={setStationId} detail={(row) => row.address || ""} />
-          <TextField label="Tên người nhận" value={recipient} onChangeText={setRecipient} />
-          <PickList rows={items.rows} selected={itemId} onPick={setItemId} detail={(row) => unitSpoken(row.unit || "")} />
-          <TextField label="Số lượng" value={quantity} onChangeText={setQuantity} />
-          <Button
-            label="Ghi đợt giao"
-            onPress={() => void job.run((token) => backend.createRelief(token, {
-              campaignId,
-              stationId,
-              recipientName: recipient.trim(),
-              closeCampaign: false,
-              items: line(itemId, quantity, items.rows?.find((row) => row._id === itemId)?.unit || ""),
-            })).then((ok) => ok && lots.reload())}
-          />
-        </Fold>
-      ) : <Body muted>Vai trò này chỉ xem đợt giao.</Body>}
+
+      {/* Modal Tạo đợt mới */}
+      <Modal
+        visible={isCreateModalOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setIsCreateModalOpen(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            justifyContent: "center",
+            alignItems: "center",
+            padding: 16,
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: colors.surface,
+              borderRadius: 20,
+              width: "100%",
+              maxWidth: 540,
+              maxHeight: "90%",
+              overflow: "hidden",
+            }}
+          >
+            {/* Modal Header */}
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                paddingHorizontal: 16,
+                paddingVertical: 14,
+                borderBottomWidth: 1,
+                borderBottomColor: colors.hairline,
+              }}
+            >
+              <Text style={{ fontFamily: fonts.bold, fontSize: 17, color: colors.ink }}>
+                Tạo đợt giao hàng mới
+              </Text>
+              <Button
+                label="Đóng"
+                tone="ghost"
+                onPress={() => setIsCreateModalOpen(false)}
+              />
+            </View>
+
+            <ScrollView
+              contentContainerStyle={{ padding: 16, gap: 14 }}
+              showsVerticalScrollIndicator={false}
+            >
+              {/* 1. Phần Chiến dịch Dropdown */}
+              <View style={{ gap: 6 }}>
+                <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.muted }}>
+                  Chiến dịch cứu trợ *
+                </Text>
+                <Card style={{ padding: 0, overflow: "hidden" }}>
+                  <Tap onPress={() => setIsCampaignDropdownOpen(!isCampaignDropdownOpen)}>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 14 }}>
+                      <Text style={{ fontFamily: fonts.bold, fontSize: 15, color: selectedCampaign ? colors.ink : colors.muted, flex: 1 }}>
+                        {selectedCampaign ? selectedCampaign.title : "Chọn chiến dịch..."}
+                      </Text>
+                      <Icon name={isCampaignDropdownOpen ? "expand-less" : "expand-more"} size={22} color={colors.primary} />
+                    </View>
+                  </Tap>
+
+                  {isCampaignDropdownOpen ? (
+                    <View style={{ borderTopWidth: 1, borderTopColor: colors.hairline, maxHeight: 220 }}>
+                      <ScrollView nestedScrollEnabled style={{ maxHeight: 220 }}>
+                        {activeCampaigns.length === 0 ? (
+                          <View style={{ padding: 12 }}>
+                            <Body muted>Không có chiến dịch nào đang hoạt động.</Body>
+                          </View>
+                        ) : (
+                          activeCampaigns.map((camp) => {
+                            const isCampSelected = camp._id === campaignId;
+                            return (
+                              <Tap
+                                key={camp._id}
+                                onPress={() => {
+                                  setCampaignId(camp._id);
+                                  setIsCampaignDropdownOpen(false);
+                                }}
+                              >
+                                <View
+                                  style={{
+                                    padding: 12,
+                                    borderBottomWidth: 1,
+                                    borderBottomColor: colors.hairline,
+                                    backgroundColor: isCampSelected ? colors.surfaceLow : colors.surface,
+                                    flexDirection: "row",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    gap: 8,
+                                  }}
+                                >
+                                  <View style={{ flex: 1, gap: 2 }}>
+                                    <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: isCampSelected ? colors.primary : colors.ink }}>
+                                      {camp.title || "Chiến dịch"}
+                                    </Text>
+                                    {camp.startDate && camp.endDate ? (
+                                      <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.muted }}>
+                                        {`${new Date(camp.startDate).toLocaleDateString("vi-VN")} - ${new Date(camp.endDate).toLocaleDateString("vi-VN")}`}
+                                      </Text>
+                                    ) : null}
+                                  </View>
+                                  <Badge label={donorLabel({ status: camp.status || "" })} tone="neutral" />
+                                </View>
+                              </Tap>
+                            );
+                          })
+                        )}
+                      </ScrollView>
+                    </View>
+                  ) : null}
+                </Card>
+
+                {/* Sổ ra thông tin chi tiết nội dung của chiến dịch đã chọn */}
+                {selectedCampaign ? (
+                  <View style={{ backgroundColor: colors.surfaceLow, padding: 12, borderRadius: 10, gap: 6, borderWidth: 1, borderColor: colors.hairline }}>
+                    <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: colors.primary }}>
+                      Thông tin chi tiết chiến dịch:
+                    </Text>
+                    <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.ink }}>
+                      {selectedCampaign.description || "Không có mô tả chi tiết."}
+                    </Text>
+                    {selectedCampaign.startDate && selectedCampaign.endDate ? (
+                      <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.muted }}>
+                        {`Thời gian: ${new Date(selectedCampaign.startDate).toLocaleDateString("vi-VN")} đến ${new Date(selectedCampaign.endDate).toLocaleDateString("vi-VN")}`}
+                      </Text>
+                    ) : null}
+                    {selectedCampaign.status ? (
+                      <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.muted }}>
+                        {`Trạng thái: ${donorLabel({ status: selectedCampaign.status })}`}
+                      </Text>
+                    ) : null}
+                  </View>
+                ) : null}
+              </View>
+
+              {/* 2. Phần Trạm xuất hàng Dropdown */}
+              <View style={{ gap: 6 }}>
+                <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.muted }}>
+                  Trạm xuất hàng cứu trợ *
+                </Text>
+                <Card style={{ padding: 0, overflow: "hidden" }}>
+                  <Tap onPress={() => setIsStationDropdownOpen(!isStationDropdownOpen)}>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 14 }}>
+                      <Text style={{ fontFamily: fonts.bold, fontSize: 15, color: selectedStation ? colors.ink : colors.muted, flex: 1 }}>
+                        {selectedStation ? selectedStation.name : "Chọn trạm xuất hàng..."}
+                      </Text>
+                      <Icon name={isStationDropdownOpen ? "expand-less" : "expand-more"} size={22} color={colors.primary} />
+                    </View>
+                  </Tap>
+
+                  {isStationDropdownOpen ? (
+                    <View style={{ borderTopWidth: 1, borderTopColor: colors.hairline, maxHeight: 200 }}>
+                      <ScrollView nestedScrollEnabled style={{ maxHeight: 200 }}>
+                        {(stations.rows ?? []).length === 0 ? (
+                          <View style={{ padding: 12 }}>
+                            <Body muted>Không có trạm nào khả dụng.</Body>
+                          </View>
+                        ) : (
+                          (stations.rows ?? []).map((st) => {
+                            const isStSelected = st._id === stationId;
+                            return (
+                              <Tap
+                                key={st._id}
+                                onPress={() => {
+                                  setStationId(st._id);
+                                  setIsStationDropdownOpen(false);
+                                }}
+                              >
+                                <View
+                                  style={{
+                                    padding: 12,
+                                    borderBottomWidth: 1,
+                                    borderBottomColor: colors.hairline,
+                                    backgroundColor: isStSelected ? colors.surfaceLow : colors.surface,
+                                    gap: 2,
+                                  }}
+                                >
+                                  <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: isStSelected ? colors.primary : colors.ink }}>
+                                    {st.name || "Trạm"}
+                                  </Text>
+                                  {st.address ? (
+                                    <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.muted }}>
+                                      {st.address}
+                                    </Text>
+                                  ) : null}
+                                </View>
+                              </Tap>
+                            );
+                          })
+                        )}
+                      </ScrollView>
+                    </View>
+                  ) : null}
+                </Card>
+              </View>
+
+              {/* 3. Thông tin người nhận */}
+              <TextField label="Tên người nhận *" value={recipientName} onChangeText={setRecipientName} />
+              <TextField label="Vai trò người nhận" value={recipientRole} onChangeText={setRecipientRole} />
+              <TextField label="Số điện thoại" value={recipientPhone} onChangeText={setRecipientPhone} keyboardType="phone-pad" />
+              <TextField label="Địa chỉ nhận hàng" value={recipientAddress} onChangeText={setRecipientAddress} />
+              <TextField label="Ghi chú đợt giao" value={notes} onChangeText={setNotes} />
+
+              {/* Ảnh chứng từ / hàng giao (tùy chọn) */}
+              <View style={{ gap: 6 }}>
+                <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.muted }}>
+                  Ảnh chứng từ / hàng giao (tùy chọn):
+                </Text>
+                {reliefImages.length > 0 ? (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
+                    {reliefImages.map((uri, idx) => (
+                      <View key={idx} style={{ position: "relative" }}>
+                        <Photo uri={uri} width={130} height={90} radius={8} />
+                        <Tap
+                          style={{
+                            position: "absolute",
+                            top: 4,
+                            right: 4,
+                            backgroundColor: "rgba(0,0,0,0.6)",
+                            borderRadius: 12,
+                            width: 24,
+                            height: 24,
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                          onPress={() => setReliefImages((prev) => prev.filter((_, i) => i !== idx))}
+                        >
+                          <Icon name="close" size={14} color="#fff" />
+                        </Tap>
+                      </View>
+                    ))}
+                  </ScrollView>
+                ) : (
+                  <Body muted>Chưa có ảnh đính kèm cho đợt giao này.</Body>
+                )}
+                <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+                  <Button
+                    label={reliefImages.length > 0 ? "Thêm ảnh khác" : "Chọn ảnh giao hàng"}
+                    tone="ghost"
+                    onPress={() => void createReliefJob.run(async (token) => {
+                      const file = await pickImage();
+                      if (!file) return { message: "Chưa chọn ảnh." };
+                      const uploaded = await backend.uploadReliefImages(token, [file]);
+                      const url = uploaded.imageUrls?.[0];
+                      if (url) {
+                        setReliefImages((prev) => [...prev, url]);
+                        return { message: "Đã tải ảnh lên thành công." };
+                      }
+                      return { message: "Máy chủ không trả về URL ảnh." };
+                    })}
+                  />
+                  {reliefImages.length > 0 ? (
+                    <Button label="Xóa tất cả ảnh" tone="danger" onPress={() => setReliefImages([])} />
+                  ) : null}
+                </View>
+              </View>
+
+              {/* 4. Phần đồ gửi (Dropdown chọn nhiều vật phẩm + form số lượng ngay trong ô vật phẩm) */}
+              <View style={{ gap: 6 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                  <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.muted }}>
+                    {`Vật phẩm vận chuyển (${Object.keys(selectedItemsMap).length} đã chọn) *`}
+                  </Text>
+                  <Tap onPress={() => setIsItemsDropdownOpen(!isItemsDropdownOpen)}>
+                    <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.primary }}>
+                      {isItemsDropdownOpen ? "Thu gọn danh mục" : "Mở danh mục"}
+                    </Text>
+                  </Tap>
+                </View>
+
+                {isItemsDropdownOpen ? (
+                  <View style={{ gap: 8 }}>
+                    {(items.rows ?? []).length === 0 ? (
+                      <Body muted>Đang tải danh mục vật phẩm...</Body>
+                    ) : (
+                      (items.rows ?? []).map((it) => {
+                        const isSelected = Boolean(selectedItemsMap[it._id]);
+                        return (
+                          <Card
+                            key={it._id}
+                            style={{
+                              padding: 12,
+                              gap: 8,
+                              borderWidth: isSelected ? 1.5 : 1,
+                              borderColor: isSelected ? colors.primary : colors.hairline,
+                              backgroundColor: isSelected ? colors.surface : colors.surfaceLow,
+                            }}
+                          >
+                            <Tap onPress={() => toggleItem(it)}>
+                              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                                <Icon
+                                  name={isSelected ? "check-box" : "check-box-outline-blank"}
+                                  size={22}
+                                  color={isSelected ? colors.primary : colors.muted}
+                                />
+                                <View style={{ flex: 1 }}>
+                                  <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: colors.ink }}>
+                                    {it.name || "Vật phẩm"}
+                                  </Text>
+                                  <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.muted }}>
+                                    {`Đơn vị: ${unitSpoken(it.unit || "")}`}
+                                  </Text>
+                                </View>
+                              </View>
+                            </Tap>
+
+                            {/* Khi chọn vật phẩm nào sẽ hiện ra form điền số lượng mong muốn vào luôn */}
+                            {isSelected ? (
+                              <View
+                                style={{
+                                  flexDirection: "row",
+                                  alignItems: "center",
+                                  justifyContent: "space-between",
+                                  paddingTop: 8,
+                                  borderTopWidth: 1,
+                                  borderTopColor: colors.hairline,
+                                  gap: 8,
+                                }}
+                              >
+                                <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.ink }}>
+                                  {`Số lượng (${unitSpoken(it.unit || "")}):`}
+                                </Text>
+                                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                                  <Tap
+                                    onPress={() => {
+                                      const cur = Math.max(1, (Number(selectedItemsMap[it._id]?.quantity) || 1) - 1);
+                                      setSelectedItemsMap((prev) => ({
+                                        ...prev,
+                                        [it._id]: { ...prev[it._id], quantity: String(cur) },
+                                      }));
+                                    }}
+                                    style={{
+                                      width: 32,
+                                      height: 32,
+                                      borderRadius: 8,
+                                      backgroundColor: colors.surfaceLow,
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      borderWidth: 1,
+                                      borderColor: colors.hairline,
+                                    }}
+                                  >
+                                    <Text style={{ fontFamily: fonts.bold, fontSize: 18, color: colors.ink }}>-</Text>
+                                  </Tap>
+
+                                  <TextInput
+                                    value={selectedItemsMap[it._id]?.quantity || "1"}
+                                    onChangeText={(val) => {
+                                      const num = val.replace(/\D/g, "");
+                                      setSelectedItemsMap((prev) => ({
+                                        ...prev,
+                                        [it._id]: { ...prev[it._id], quantity: num },
+                                      }));
+                                    }}
+                                    keyboardType="number-pad"
+                                    style={{
+                                      minWidth: 54,
+                                      height: 34,
+                                      paddingHorizontal: 8,
+                                      textAlign: "center",
+                                      borderRadius: 8,
+                                      borderWidth: 1,
+                                      borderColor: colors.hairline,
+                                      fontFamily: fonts.bold,
+                                      fontSize: 15,
+                                      color: colors.ink,
+                                      backgroundColor: colors.surface,
+                                    }}
+                                  />
+
+                                  <Tap
+                                    onPress={() => {
+                                      const cur = (Number(selectedItemsMap[it._id]?.quantity) || 1) + 1;
+                                      setSelectedItemsMap((prev) => ({
+                                        ...prev,
+                                        [it._id]: { ...prev[it._id], quantity: String(cur) },
+                                      }));
+                                    }}
+                                    style={{
+                                      width: 32,
+                                      height: 32,
+                                      borderRadius: 8,
+                                      backgroundColor: colors.surfaceLow,
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      borderWidth: 1,
+                                      borderColor: colors.hairline,
+                                    }}
+                                  >
+                                    <Text style={{ fontFamily: fonts.bold, fontSize: 18, color: colors.ink }}>+</Text>
+                                  </Tap>
+                                </View>
+                              </View>
+                            ) : null}
+                          </Card>
+                        );
+                      })
+                    )}
+                  </View>
+                ) : null}
+              </View>
+
+              {/* Submit Button */}
+              <Button
+                label={createReliefJob.busy ? "Đang ghi đợt giao..." : "Ghi đợt giao"}
+                disabled={createReliefJob.busy || !campaignId || !stationId || !recipientName.trim() || Object.keys(selectedItemsMap).length === 0}
+                onPress={submitCreateRelief}
+              />
+              <Note text={createReliefJob.note} error={createReliefJob.isError} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </OpsGate>
   );
 }
@@ -2322,7 +3062,6 @@ function taskDateTime(date: Date | null, time: Date | null) {
 }
 
 export function CrewWork() {
-  const tasks = useRows((token) => backend.listTasks(token).then((data) => data.data as Row[]));
   const campaigns = useRows(async () => (await backend.listCampaigns()).campaigns as Row[]);
   const stations = useRows((token) => backend.listStations(token).then((data) => data.data as Row[]));
   const job = useJob();
@@ -2333,10 +3072,7 @@ export function CrewWork() {
   const canCreateTask = can(role, ["ADMIN", "STATION_MANAGER", "STAFF"]);
   const canApproveJoin = can(role, ["ADMIN", "STATION_MANAGER"]);
   const [taskId, setTaskId] = useState("");
-  const [filterStationId, setFilterStationId] = useState("");
-  const [onlyPending, setOnlyPending] = useState(false);
   const [campaignId, setCampaignId] = useState("");
-  const [stationId, setStationId] = useState("");
   const [title, setTitle] = useState("");
   const [detail, setDetail] = useState("");
   const [startDate, setStartDate] = useState<Date | null>(null);
@@ -2356,15 +3092,139 @@ export function CrewWork() {
   const [people, setPeople] = useState<Row[] | null>(null);
   const [peopleError, setPeopleError] = useState("");
   const [registrationId, setRegistrationId] = useState("");
-  const [applicants, setApplicants] = useState<Row[] | null>(null);
-  const [applicantsError, setApplicantsError] = useState("");
   const [joinStamp, setJoinStamp] = useState(0);
-  const [applyStamp, setApplyStamp] = useState(0);
-  const profileStationId = user?.stations?.[0]?._id ?? "";
+  const [crewSection, setCrewSection] = useState<"APPLICATIONS" | "TASKS" | "CAMPAIGNS">("TASKS");
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const managedStations = (role === "ADMIN" ? (stations.rows ?? []) : (user?.stations ?? [])) as Array<StationRow | Row>;
+  const managedStationIds = managedStations.map((s) => s._id).join(",");
+  const [selectedStationId, setSelectedStationId] = useState("");
+  const [appStatusFilter, setAppStatusFilter] = useState("");
+  const [appPage, setAppPage] = useState(1);
+  const [applications, setApplications] = useState<Array<{
+    _id: string;
+    taskId?: {
+      _id?: string;
+      title?: string;
+      description?: string;
+      stationId?: { _id?: string; name?: string; address?: string };
+      campaignId?: { _id?: string; title?: string; status?: string };
+      startTime?: string;
+      endTime?: string;
+      rewardPoints?: number;
+      requiredVolunteers?: number;
+      status?: string;
+      recruitmentStatus?: string;
+    };
+    userId?: {
+      _id?: string;
+      fullName?: string;
+      email?: string;
+      phone?: string;
+      username?: string;
+    };
+    status?: string;
+    appliedAt?: string;
+    note?: string;
+    reviewedBy?: {
+      _id?: string;
+      fullName?: string;
+      username?: string;
+    };
+    reviewedAt?: string;
+  }>>([]);
+  const [appTotal, setAppTotal] = useState(0);
+  const [appTotalPages, setAppTotalPages] = useState(1);
+  const [isLoadingApps, setIsLoadingApps] = useState(false);
+  const [appError, setAppError] = useState("");
+  const [appReloadStamp, setAppReloadStamp] = useState(0);
+
+  const [tasksList, setTasksList] = useState<Row[] | null>(null);
+  const [tasksError, setTasksError] = useState("");
+  const [tasksStamp, setTasksStamp] = useState(0);
+  const reloadTasks = useCallback(() => setTasksStamp((v) => v + 1), []);
+  const tasks = { rows: tasksList, error: tasksError, reload: reloadTasks };
 
   useEffect(() => {
-    if (!stationId && profileStationId) setStationId(profileStationId);
-  }, [profileStationId, stationId]);
+    if (managedStations.length > 0) {
+      if (!selectedStationId || !managedStations.some((s) => s._id === selectedStationId)) {
+        setSelectedStationId(managedStations[0]._id);
+      }
+    } else if (selectedStationId) {
+      setSelectedStationId("");
+    }
+  }, [managedStationIds, selectedStationId]);
+
+  useEffect(() => {
+    if (!job.token) {
+      setTasksList(null);
+      setTasksError("");
+      return;
+    }
+    if (role !== "ADMIN" && managedStations.length === 0) {
+      setTasksList([]);
+      setTasksError("");
+      return;
+    }
+    let cancelled = false;
+    setTasksError("");
+    const queryStationId = selectedStationId || (role !== "ADMIN" ? managedStations[0]?._id : undefined);
+    backend.listTasks(job.token, queryStationId)
+      .then((data) => {
+        if (!cancelled) setTasksList((data.data as Row[]) || []);
+      })
+      .catch((caught) => {
+        if (!cancelled) {
+          setTasksList([]);
+          setTasksError(caught instanceof ApiError ? caught.message : "Không tải được danh sách công việc.");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [job.token, selectedStationId, managedStationIds, role, tasksStamp]);
+
+  useEffect(() => {
+    if (!job.token || !selectedStationId) {
+      setApplications([]);
+      setAppTotal(0);
+      setAppTotalPages(1);
+      setIsLoadingApps(false);
+      setAppError("");
+      return;
+    }
+    let cancelled = false;
+    setIsLoadingApps(true);
+    setAppError("");
+    backend.stationTaskApplications(job.token, selectedStationId, {
+      status: appStatusFilter || undefined,
+      page: appPage,
+      limit: 20,
+    })
+      .then((res) => {
+        if (cancelled) return;
+        setApplications(res.data || []);
+        setAppTotal(res.total || 0);
+        setAppTotalPages(res.totalPages || 1);
+      })
+      .catch((caught) => {
+        if (cancelled) return;
+        setApplications([]);
+        setAppTotal(0);
+        setAppTotalPages(1);
+        if (caught instanceof ApiError && caught.status === 403) {
+          setAppError("Tài khoản không có quyền xem hoặc quản lý đơn ứng tuyển tại trạm này.");
+        } else {
+          setAppError(caught instanceof Error ? caught.message : "Không tải được danh sách đơn ứng tuyển.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingApps(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [job.token, selectedStationId, appStatusFilter, appPage, appReloadStamp]);
 
   const scheduleValues: Record<ScheduleField, Date | null> = {
     startDate,
@@ -2386,6 +3246,7 @@ export function CrewWork() {
   const earliestEndDate = startDate ? startOfDay(startDate) : null;
   const startAt = startDate && startTime ? new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate(), startTime.getHours(), startTime.getMinutes()) : null;
   const endAt = endDate && endTime ? new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), endTime.getHours(), endTime.getMinutes()) : null;
+  const deadlineAt = deadlineDate && deadlineTime ? new Date(deadlineDate.getFullYear(), deadlineDate.getMonth(), deadlineDate.getDate(), deadlineTime.getHours(), deadlineTime.getMinutes()) : null;
   const startDateError = startDate && startOfDay(startDate) < today
     ? "Ngày bắt đầu không thể trước hôm nay."
     : startAt && startAt.getTime() <= Date.now()
@@ -2397,7 +3258,15 @@ export function CrewWork() {
   const neededError = !Number.isInteger(Number(needed)) || Number(needed) < 1
     ? "Số người cần phải lớn hơn hoặc bằng 1."
     : "";
-  const formWarning = [startDateError, endDateError, neededError].filter(Boolean).join(" ");
+  const hasPartialDeadline = (deadlineDate && !deadlineTime) || (!deadlineDate && deadlineTime);
+  const deadlineError = hasPartialDeadline
+    ? "Vui lòng chọn đầy đủ cả ngày và giờ hạn đăng ký (hoặc để trống cả hai)."
+    : deadlineAt && deadlineAt.getTime() <= Date.now()
+      ? "Hạn đăng ký phải ở tương lai."
+      : deadlineAt && startAt && deadlineAt.getTime() > startAt.getTime()
+        ? "Hạn đăng ký không được sau giờ bắt đầu."
+        : "";
+  const formWarning = [startDateError, endDateError, neededError, deadlineError].filter(Boolean).join(" ");
   const updateScheduleValue = (field: ScheduleField, mode: ScheduleMode, rawValue: string) => {
     if (!rawValue) {
       scheduleSetters[field](null);
@@ -2420,8 +3289,19 @@ export function CrewWork() {
       ? today
       : field === "endDate"
         ? earliestEndDate
-        : null;
-    const fieldError = field === "startDate" ? startDateError : field === "endDate" ? endDateError : "";
+        : field === "deadlineDate"
+          ? today
+          : null;
+    const maximumDate = field === "deadlineDate" && startDate
+      ? startOfDay(startDate)
+      : null;
+    const fieldError = field === "startDate"
+      ? startDateError
+      : field === "endDate"
+        ? endDateError
+        : (field === "deadlineDate" || field === "deadlineTime")
+          ? deadlineError
+          : "";
     if (Platform.OS === "web") {
       return (
         <View key={field} style={{ gap: 6 }}>
@@ -2430,6 +3310,7 @@ export function CrewWork() {
             type: mode,
             value: value ? dateValue(value, mode) : "",
             ...(minimumDate ? { min: dateValue(minimumDate, "date") } : {}),
+            ...(maximumDate ? { max: dateValue(maximumDate, "date") } : {}),
             onChange: (event: ChangeEvent<HTMLInputElement>) => updateScheduleValue(field, mode, event.currentTarget.value),
             "aria-label": label,
             style: {
@@ -2470,6 +3351,8 @@ export function CrewWork() {
     if (activePicker && value) {
       if (activePicker.field === "startDate" && startOfDay(value) < today) return;
       if (activePicker.field === "endDate" && earliestEndDate && startOfDay(value) < earliestEndDate) return;
+      if (activePicker.field === "deadlineDate" && startOfDay(value) < today) return;
+      if (activePicker.field === "deadlineDate" && startDate && startOfDay(value) > startOfDay(startDate)) return;
       scheduleSetters[activePicker.field](value);
     }
     if (Platform.OS === "android") setActivePicker(null);
@@ -2498,31 +3381,6 @@ export function CrewWork() {
     };
   }, [job.token, campaignId, joinStamp]);
 
-  useEffect(() => {
-    if (!job.token || !taskId) {
-      setApplicants(null);
-      setApplicantsError("");
-      return;
-    }
-    let cancelled = false;
-    setApplicants(null);
-    setApplicantsError("");
-    backend.taskApplications(job.token, taskId)
-      .then((data) => {
-        const payload = data as { data?: Array<Row & { userId?: { _id?: string; fullName?: string; username?: string; phone?: string; email?: string } | string }> };
-        if (!cancelled) setApplicants((payload.data || []).map(asPerson));
-      })
-      .catch((caught) => {
-        if (!cancelled) {
-          setApplicants([]);
-          setApplicantsError(caught instanceof ApiError ? caught.message : "Không tải được danh sách ứng tuyển.");
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [job.token, taskId, applyStamp]);
-
   const allTasks = tasks.rows ?? [];
   useEffect(() => {
     const row = allTasks.find((item) => item._id === taskId);
@@ -2531,12 +3389,14 @@ export function CrewWork() {
     setEditPoints(String(row?.rewardPoints ?? 0));
     setEditImage(row?.imageUrl || null);
   }, [taskId, tasks.rows]);
-  const pendingTotal = allTasks.reduce((sum, row) => sum + (row.slots?.pending ?? 0), 0);
-  const tasksWithPending = allTasks.filter((row) => (row.slots?.pending ?? 0) > 0).length;
   const visibleTasks = tasks.rows
     ? allTasks.filter((row) => {
-        if (onlyPending && (row.slots?.pending ?? 0) === 0) return false;
-        if (filterStationId && stationIdOf(row.stationId) !== filterStationId) return false;
+        const rowStId = stationIdOf(row.stationId);
+        if (role !== "ADMIN") {
+          const isManaged = managedStations.some((st) => st._id === rowStId);
+          if (!isManaged) return false;
+        }
+        if (selectedStationId && rowStId !== selectedStationId) return false;
         return true;
       })
     : null;
@@ -2545,264 +3405,552 @@ export function CrewWork() {
     <OpsGate>
       <Title>Nhân sự & Tình nguyện viên</Title>
       <RoleNote />
-      <Note text={tasks.error || peopleError || applicantsError || job.note} />
+      <Note text={tasks.error || peopleError || appError || job.note} />
       {tasks.rows ? (
         <StatRow
           items={[
+            { label: "Đơn tại trạm", value: appTotal, unit: "đơn", tone: "coral" },
             { label: "Tổng việc", value: allTasks.length, unit: "việc", tone: "ink" },
             { label: "Đang mở tuyển", value: allTasks.filter((row) => row.recruitmentStatus === "OPEN").length, unit: "việc", tone: "primary" },
-            { label: "Đơn chờ duyệt", value: pendingTotal, unit: "đơn", tone: "coral" },
           ]}
         />
       ) : null}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-        <Pill label={`Tất cả việc (${allTasks.length})`} active={!onlyPending} onPress={() => setOnlyPending(false)} />
-        <Pill label={`Có đơn chờ duyệt (${tasksWithPending})`} active={onlyPending} onPress={() => setOnlyPending(true)} />
+        <Pill
+          label={`Tin tuyển dụng (${allTasks.length})`}
+          active={crewSection === "TASKS"}
+          onPress={() => setCrewSection("TASKS")}
+        />
+        <Pill
+          label={`Đơn ứng tuyển trạm ${appTotal > 0 ? `(${appTotal})` : ""}`}
+          active={crewSection === "APPLICATIONS"}
+          onPress={() => setCrewSection("APPLICATIONS")}
+        />
+        <Pill
+          label="Đơn tham gia chiến dịch"
+          active={crewSection === "CAMPAIGNS"}
+          onPress={() => setCrewSection("CAMPAIGNS")}
+        />
       </ScrollView>
-      {stations.rows && stations.rows.length > 0 ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-          <Pill label="Tất cả trạm" active={filterStationId === ""} onPress={() => setFilterStationId("")} />
-          {stations.rows.map((st) => (
-            <Pill key={st._id} label={st.name || "Trạm"} active={filterStationId === st._id} onPress={() => setFilterStationId(st._id)} />
-          ))}
-        </ScrollView>
-      ) : null}
-      <PickList
-        rows={visibleTasks}
-        selected={taskId}
-        onPick={setTaskId}
-        detail={(row) => {
-          const stName = stationTitleOf(row.stationId);
-          const pending = row.slots?.pending ?? 0;
-          const approved = row.slots?.approved ?? 0;
-          const total = row.slots?.total ?? 0;
-          return [
-            stName || "Chưa rõ trạm",
-            pending > 0 ? `Chờ duyệt: ${pending} đơn` : null,
-            `Chỗ: ${approved}/${total}`,
-            `${row.status || ""} · ${row.recruitmentStatus || ""}`,
-          ].filter(Boolean).join(" · ");
-        }}
-        panel={(row) => canTask ? (
-          <View style={{ gap: 10 }}>
-            {editImage ? <Photo uri={editImage} height={160} radius={12} /> : <Body muted>Tin này chưa có ảnh.</Body>}
-            <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
-              <Button
-                label="Chọn ảnh tin"
-                tone="ghost"
-                onPress={() => void job.run(async (token) => {
-                  const file = await pickImage();
-                  if (!file) return { message: "Chưa chọn ảnh." };
-                  const uploaded = await backend.uploadTaskImage(token, file);
-                  setEditImage(uploaded.imageUrl);
-                  return { message: "Đã tải ảnh. Bấm lưu để gắn vào tin." };
-                })}
-              />
-              {editImage ? <Button label="Gỡ ảnh" tone="danger" onPress={() => setEditImage(null)} /> : null}
+
+      {crewSection === "APPLICATIONS" ? (
+        <View style={{ gap: 12 }}>
+          {managedStations.length > 1 ? (
+            <View style={{ gap: 6 }}>
+              <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.muted }}>
+                {role === "ADMIN" ? "Chọn trạm quản lý:" : "Trạm của bạn:"}
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                {managedStations.map((st) => (
+                  <Pill
+                    key={st._id}
+                    label={st.name || "Trạm"}
+                    active={selectedStationId === st._id}
+                    onPress={() => {
+                      setSelectedStationId(st._id);
+                      setAppPage(1);
+                    }}
+                  />
+                ))}
+              </ScrollView>
             </View>
-            <TextField label="Tên việc" value={editTitle} onChangeText={setEditTitle} />
-            <TextField label="Mô tả" value={editDetail} onChangeText={setEditDetail} />
-            <TextField label="Điểm thưởng" value={editPoints} onChangeText={(value) => setEditPoints(value.replace(/\D/g, ""))} keyboardType="number-pad" />
-            <Button
-              label="Lưu tin"
+          ) : managedStations.length === 1 ? (
+            <View style={{ paddingVertical: 4 }}>
+              <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.muted }}>
+                {`Trạm quản lý: ${managedStations[0].name || "Trạm"}`}
+              </Text>
+            </View>
+          ) : (
+            <Body muted>Tài khoản chưa được phân công quản lý trạm nào để xem đơn ứng tuyển.</Body>
+          )}
+
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+            <Pill
+              label="Tất cả"
+              active={appStatusFilter === ""}
               onPress={() => {
-                if (!editTitle.trim()) {
-                  job.fail("Vui lòng nhập tên công việc.");
-                  return;
-                }
-                void job.run((token) => backend.updateTask(token, row._id, {
-                  title: editTitle.trim(),
-                  description: editDetail.trim(),
-                  rewardPoints: Number(editPoints) || 0,
-                  imageUrl: editImage,
-                })).then((ok) => ok && tasks.reload());
+                setAppStatusFilter("");
+                setAppPage(1);
               }}
             />
-            {stationTitleOf(row.stationId) ? <Body muted>{`Trạm: ${stationTitleOf(row.stationId)}`}</Body> : null}
-            <Text style={{ fontFamily: fonts.bold, fontSize: 15, color: colors.ink }}>
-              {`Tình nguyện viên ứng tuyển (${applicants ? applicants.length : "…"})`}
-            </Text>
-            {applicants === null ? <Body muted>Đang tải danh sách ứng tuyển...</Body> : null}
-            {applicants && applicants.length === 0 ? <Body muted>Chưa có tình nguyện viên nào ứng tuyển việc này.</Body> : null}
-            {applicants?.map((app) => (
-              <Card key={app._id} style={{ backgroundColor: colors.surfaceLow, padding: 12, gap: 8 }}>
+            <Pill
+              label="Chờ duyệt"
+              active={appStatusFilter === "PENDING"}
+              onPress={() => {
+                setAppStatusFilter("PENDING");
+                setAppPage(1);
+              }}
+            />
+            <Pill
+              label="Đã duyệt"
+              active={appStatusFilter === "APPROVED"}
+              onPress={() => {
+                setAppStatusFilter("APPROVED");
+                setAppPage(1);
+              }}
+            />
+            <Pill
+              label="Từ chối"
+              active={appStatusFilter === "REJECTED"}
+              onPress={() => {
+                setAppStatusFilter("REJECTED");
+                setAppPage(1);
+              }}
+            />
+            <Pill
+              label="Đã hủy"
+              active={appStatusFilter === "CANCELLED"}
+              onPress={() => {
+                setAppStatusFilter("CANCELLED");
+                setAppPage(1);
+              }}
+            />
+          </ScrollView>
+
+          {isLoadingApps ? (
+            <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 12 }} />
+          ) : null}
+
+          {!isLoadingApps && applications.length === 0 && !appError && selectedStationId ? (
+            <Body muted>Không có đơn ứng tuyển nào ở trạng thái này tại trạm đã chọn.</Body>
+          ) : null}
+
+          {applications.map((app) => {
+            const applicantName = app.userId?.fullName || app.userId?.username || "Tình nguyện viên";
+            const contactParts = [app.userId?.phone, app.userId?.email, app.userId?.username ? `@${app.userId.username}` : ""].filter(Boolean);
+            const jobTitle = app.taskId?.title || "Công việc tình nguyện";
+            const stationName = app.taskId?.stationId?.name || "";
+            const campaignTitle = app.taskId?.campaignId?.title || "";
+            const appliedTime = app.appliedAt ? new Date(app.appliedAt).toLocaleString("vi-VN") : "";
+            const reviewedTime = app.reviewedAt ? new Date(app.reviewedAt).toLocaleString("vi-VN") : "";
+            const reviewerName = app.reviewedBy?.fullName || app.reviewedBy?.username || "";
+
+            return (
+              <Card key={app._id} style={{ padding: 14, gap: 10 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                  <Text style={{ fontFamily: fonts.bold, fontSize: 15, color: colors.ink }}>
-                    {app.fullName || app.username || "Tình nguyện viên"}
-                  </Text>
+                  <View style={{ flex: 1, minWidth: 160 }}>
+                    <Text style={{ fontFamily: fonts.bold, fontSize: 16, color: colors.ink }}>
+                      {applicantName}
+                    </Text>
+                    {contactParts.length > 0 ? (
+                      <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.muted, marginTop: 2 }}>
+                        {contactParts.join(" · ")}
+                      </Text>
+                    ) : null}
+                  </View>
                   <Badge
                     label={appStatusLabel(app.status)}
-                    tone={app.status === "APPROVED" ? "primary" : app.status === "REJECTED" ? "danger" : "coral"}
+                    tone={app.status === "APPROVED" ? "primary" : app.status === "REJECTED" ? "danger" : app.status === "PENDING" ? "coral" : "neutral"}
                   />
                 </View>
-                {[app.phone, app.email, app.username ? `@${app.username}` : ""].filter(Boolean).length > 0 ? (
-                  <Body muted>{[app.phone, app.email, app.username ? `@${app.username}` : ""].filter(Boolean).join(" · ")}</Body>
+
+                <View style={{ backgroundColor: colors.surfaceLow, padding: 10, borderRadius: 10, gap: 4 }}>
+                  <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: colors.ink }}>
+                    {jobTitle}
+                  </Text>
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                    {stationName ? (
+                      <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.muted }}>
+                        {`Trạm: ${stationName}`}
+                      </Text>
+                    ) : null}
+                    {campaignTitle ? (
+                      <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.primary }}>
+                        {`Chiến dịch: ${campaignTitle}`}
+                      </Text>
+                    ) : null}
+                  </View>
+                  {appliedTime ? (
+                    <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.muted }}>
+                      {`Nộp lúc: ${appliedTime}`}
+                    </Text>
+                  ) : null}
+                </View>
+
+                {app.note ? (
+                  <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.ink, fontStyle: "italic" }}>
+                    {`Lời nhắn: "${app.note}"`}
+                  </Text>
                 ) : null}
+
+                {reviewerName ? (
+                  <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.muted }}>
+                    {`Đã duyệt bởi: ${reviewerName}${reviewedTime ? ` (${reviewedTime})` : ""}`}
+                  </Text>
+                ) : null}
+
                 {app.status === "PENDING" ? (
-                  <View style={{ gap: 8 }}>
-                    <Button
-                      label={job.busy ? "Đang xử lý..." : "Duyệt tình nguyện viên"}
-                      onPress={() => void job.run((token) => backend.reviewTaskApplication(token, app._id, { status: "APPROVED" })).then((ok) => {
-                        if (!ok) return;
-                        setApplyStamp((value) => value + 1);
-                        tasks.reload();
-                      })}
-                    />
-                    <Button
-                      label="Từ chối đơn"
-                      tone="danger"
-                      onPress={() => void job.run((token) => backend.reviewTaskApplication(token, app._id, { status: "REJECTED" })).then((ok) => {
-                        if (!ok) return;
-                        setApplyStamp((value) => value + 1);
-                        tasks.reload();
-                      })}
-                    />
+                  <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
+                    <View style={{ flex: 1 }}>
+                      <Button
+                        label={job.busy ? "Đang xử lý..." : "Duyệt đơn"}
+                        onPress={() => void job.run((token) => backend.reviewTaskApplication(token, app._id, { status: "APPROVED", note: "Đồng ý" })).then((ok) => {
+                          if (!ok) return;
+                          setAppReloadStamp((v) => v + 1);
+                          tasks.reload();
+                        })}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Button
+                        label="Từ chối"
+                        tone="danger"
+                        onPress={() => void job.run((token) => backend.reviewTaskApplication(token, app._id, { status: "REJECTED" })).then((ok) => {
+                          if (!ok) return;
+                          setAppReloadStamp((v) => v + 1);
+                          tasks.reload();
+                        })}
+                      />
+                    </View>
                   </View>
                 ) : null}
               </Card>
-            ))}
-            <View style={{ gap: 8, paddingTop: 6, borderTopWidth: 1, borderTopColor: colors.hairline }}>
-              {row.recruitmentStatus === "OPEN" ? (
-                <Button label="Đóng tuyển" tone="ghost" onPress={() => void job.run((token) => backend.updateTask(token, row._id, { recruitmentStatus: "CLOSED" })).then((ok) => ok && tasks.reload())} />
-              ) : row.status !== "CANCELLED" ? (
-                <Button label="Mở tuyển lại" tone="ghost" onPress={() => void job.run((token) => backend.updateTask(token, row._id, { recruitmentStatus: "OPEN" })).then((ok) => ok && tasks.reload())} />
-              ) : null}
-              {row.status !== "CANCELLED" ? (
-                <Button label="Hủy việc này" tone="danger" onPress={() => void job.run((token) => backend.updateTask(token, row._id, { status: "CANCELLED", recruitmentStatus: "CLOSED" })).then((ok) => ok && tasks.reload())} />
-              ) : null}
-            </View>
-          </View>
-        ) : null}
-      />
-      {canCreateTask ? (
-        <Fold title="Đăng tin tuyển">
-          <PickList rows={stations.rows} selected={stationId} onPick={setStationId} detail={(row) => row.address || ""} />
-          <TextField label="Tên việc" value={title} onChangeText={setTitle} />
-          <TextField label="Mô tả ngắn" value={detail} onChangeText={setDetail} />
-          {renderScheduleField("Ngày bắt đầu", "startDate", "date")}
-          {renderScheduleField("Giờ bắt đầu", "startTime", "time")}
-          {renderScheduleField("Ngày kết thúc", "endDate", "date")}
-          {renderScheduleField("Giờ kết thúc", "endTime", "time")}
-          <TextField label="Số người cần" value={needed} onChangeText={(value) => setNeeded(value.replace(/\D/g, ""))} keyboardType="number-pad" />
-          {neededError ? <Text style={{ color: colors.error, fontFamily: fonts.medium, fontSize: 13 }}>{neededError}</Text> : null}
-          {renderScheduleField("Ngày hạn đăng ký (không bắt buộc)", "deadlineDate", "date")}
-          {renderScheduleField("Giờ hạn đăng ký (không bắt buộc)", "deadlineTime", "time")}
-          <TextField label="Điểm thưởng" value={points} onChangeText={(value) => setPoints(value.replace(/\D/g, ""))} keyboardType="number-pad" />
-          {taskImage ? <Photo uri={taskImage} height={160} radius={12} /> : <Body muted>Chưa chọn ảnh cho tin.</Body>}
-          <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
-            <Button
-              label="Chọn ảnh tin"
-              tone="ghost"
-              onPress={() => void createTaskJob.run(async (token) => {
-                const file = await pickImage();
-                if (!file) return { message: "Chưa chọn ảnh." };
-                const uploaded = await backend.uploadTaskImage(token, file);
-                setTaskImage(uploaded.imageUrl);
-                return { message: "Đã tải ảnh. Ảnh sẽ gắn khi đăng tin." };
-              })}
-            />
-            {taskImage ? <Button label="Gỡ ảnh" tone="danger" onPress={() => setTaskImage(null)} /> : null}
-          </View>
-          {activePicker && Platform.OS !== "web" ? (
-            <View style={{ gap: 8 }}>
-              <DateTimePicker
-                value={scheduleValues[activePicker.field] || new Date()}
-                mode={activePicker.mode}
-                display={Platform.OS === "ios" ? "spinner" : "default"}
-                minimumDate={activePicker.mode === "date"
-                  ? activePicker.field === "startDate" ? today : activePicker.field === "endDate" ? earliestEndDate ?? undefined : undefined
-                  : undefined}
-                onChange={onSchedulePickerChange}
+            );
+          })}
+
+          {appTotalPages > 1 ? (
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 8 }}>
+              <Button
+                label="Trang trước"
+                tone="ghost"
+                disabled={appPage <= 1}
+                onPress={() => setAppPage((p) => Math.max(1, p - 1))}
               />
-              {Platform.OS === "ios" ? <Button label="Xong" onPress={() => setActivePicker(null)} /> : null}
+              <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.muted }}>
+                {`Trang ${appPage} / ${appTotalPages} (${appTotal} đơn)`}
+              </Text>
+              <Button
+                label="Trang sau"
+                tone="ghost"
+                disabled={appPage >= appTotalPages}
+                onPress={() => setAppPage((p) => Math.min(appTotalPages, p + 1))}
+              />
             </View>
           ) : null}
-          <Button
-            label={createTaskJob.busy ? "Đang đăng tin..." : "Đăng tin"}
-            disabled={Boolean(startDateError || endDateError || neededError || createTaskJob.busy)}
-            onPress={() => {
-              if (startDateError || endDateError || neededError) return;
-              if (!stationId) {
-                createTaskJob.fail("Vui lòng chọn trạm cho công việc tình nguyện.");
-                return;
-              }
-              if (!title.trim()) {
-                createTaskJob.fail("Vui lòng nhập tên công việc.");
-                return;
-              }
-              if (!startDate || !startTime || !endDate || !endTime) {
-                createTaskJob.fail("Vui lòng chọn đầy đủ cả Ngày và Giờ bắt đầu, Ngày và Giờ kết thúc.");
-                return;
-              }
-              const payload = {
-                ...(campaignId ? { campaignId } : {}),
-                stationId,
-                title: title.trim(),
-                description: detail.trim(),
-                startTime: taskDateTime(startDate, startTime),
-                endTime: taskDateTime(endDate, endTime),
-                requiredVolunteers: Number(needed),
-                ...(taskDateTime(deadlineDate, deadlineTime) ? { volunteerDeadline: taskDateTime(deadlineDate, deadlineTime) } : {}),
-                recruitmentStatus: "OPEN",
-                rewardPoints: Number(points) || 0,
-                ...(taskImage ? { imageUrl: taskImage } : {}),
-              };
-              console.info("[Đăng tin tuyển] Submitting task", payload);
-              void createTaskJob.run((token) => backend.createTask(token, payload)).then((ok) => {
-                if (ok) {
-                  console.info("[Đăng tin tuyển] Task created successfully", { stationId, title: payload.title, requiredVolunteers: payload.requiredVolunteers });
-                  tasks.reload();
-                  return;
-                }
-                console.error("[Đăng tin tuyển] Task creation failed", { stationId, title: payload.title, requiredVolunteers: payload.requiredVolunteers });
-              });
-            }}
-          />
-          <Note text={createTaskJob.note} error={createTaskJob.isError} />
-        </Fold>
+        </View>
       ) : null}
-      <Title>Đơn tham gia chiến dịch</Title>
-      <Body muted>Chọn chiến dịch bên dưới để xem tình nguyện viên đăng ký theo chiến dịch.</Body>
-      {campaigns.rows && campaigns.rows.length > 0 ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-          {campaigns.rows.map((camp) => (
-            <Pill
-              key={camp._id}
-              label={camp.title || "Chiến dịch"}
-              active={campaignId === camp._id}
-              onPress={() => {
-                setCampaignId(camp._id);
-                setRegistrationId("");
-              }}
-            />
-          ))}
-        </ScrollView>
-      ) : null}
-      {can(role, ["ADMIN", "STATION_MANAGER", "STAFF"]) && campaignId ? (
-        <PickList
-          rows={people}
-          selected={registrationId}
-          onPick={setRegistrationId}
-          detail={(row) => [row.phone, row.status || ""].filter(Boolean).join(" · ")}
-          panel={(row) => canApproveJoin ? (
-            <View style={{ gap: 8 }}>
-              {row.status !== "APPROVED" ? (
-                <Button label="Duyệt đơn tham gia" onPress={() => void job.run((token) => backend.updateVolunteerStatus(token, row._id, { status: "APPROVED" })).then((ok) => ok && setJoinStamp((value) => value + 1))} />
-              ) : null}
-              {row.status !== "REJECTED" ? (
-                <Button label="Từ chối đơn tham gia" tone="danger" onPress={() => void job.run((token) => backend.updateVolunteerStatus(token, row._id, { status: "REJECTED" })).then((ok) => ok && setJoinStamp((value) => value + 1))} />
-              ) : null}
-              {row.status !== "CANCELLED" ? (
-                <Button label="Hủy đơn tham gia" tone="ghost" onPress={() => void job.run((token) => backend.updateVolunteerStatus(token, row._id, { status: "CANCELLED" })).then((ok) => ok && setJoinStamp((value) => value + 1))} />
-              ) : null}
+
+      {crewSection === "TASKS" ? (
+        <View style={{ gap: 12 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <Text style={{ fontFamily: fonts.bold, fontSize: 16, color: colors.ink }}>
+              {`Danh sách tin (${visibleTasks?.length ?? 0})`}
+            </Text>
+            {canCreateTask ? (
+              <Button
+                label="+ Đăng tin mới"
+                tone="primary"
+                onPress={() => setIsCreateModalOpen(true)}
+              />
+            ) : null}
+          </View>
+          {managedStations.length > 1 ? (
+            <View style={{ gap: 6 }}>
+              <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.muted }}>
+                {role === "ADMIN" ? "Lọc theo trạm:" : "Trạm của bạn:"}
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                {role === "ADMIN" ? (
+                  <Pill label="Tất cả trạm" active={selectedStationId === ""} onPress={() => setSelectedStationId("")} />
+                ) : null}
+                {managedStations.map((st) => (
+                  <Pill key={st._id} label={st.name || "Trạm"} active={selectedStationId === st._id} onPress={() => setSelectedStationId(st._id)} />
+                ))}
+              </ScrollView>
             </View>
+          ) : managedStations.length === 1 ? (
+            <View style={{ paddingVertical: 2 }}>
+              <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.muted }}>
+                {`Trạm quản lý: ${managedStations[0].name || "Trạm"}`}
+              </Text>
+            </View>
+          ) : null}
+          <PickList
+            rows={visibleTasks}
+            selected={taskId}
+            onPick={setTaskId}
+            detail={(row) => {
+              const stName = stationTitleOf(row.stationId);
+              const approved = row.slots?.approved ?? 0;
+              const total = row.slots?.total ?? 0;
+              return [
+                stName || "Chưa rõ trạm",
+                `Chỗ: ${approved}/${total}`,
+                `${row.status || ""} · ${row.recruitmentStatus || ""}`,
+              ].filter(Boolean).join(" · ");
+            }}
+            panel={(row) => canTask ? (
+              <View style={{ gap: 10 }}>
+                {editImage ? <Photo uri={editImage} height={160} radius={12} /> : <Body muted>Tin này chưa có ảnh.</Body>}
+                <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+                  <Button
+                    label="Chọn ảnh tin"
+                    tone="ghost"
+                    onPress={() => void job.run(async (token) => {
+                      const file = await pickImage();
+                      if (!file) return { message: "Chưa chọn ảnh." };
+                      const uploaded = await backend.uploadTaskImage(token, file);
+                      setEditImage(uploaded.imageUrl);
+                      return { message: "Đã tải ảnh. Bấm lưu để gắn vào tin." };
+                    })}
+                  />
+                  {editImage ? <Button label="Gỡ ảnh" tone="danger" onPress={() => setEditImage(null)} /> : null}
+                </View>
+                <TextField label="Tên việc" value={editTitle} onChangeText={setEditTitle} />
+                <TextField label="Mô tả" value={editDetail} onChangeText={setEditDetail} />
+                <TextField label="Điểm thưởng" value={editPoints} onChangeText={(value) => setEditPoints(value.replace(/\D/g, ""))} keyboardType="number-pad" />
+                <Button
+                  label="Lưu tin"
+                  onPress={() => {
+                    if (!editTitle.trim()) {
+                      job.fail("Vui lòng nhập tên công việc.");
+                      return;
+                    }
+                    void job.run((token) => backend.updateTask(token, row._id, {
+                      title: editTitle.trim(),
+                      description: editDetail.trim(),
+                      rewardPoints: Number(editPoints) || 0,
+                      imageUrl: editImage,
+                    })).then((ok) => ok && tasks.reload());
+                  }}
+                />
+                {stationTitleOf(row.stationId) ? <Body muted>{`Trạm: ${stationTitleOf(row.stationId)}`}</Body> : null}
+                <View style={{ gap: 8, paddingTop: 6, borderTopWidth: 1, borderTopColor: colors.hairline }}>
+                  {row.recruitmentStatus === "OPEN" ? (
+                    <Button label="Đóng tuyển" tone="ghost" onPress={() => void job.run((token) => backend.updateTask(token, row._id, { recruitmentStatus: "CLOSED" })).then((ok) => ok && tasks.reload())} />
+                  ) : row.status !== "CANCELLED" ? (
+                    <Button label="Mở tuyển lại" tone="ghost" onPress={() => void job.run((token) => backend.updateTask(token, row._id, { recruitmentStatus: "OPEN" })).then((ok) => ok && tasks.reload())} />
+                  ) : null}
+                  {row.status !== "CANCELLED" ? (
+                    <Button label="Hủy việc này" tone="danger" onPress={() => void job.run((token) => backend.updateTask(token, row._id, { status: "CANCELLED", recruitmentStatus: "CLOSED" })).then((ok) => ok && tasks.reload())} />
+                  ) : null}
+                </View>
+              </View>
+            ) : null}
+          />
+        </View>
+      ) : null}
+
+      {crewSection === "CAMPAIGNS" ? (
+        <View style={{ gap: 12 }}>
+          <Title>Đơn tham gia chiến dịch</Title>
+          <Body muted>Chọn chiến dịch bên dưới để xem tình nguyện viên đăng ký theo chiến dịch.</Body>
+          {campaigns.rows && campaigns.rows.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+              {campaigns.rows.map((camp) => (
+                <Pill
+                  key={camp._id}
+                  label={camp.title || "Chiến dịch"}
+                  active={campaignId === camp._id}
+                  onPress={() => {
+                    setCampaignId(camp._id);
+                    setRegistrationId("");
+                  }}
+                />
+              ))}
+            </ScrollView>
+          ) : null}
+          {can(role, ["ADMIN", "STATION_MANAGER", "STAFF"]) && campaignId ? (
+            <PickList
+              rows={people}
+              selected={registrationId}
+              onPick={setRegistrationId}
+              detail={(row) => [row.phone, row.status || ""].filter(Boolean).join(" · ")}
+              panel={(row) => canApproveJoin ? (
+                <View style={{ gap: 8 }}>
+                  {row.status !== "APPROVED" ? (
+                    <Button label="Duyệt đơn tham gia" onPress={() => void job.run((token) => backend.updateVolunteerStatus(token, row._id, { status: "APPROVED" })).then((ok) => ok && setJoinStamp((value) => value + 1))} />
+                  ) : null}
+                  {row.status !== "REJECTED" ? (
+                    <Button label="Từ chối đơn tham gia" tone="danger" onPress={() => void job.run((token) => backend.updateVolunteerStatus(token, row._id, { status: "REJECTED" })).then((ok) => ok && setJoinStamp((value) => value + 1))} />
+                  ) : null}
+                  {row.status !== "CANCELLED" ? (
+                    <Button label="Hủy đơn tham gia" tone="ghost" onPress={() => void job.run((token) => backend.updateVolunteerStatus(token, row._id, { status: "CANCELLED" })).then((ok) => ok && setJoinStamp((value) => value + 1))} />
+                  ) : null}
+                </View>
+              ) : (
+                <Body muted>Nhân viên xem được đơn tham gia chiến dịch. Chỉ Admin và Quản lý trạm duyệt đơn đó.</Body>
+              )}
+            />
           ) : (
-            <Body muted>Nhân viên xem được đơn tham gia chiến dịch. Chỉ Admin và Quản lý trạm duyệt đơn đó.</Body>
+            <Body muted>Bấm chọn một chiến dịch ở trên để xem danh sách đăng ký.</Body>
           )}
-        />
-      ) : (
-        <Body muted>Bấm chọn một chiến dịch ở trên để xem danh sách đăng ký.</Body>
-      )}
+        </View>
+      ) : null}
+
+      <Modal
+        visible={isCreateModalOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setIsCreateModalOpen(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            justifyContent: "center",
+            alignItems: "center",
+            padding: 16,
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: colors.surface,
+              borderRadius: 20,
+              width: "100%",
+              maxWidth: 540,
+              maxHeight: "90%",
+              overflow: "hidden",
+            }}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                paddingHorizontal: 16,
+                paddingVertical: 14,
+                borderBottomWidth: 1,
+                borderBottomColor: colors.hairline,
+              }}
+            >
+              <Text style={{ fontFamily: fonts.bold, fontSize: 17, color: colors.ink }}>
+                Đăng tin tuyển mới
+              </Text>
+              <Button
+                label="Đóng"
+                tone="ghost"
+                onPress={() => setIsCreateModalOpen(false)}
+              />
+            </View>
+
+            <ScrollView
+              contentContainerStyle={{ padding: 16, gap: 12 }}
+              showsVerticalScrollIndicator={false}
+            >
+              {managedStations.length === 0 ? (
+                <Body muted>Tài khoản chưa được phân công quản lý trạm nào để đăng tin tuyển.</Body>
+              ) : managedStations.length > 1 ? (
+                <View style={{ gap: 6 }}>
+                  <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.muted }}>
+                    Chọn trạm đăng tin:
+                  </Text>
+                  <PickList rows={managedStations} selected={selectedStationId} onPick={setSelectedStationId} detail={(row) => row.address || ""} />
+                </View>
+              ) : (
+                <View style={{ paddingVertical: 2 }}>
+                  <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.muted }}>
+                    {`Trạm thực hiện: ${managedStations[0].name || "Trạm"}`}
+                  </Text>
+                </View>
+              )}
+              <TextField label="Tên việc" value={title} onChangeText={setTitle} />
+              <TextField label="Mô tả ngắn" value={detail} onChangeText={setDetail} />
+              {renderScheduleField("Ngày bắt đầu", "startDate", "date")}
+              {renderScheduleField("Giờ bắt đầu", "startTime", "time")}
+              {renderScheduleField("Ngày kết thúc", "endDate", "date")}
+              {renderScheduleField("Giờ kết thúc", "endTime", "time")}
+              <TextField label="Số người cần" value={needed} onChangeText={(value) => setNeeded(value.replace(/\D/g, ""))} keyboardType="number-pad" />
+              {neededError ? <Text style={{ color: colors.error, fontFamily: fonts.medium, fontSize: 13 }}>{neededError}</Text> : null}
+              {renderScheduleField("Ngày hạn đăng ký (không bắt buộc)", "deadlineDate", "date")}
+              {renderScheduleField("Giờ hạn đăng ký (không bắt buộc)", "deadlineTime", "time")}
+              {deadlineError ? <Text style={{ color: colors.error, fontFamily: fonts.medium, fontSize: 13 }}>{deadlineError}</Text> : null}
+              <TextField label="Điểm thưởng" value={points} onChangeText={(value) => setPoints(value.replace(/\D/g, ""))} keyboardType="number-pad" />
+              {taskImage ? <Photo uri={taskImage} height={160} radius={12} /> : <Body muted>Chưa chọn ảnh cho tin.</Body>}
+              <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+                <Button
+                  label="Chọn ảnh tin"
+                  tone="ghost"
+                  onPress={() => void createTaskJob.run(async (token) => {
+                    const file = await pickImage();
+                    if (!file) return { message: "Chưa chọn ảnh." };
+                    const uploaded = await backend.uploadTaskImage(token, file);
+                    setTaskImage(uploaded.imageUrl);
+                    return { message: "Đã tải ảnh. Ảnh sẽ gắn khi đăng tin." };
+                  })}
+                />
+                {taskImage ? <Button label="Gỡ ảnh" tone="danger" onPress={() => setTaskImage(null)} /> : null}
+              </View>
+              {activePicker && Platform.OS !== "web" ? (
+                <View style={{ gap: 8 }}>
+                  <DateTimePicker
+                    value={scheduleValues[activePicker.field] || new Date()}
+                    mode={activePicker.mode}
+                    display={Platform.OS === "ios" ? "spinner" : "default"}
+                    minimumDate={activePicker.mode === "date"
+                      ? activePicker.field === "startDate" ? today : activePicker.field === "endDate" ? earliestEndDate ?? undefined : activePicker.field === "deadlineDate" ? today : undefined
+                      : undefined}
+                    maximumDate={activePicker.mode === "date" && activePicker.field === "deadlineDate" && startDate ? startDate : undefined}
+                    onChange={onSchedulePickerChange}
+                  />
+                  {Platform.OS === "ios" ? <Button label="Xong" onPress={() => setActivePicker(null)} /> : null}
+                </View>
+              ) : null}
+              <Button
+                label={createTaskJob.busy ? "Đang đăng tin..." : "Đăng tin"}
+                disabled={Boolean(startDateError || endDateError || neededError || deadlineError || createTaskJob.busy || managedStations.length === 0)}
+                onPress={() => {
+                  if (startDateError || endDateError || neededError || deadlineError) return;
+                  if (managedStations.length === 0) {
+                    createTaskJob.fail("Tài khoản chưa được phân công quản lý trạm nào để đăng việc.");
+                    return;
+                  }
+                  if (!selectedStationId) {
+                    createTaskJob.fail("Vui lòng chọn trạm cho công việc tình nguyện.");
+                    return;
+                  }
+                  if (!title.trim()) {
+                    createTaskJob.fail("Vui lòng nhập tên công việc.");
+                    return;
+                  }
+                  if (!startDate || !startTime || !endDate || !endTime) {
+                    createTaskJob.fail("Vui lòng chọn đầy đủ cả Ngày và Giờ bắt đầu, Ngày và Giờ kết thúc.");
+                    return;
+                  }
+                  const payload = {
+                    ...(campaignId ? { campaignId } : {}),
+                    stationId: selectedStationId,
+                    title: title.trim(),
+                    description: detail.trim(),
+                    startTime: taskDateTime(startDate, startTime),
+                    endTime: taskDateTime(endDate, endTime),
+                    requiredVolunteers: Number(needed),
+                    ...(taskDateTime(deadlineDate, deadlineTime) ? { volunteerDeadline: taskDateTime(deadlineDate, deadlineTime) } : {}),
+                    recruitmentStatus: "OPEN",
+                    rewardPoints: Number(points) || 0,
+                    ...(taskImage ? { imageUrl: taskImage } : {}),
+                  };
+                  console.info("[Đăng tin tuyển] Submitting task", payload);
+                  void createTaskJob.run((token) => backend.createTask(token, payload)).then((ok) => {
+                    if (ok) {
+                      console.info("[Đăng tin tuyển] Task created successfully", { stationId: selectedStationId, title: payload.title, requiredVolunteers: payload.requiredVolunteers });
+                      setTitle("");
+                      setDetail("");
+                      setStartDate(null);
+                      setStartTime(null);
+                      setEndDate(null);
+                      setEndTime(null);
+                      setDeadlineDate(null);
+                      setDeadlineTime(null);
+                      setTaskImage(null);
+                      setIsCreateModalOpen(false);
+                      tasks.reload();
+                      return;
+                    }
+                    console.error("[Đăng tin tuyển] Task creation failed", {
+                      stationId: selectedStationId,
+                      title: payload.title,
+                      requiredVolunteers: payload.requiredVolunteers,
+                      error: createTaskJob.note,
+                    });
+                  });
+                }}
+              />
+              <Note text={createTaskJob.note} error={createTaskJob.isError} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </OpsGate>
   );
 }

@@ -5,6 +5,7 @@ import { ApiError } from "@/api/client";
 import { backend } from "@/api/backend";
 import type { ShiftScheduleRow, StationRow } from "@/api/types";
 import { useSession } from "@/api/session";
+import { useToast } from "@/api/toast";
 import { Screen } from "@/components/chrome";
 import { StationProofScan, StationQrCard, type StationProof } from "@/components/station-proof";
 import { Badge, Body, Button, Card, Icon, Pill, StatRow, Tap, Title } from "@/components/ui";
@@ -61,6 +62,7 @@ function shiftState(status: string) {
 
 export function ShiftsScreen() {
   const { token, user } = useSession();
+  const toast = useToast();
   const role = user?.role && shiftRoles.includes(user.role) ? user.role : "";
   const canWrite = role === "STATION_MANAGER" || role === "ORG_MANAGER";
   const staffStations = user?.stations;
@@ -71,7 +73,6 @@ export function ShiftsScreen() {
   const [schedules, setSchedules] = useState<ShiftScheduleRow[] | null>(null);
   const [error, setError] = useState("");
   const [staffError, setStaffError] = useState("");
-  const [note, setNote] = useState("");
   const [pending, setPending] = useState<{ id: string; kind: "in" | "out" } | null>(null);
   const [dayKey, setDayKey] = useState(localDate(new Date()));
   const [templateId, setTemplateId] = useState("");
@@ -148,7 +149,6 @@ export function ShiftsScreen() {
 
   async function assign() {
     if (!token || !stationId || !templateId || staffIds.length === 0) return;
-    setNote("");
     try {
       const data = await backend.createShiftSchedule(token, stationId, {
         templateId,
@@ -156,23 +156,22 @@ export function ShiftsScreen() {
         staffIds,
         requiredStaff: staffIds.length,
       });
-      setNote(data.message);
+      toast.show(data.message, "success");
       setStaffIds([]);
       await refresh();
     } catch (reason) {
-      setNote(reason instanceof ApiError ? reason.message : "Không phân được ca.");
+      toast.show(reason instanceof ApiError ? reason.message : "Không phân được ca.", "error");
     }
   }
 
   async function punch(id: string, kind: "in" | "out", proof: StationProof) {
     if (!token) return;
-    setNote("");
     try {
       const data = kind === "in" ? await backend.checkInShift(token, id, proof) : await backend.checkOutShift(token, id, proof);
-      setNote(data.message);
+      toast.show(data.message, "success");
       await refresh();
     } catch (reason) {
-      setNote(reason instanceof ApiError ? reason.message : "Không điểm danh được.");
+      toast.show(reason instanceof ApiError ? reason.message : "Không điểm danh được.", "error");
     }
   }
 
@@ -201,7 +200,6 @@ export function ShiftsScreen() {
     <Screen tab="stations">
       <Title>Ca trực</Title>
       {role === "STAFF" ? <Body muted>Bảy ngày tới. Chọn một ngày để xem ca của bạn.</Body> : <Body muted>Điểm danh chỉ ghi giờ vào và giờ ra. Server không tính công và không cộng điểm.</Body>}
-      {note ? <Body>{note}</Body> : null}
       {pending ? (
         <StationProofScan
           title={pending.kind === "in" ? "Vào ca" : "Tan ca"}

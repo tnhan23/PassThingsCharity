@@ -14,6 +14,7 @@ import { GuestProvider, useGuest } from "@/api/guest";
 import { LocaleProvider } from "@/api/locale";
 import { SessionProvider, useSession } from "@/api/session";
 import { ShellProvider } from "@/api/shell";
+import { ToastProvider } from "@/api/toast";
 import { colors } from "@/theme";
 
 SplashScreen.preventAutoHideAsync();
@@ -51,6 +52,7 @@ export default function RootLayout() {
         <SessionProvider>
           <GuestProvider>
           <ShellProvider>
+          <ToastProvider>
           <SignedOutGate />
           <Stack
             screenOptions={{
@@ -65,6 +67,7 @@ export default function RootLayout() {
             <Stack.Screen name="profile/[mode]" options={{ animation: "none" }} />
             <Stack.Screen name="login" options={{ animation: "none", gestureEnabled: false }} />
           </Stack>
+          </ToastProvider>
           </ShellProvider>
           </GuestProvider>
         </SessionProvider>

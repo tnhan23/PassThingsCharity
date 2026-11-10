@@ -6,6 +6,7 @@ import { ApiError } from "@/api/client";
 import { pickImage } from "@/api/images";
 import { formatDay, unitSpoken } from "@/api/labels";
 import { useSession } from "@/api/session";
+import { toastToneFromError, useToast } from "@/api/toast";
 import type { CampaignSummary, ContributionItemRow, ContributionRow, PointsPayload, StationRow } from "@/api/types";
 import { Field } from "@/components/form";
 import { Badge, Body, Button, Card, Icon, Photo, Pill, StatRow, Tap, Title } from "@/components/ui";
@@ -305,6 +306,7 @@ export function ContributionDetailScreen() {
 
 export function ReceptionForm({ onCreated }: { onCreated?: () => void }) {
   const { token, user } = useSession();
+  const toast = useToast();
   const stations = user?.stations ?? [];
   const [stationId, setStationId] = useState(stations.length === 1 ? stations[0]._id : "");
   const [extraStations, setExtraStations] = useState<StationRow[] | null>(stations.length ? stations : null);
@@ -318,8 +320,11 @@ export function ReceptionForm({ onCreated }: { onCreated?: () => void }) {
   const [notes, setNotes] = useState("");
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState("");
   const [done, setDone] = useState<{ code: string; count: number; points: number } | null>(null);
+
+  function flash(message: string, isError = false) {
+    toast.show(message, toastToneFromError(isError));
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -336,7 +341,7 @@ export function ReceptionForm({ onCreated }: { onCreated?: () => void }) {
         pointsPerUnit: item.pointsPerUnit || 0,
       }] : []));
     }).catch((caught) => {
-      if (!cancelled) setNote(caught instanceof ApiError ? caught.message : "Không tải được danh mục.");
+      if (!cancelled) flash(caught instanceof ApiError ? caught.message : "Không tải được danh mục.", true);
     });
     return () => {
       cancelled = true;
@@ -389,20 +394,18 @@ export function ReceptionForm({ onCreated }: { onCreated?: () => void }) {
     setNotes("");
     setImageUrls([]);
     setDone(null);
-    setNote("");
     if (stations.length === 1) setStationId(stations[0]._id);
   }
 
   async function searchDonor() {
     if (!token || !query.trim()) return;
     setBusy(true);
-    setNote("");
     try {
       const data = await backend.lookupDonor(token, query.trim());
       setDonors(data.data || []);
-      setNote(data.data?.length ? `Có ${data.data.length} người.` : "Không thấy người quyên góp.");
+      flash(data.data?.length ? `Có ${data.data.length} người.` : "Không thấy người quyên góp.", !data.data?.length);
     } catch (caught) {
-      setNote(caught instanceof ApiError ? caught.message : "Không tra được người quyên góp.");
+      flash(caught instanceof ApiError ? caught.message : "Không tra được người quyên góp.", true);
     } finally {
       setBusy(false);
     }
@@ -411,18 +414,18 @@ export function ReceptionForm({ onCreated }: { onCreated?: () => void }) {
   async function upload() {
     if (!token) return;
     setBusy(true);
-    setNote("");
     try {
       const file = await pickImage();
       if (!file) {
-        setNote("Chưa chọn ảnh.");
+        flash("Chưa chọn ảnh.", true);
         return;
       }
       const uploaded = await backend.uploadContributionImages(token, [file]);
+      const count = uploaded.imageUrls?.length ?? 0;
       setImageUrls(uploaded.imageUrls ?? []);
-      setNote(uploaded.imageUrls?.length ? `Đã tải ${uploaded.imageUrls.length} ảnh.` : "Máy chủ không trả đường dẫn ảnh.");
+      flash(count ? `Đã tải ${count} ảnh.` : "Máy chủ không trả đường dẫn ảnh.", !count);
     } catch (caught) {
-      setNote(caught instanceof ApiError ? caught.message : "Không tải được ảnh.");
+      flash(caught instanceof ApiError ? caught.message : "Không tải được ảnh.", true);
     } finally {
       setBusy(false);
     }
@@ -438,11 +441,10 @@ export function ReceptionForm({ onCreated }: { onCreated?: () => void }) {
       return [{ itemTypeId: type._id, quantity, unit: type.unit, note: line.note.trim() }];
     });
     if (!donor || !stationId || !campaignId || items.length !== filled.length || items.length === 0) {
-      setNote("Chọn người tặng, trạm, chiến dịch, và nhập số lượng hợp lệ cho từng món. Đơn vị khác Kg dùng số nguyên.");
+      flash("Chọn người tặng, trạm, chiến dịch, và nhập số lượng hợp lệ cho từng món. Đơn vị khác Kg dùng số nguyên.", true);
       return;
     }
     setBusy(true);
-    setNote("");
     try {
       const data = await backend.createContribution(token, {
         userId: donor._id,
@@ -459,7 +461,7 @@ export function ReceptionForm({ onCreated }: { onCreated?: () => void }) {
       });
       onCreated?.();
     } catch (caught) {
-      setNote(caught instanceof ApiError ? caught.message : "Không lập được phiếu.");
+      flash(caught instanceof ApiError ? caught.message : "Không lập được phiếu.", true);
     } finally {
       setBusy(false);
     }
@@ -571,7 +573,6 @@ export function ReceptionForm({ onCreated }: { onCreated?: () => void }) {
           { label: "Ảnh đính kèm", value: imageUrls.length, unit: "ảnh", tone: "ink" },
         ]}
       />
-      {note ? <Body>{note}</Body> : null}
       <Button label={busy ? "Đang gửi" : "Lập phiếu"} disabled={busy} onPress={() => void submit()} />
     </View>
   );

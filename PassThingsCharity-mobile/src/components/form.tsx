@@ -3,6 +3,7 @@ import { Text, TextInput, View } from "react-native";
 import { ApiError } from "@/api/client";
 import { backend, resultText } from "@/api/backend";
 import { useSession } from "@/api/session";
+import { toastToneFromError, useToast } from "@/api/toast";
 import { Body, Button, Card, Title } from "@/components/ui";
 import { colors, fonts } from "@/theme";
 
@@ -58,43 +59,39 @@ export function Field({
 }
 
 export function PasswordReset() {
+  const toast = useToast();
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [nextPassword, setNextPassword] = useState("");
-  const [message, setMessage] = useState("");
-  const [isError, setIsError] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  function flash(message: string, isError = false) {
+    toast.show(message, toastToneFromError(isError));
+  }
 
   async function send(kind: "code" | "reset") {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setIsError(true);
-      setMessage("Vui lòng nhập địa chỉ email hợp lệ.");
+      flash("Vui lòng nhập địa chỉ email hợp lệ.", true);
       return;
     }
     if (kind === "reset") {
       if (!/^\d{6}$/.test(otp.trim())) {
-        setIsError(true);
-        setMessage("Mã OTP phải gồm đúng 6 chữ số.");
+        flash("Mã OTP phải gồm đúng 6 chữ số.", true);
         return;
       }
       if (nextPassword.length < 6) {
-        setIsError(true);
-        setMessage("Mật khẩu mới phải có ít nhất 6 ký tự.");
+        flash("Mật khẩu mới phải có ít nhất 6 ký tự.", true);
         return;
       }
     }
     setBusy(true);
-    setIsError(false);
-    setMessage("");
     try {
       const data = kind === "code"
         ? await backend.forgotPassword(email.trim())
         : await backend.resetPassword({ email: email.trim(), otp: otp.trim(), newPassword: nextPassword });
-      setIsError(false);
-      setMessage(data.message);
+      flash(data.message, false);
     } catch (caught) {
-      setIsError(true);
-      setMessage(caught instanceof ApiError ? caught.message : "Máy chủ từ chối yêu cầu.");
+      flash(caught instanceof ApiError ? caught.message : "Máy chủ từ chối yêu cầu.", true);
     } finally {
       setBusy(false);
     }
@@ -108,11 +105,6 @@ export function PasswordReset() {
       <Button disabled={busy} label={busy ? "Đang gửi" : "Gửi mã"} onPress={() => void send("code")} />
       <Field label="Mã 6 số" value={otp} onChangeText={setOtp} keyboardType="number-pad" />
       <Field label="Mật khẩu mới" value={nextPassword} onChangeText={setNextPassword} secure />
-      {message ? (
-        <Text selectable style={{ fontFamily: fonts.medium, fontSize: 14, color: isError ? colors.error : colors.primary }}>
-          {message}
-        </Text>
-      ) : null}
       <Button disabled={busy} label={busy ? "Đang gửi" : "Đặt mật khẩu"} tone="ghost" onPress={() => void send("reset")} />
     </Card>
   );
@@ -132,9 +124,8 @@ export function Action({
   run: (values: Record<string, string>, token: string) => Promise<unknown>;
 }) {
   const { token } = useSession();
+  const toast = useToast();
   const [values, setValues] = useState<Record<string, string>>({});
-  const [message, setMessage] = useState("");
-  const [isError, setIsError] = useState(false);
   const [busy, setBusy] = useState(false);
 
   return (
@@ -150,32 +141,22 @@ export function Action({
           onChangeText={(next) => setValues((current) => ({ ...current, [field.name]: next }))}
         />
       ))}
-      {message ? (
-        <Text selectable style={{ fontFamily: fonts.medium, fontSize: 14, color: isError ? colors.error : colors.primary }}>
-          {message}
-        </Text>
-      ) : null}
       <Button
         disabled={busy}
         label={busy ? "Đang gửi" : label}
         onPress={() => {
           if (busy) return;
           if (!token) {
-            setIsError(true);
-            setMessage("Đăng nhập trước khi gọi API này.");
+            toast.show("Đăng nhập trước khi gọi API này.", "error");
             return;
           }
           setBusy(true);
-          setIsError(false);
-          setMessage("");
           void run(values, token)
             .then((data) => {
-              setIsError(false);
-              setMessage(resultText(data));
+              toast.show(resultText(data), "success");
             })
             .catch((caught) => {
-              setIsError(true);
-              setMessage(caught instanceof ApiError ? caught.message : "Máy chủ từ chối yêu cầu.");
+              toast.show(caught instanceof ApiError ? caught.message : "Máy chủ từ chối yêu cầu.", "error");
             })
             .finally(() => setBusy(false));
         }}

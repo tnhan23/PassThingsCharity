@@ -4,9 +4,10 @@ import { ScrollView, Text, View } from "react-native";
 import { backend } from "@/api/backend";
 import { ApiError } from "@/api/client";
 import { useSession } from "@/api/session";
+import { useToast } from "@/api/toast";
 import { Screen } from "@/components/chrome";
 import { StationProofScan } from "@/components/station-proof";
-import { Badge, Body, Button, Card, Icon, Photo, Pill, StatRow, Title } from "@/components/ui";
+import { Badge, Body, Button, Card, Photo, Pill, StatRow, Title } from "@/components/ui";
 import { colors, fonts } from "@/theme";
 
 type Post = {
@@ -51,15 +52,6 @@ function postImage(post?: { imageUrl?: string | null; stationId?: Post["stationI
   return stationImage(post?.stationId);
 }
 
-function TaskImage({ uri }: { uri: string }) {
-  if (uri) return <Photo uri={uri} height={164} radius={14} />;
-  return (
-    <View style={{ height: 84, borderRadius: 14, backgroundColor: colors.secondaryContainer, alignItems: "center", justifyContent: "center" }}>
-      <Icon name="volunteer-activism" size={34} color={colors.secondary} />
-    </View>
-  );
-}
-
 function stationAddress(value?: Post["stationId"]) {
   if (!value || typeof value === "string") return "";
   return value.address || "";
@@ -87,59 +79,37 @@ function applicationStatusLabel(status: string) {
   return "Đang chờ Admin duyệt";
 }
 
-const jobCardStyle = {
-  backgroundColor: colors.coralSoft,
-  borderColor: colors.coralSoft,
-  padding: 14,
-};
-
 export default function JobsPage() {
   const { token } = useSession();
+  const toast = useToast();
   const [tab, setTab] = useState<"open" | "mine">("open");
   const [posts, setPosts] = useState<Post[] | null>(null);
   const [assigned, setAssigned] = useState<MyAssignedItem[]>([]);
   const [applications, setApplications] = useState<MyApplicationItem[]>([]);
-  const [openProblem, setOpenProblem] = useState("");
-  const [personalProblem, setPersonalProblem] = useState("");
   const [busyId, setBusyId] = useState("");
   const [stamp, setStamp] = useState(0);
-  const [note, setNote] = useState("");
   const [proofFor, setProofFor] = useState<{ id: string; kind: "in" | "out" } | null>(null);
 
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
-    backend.listOpenTasks(token)
-      .then((data) => {
-        if (cancelled) return;
-        setPosts(data.data ?? []);
-        setOpenProblem("");
-      })
-      .catch((caught) => {
-        if (cancelled) return;
-        setPosts([]);
-        setOpenProblem(caught instanceof ApiError ? caught.message : "Không tải được danh sách việc đang tuyển.");
-      });
-    Promise.allSettled([
+    Promise.all([
+      backend.listOpenTasks(token),
       backend.myAssignments(token) as Promise<{ data?: MyAssignedItem[] }>,
       backend.myTaskApplications(token) as Promise<{ data?: MyApplicationItem[] }>,
-    ]).then(([assignedResult, applicationResult]) => {
-      if (cancelled) return;
-      const failures: string[] = [];
-      if (assignedResult.status === "fulfilled") {
-        setAssigned(assignedResult.value.data ?? []);
-      } else {
-        setAssigned([]);
-        failures.push(assignedResult.reason instanceof ApiError ? assignedResult.reason.message : "Không tải được việc đã giao.");
-      }
-      if (applicationResult.status === "fulfilled") {
-        setApplications(applicationResult.value.data ?? []);
-      } else {
-        setApplications([]);
-        failures.push(applicationResult.reason instanceof ApiError ? applicationResult.reason.message : "Không tải được đơn ứng tuyển.");
-      }
-      setPersonalProblem(failures.join(" "));
-    });
+    ])
+      .then(([openData, assignedData, appData]) => {
+        if (cancelled) return;
+        setPosts(openData.data ?? []);
+        setAssigned(assignedData.data ?? []);
+        setApplications(appData.data ?? []);
+      })
+      .catch((caught) => {
+        if (!cancelled) {
+          setPosts([]);
+          toast.show(caught instanceof ApiError ? caught.message : "Không tải được danh sách việc.", "error");
+        }
+      });
     return () => {
       cancelled = true;
     };
@@ -147,7 +117,7 @@ export default function JobsPage() {
 
   if (!token) {
     return (
-      <Screen tab="jobs">
+      <Screen tab="profile">
         <Title>Việc tại trạm</Title>
         <Body>Đăng nhập để xem tin tuyển và bấm ứng tuyển.</Body>
         <Button label="Đăng nhập" onPress={() => router.push("/login")} />
@@ -164,28 +134,26 @@ export default function JobsPage() {
 
   async function runAction(id: string, action: () => Promise<{ message: string; gamification?: { pointsAwarded?: number } }>) {
     setBusyId(id);
-    setNote("");
     try {
       const data = await action();
       const bonus = data.gamification?.pointsAwarded;
-      setNote(typeof bonus === "number" && bonus > 0 ? `${data.message} (+${bonus} điểm)` : data.message);
+      toast.show(typeof bonus === "number" && bonus > 0 ? `${data.message} (+${bonus} điểm)` : data.message, "success");
       setStamp((value) => value + 1);
     } catch (caught) {
-      setNote(caught instanceof ApiError ? caught.message : "Không thực hiện được thao tác.");
+      toast.show(caught instanceof ApiError ? caught.message : "Không thực hiện được thao tác.", "error");
     } finally {
       setBusyId("");
     }
   }
 
   return (
-    <Screen tab="jobs">
+    <Screen tab="profile">
       <Title>Việc tại trạm</Title>
       <Body muted>Ứng tuyển công việc tình nguyện tại trạm, xem đơn đã được duyệt và điểm danh nhận điểm thưởng.</Body>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
         <Pill label={`Tin đang tuyển (${posts?.length ?? 0})`} active={tab === "open"} onPress={() => setTab("open")} />
         <Pill label={`Việc đã duyệt & đơn của tôi (${assigned.length + pendingOrRejectedApps.length})`} active={tab === "mine"} onPress={() => setTab("mine")} />
       </ScrollView>
-      {note ? <Body>{note}</Body> : null}
       {proofFor ? (
         <StationProofScan
           title={proofFor.kind === "in" ? "Điểm danh bắt đầu việc" : "Điểm danh hoàn thành việc"}
@@ -204,13 +172,6 @@ export default function JobsPage() {
 
       {tab === "open" ? (
         <>
-          {openProblem ? (
-            <Card style={{ borderColor: colors.errorSoft }}>
-              <Body>{openProblem}</Body>
-              <Button label="Thử tải lại" tone="ghost" onPress={() => setStamp((value) => value + 1)} />
-            </Card>
-          ) : null}
-          {!posts && !openProblem ? <Body muted>Đang tải việc đang tuyển.</Body> : null}
           {posts ? (
             <StatRow
               items={[
@@ -220,14 +181,14 @@ export default function JobsPage() {
               ]}
             />
           ) : null}
-          {posts && posts.length === 0 && !openProblem ? <Body muted>Hiện chưa có tin nào đang mở.</Body> : null}
+          {posts && posts.length === 0 ? <Body muted>Hiện chưa có tin nào đang mở.</Body> : null}
           {posts?.map((post) => {
             const remaining = post.slots?.remaining;
             const total = post.slots?.total;
             const myStatus = appliedByTaskId.get(post._id);
             return (
-              <Card key={post._id} style={jobCardStyle}>
-                <TaskImage uri={postImage(post)} />
+              <Card key={post._id}>
+                {postImage(post) ? <Photo uri={postImage(post)} height={148} radius={12} /> : null}
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                   <Badge label={stationName(post.stationId)} tone="primary" />
                   <Badge label={`+${post.rewardPoints || 0} điểm`} tone="coral" />
@@ -262,7 +223,6 @@ export default function JobsPage() {
         </>
       ) : (
         <>
-          {personalProblem ? <Body>{personalProblem}</Body> : null}
           <StatRow
             items={[
               { label: "Đã duyệt & giao", value: assigned.length, unit: "việc", tone: "primary" },
@@ -279,8 +239,8 @@ export default function JobsPage() {
           {assigned.map((item) => {
             const task = item.taskId;
             return (
-              <Card key={item._id} style={jobCardStyle}>
-                <TaskImage uri={postImage(task)} />
+              <Card key={item._id}>
+                {postImage(task) ? <Photo uri={postImage(task)} height={148} radius={12} /> : null}
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                   <Badge label={stationName(task?.stationId)} tone="primary" />
                   <Badge
@@ -320,7 +280,7 @@ export default function JobsPage() {
             <>
               <Title>Đơn đang chờ / đã từ chối</Title>
               {pendingOrRejectedApps.map((app) => (
-                <Card key={app._id} style={jobCardStyle}>
+                <Card key={app._id}>
                   <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                     <Badge label={stationName(app.taskId?.stationId)} tone="neutral" />
                     <Badge

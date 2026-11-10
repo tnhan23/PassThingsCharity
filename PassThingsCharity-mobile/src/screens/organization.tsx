@@ -6,6 +6,7 @@ import { ApiError } from "@/api/client";
 import { pickImage } from "@/api/images";
 import { useSession } from "@/api/session";
 import { readOrgRequest, writeOrgRequest } from "@/api/storage";
+import { toastToneFromError, useToast } from "@/api/toast";
 import type { OrgApplication } from "@/api/types";
 import { Screen } from "@/components/chrome";
 import { Field } from "@/components/form";
@@ -29,13 +30,16 @@ function orgStatus(application: OrgApplication) {
 
 export function OrganizationScreen() {
   const { token, user, patchUser } = useSession();
+  const toast = useToast();
   const [application, setApplication] = useState<OrgApplication | null>(null);
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [note, setNote] = useState("");
-  const [isError, setIsError] = useState(false);
+
+  function flash(message: string, isError = false) {
+    toast.show(message, toastToneFromError(isError));
+  }
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [address, setAddress] = useState("");
@@ -87,13 +91,10 @@ export function OrganizationScreen() {
   async function uploadEvidence() {
     if (!token) return;
     if (evidenceImageUrls.length >= 10) {
-      setIsError(true);
-      setNote("Tối đa 10 ảnh minh chứng.");
+      flash("Tối đa 10 ảnh minh chứng.", true);
       return;
     }
     setUploading(true);
-    setIsError(false);
-    setNote("");
     try {
       const file = await pickImage();
       if (!file) {
@@ -103,15 +104,12 @@ export function OrganizationScreen() {
       const nextUrls = (uploaded.imageUrls ?? []).filter((url) => url && !evidenceImageUrls.includes(url));
       if (nextUrls.length > 0) {
         setEvidenceImageUrls((current) => [...current, ...nextUrls].slice(0, 10));
-        setIsError(false);
-        setNote(`Đã tải lên ${Math.min(evidenceImageUrls.length + nextUrls.length, 10)} ảnh minh chứng.`);
+        flash(`Đã tải lên ${Math.min(evidenceImageUrls.length + nextUrls.length, 10)} ảnh minh chứng.`);
       } else {
-        setIsError(true);
-        setNote("Ảnh này đã được đính kèm hoặc máy chủ không trả đường dẫn.");
+        flash("Ảnh này đã được đính kèm hoặc máy chủ không trả đường dẫn.", true);
       }
     } catch (caught) {
-      setIsError(true);
-      setNote(caught instanceof Error ? caught.message : "Không tải được ảnh minh chứng.");
+      flash(caught instanceof Error ? caught.message : "Không tải được ảnh minh chứng.", true);
     } finally {
       setUploading(false);
     }
@@ -120,33 +118,26 @@ export function OrganizationScreen() {
   async function submit() {
     if (!token || !user?.id) return;
     if (!name.trim() || !code.trim() || !address.trim()) {
-      setIsError(true);
-      setNote("Vui lòng nhập đầy đủ Tên tổ chức, Mã tổ chức và Địa chỉ.");
+      flash("Vui lòng nhập đầy đủ Tên tổ chức, Mã tổ chức và Địa chỉ.", true);
       return;
     }
     if (phone.trim() && !/^\d{10}$/.test(phone.trim())) {
-      setIsError(true);
-      setNote("Số điện thoại tổ chức phải gồm đúng 10 chữ số.");
+      flash("Số điện thoại tổ chức phải gồm đúng 10 chữ số.", true);
       return;
     }
     if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setIsError(true);
-      setNote("Email tổ chức không đúng định dạng (ví dụ: lienhe@tochuc.org).");
+      flash("Email tổ chức không đúng định dạng (ví dụ: lienhe@tochuc.org).", true);
       return;
     }
     if (idCardNumber.trim() && !/^\d{9}(\d{3})?$/.test(idCardNumber.trim())) {
-      setIsError(true);
-      setNote("Số CCCD/CMND người đại diện phải gồm 9 hoặc 12 chữ số.");
+      flash("Số CCCD/CMND người đại diện phải gồm 9 hoặc 12 chữ số.", true);
       return;
     }
     if (evidenceImageUrls.length === 0) {
-      setIsError(true);
-      setNote("Vui lòng đính kèm ít nhất 1 ảnh minh chứng trước khi gửi hồ sơ.");
+      flash("Vui lòng đính kèm ít nhất 1 ảnh minh chứng trước khi gửi hồ sơ.", true);
       return;
     }
     setBusy(true);
-    setIsError(false);
-    setNote("");
     try {
       const data = await backend.createOrganization(token, {
         name: name.trim(),
@@ -162,11 +153,9 @@ export function OrganizationScreen() {
       await writeOrgRequest(user.id, data.organization._id);
       setApplication(data.organization);
       setEditing(false);
-      setIsError(false);
-      setNote(data.message);
+      flash(data.message);
     } catch (caught) {
-      setIsError(true);
-      setNote(caught instanceof ApiError ? caught.message : "Không gửi được hồ sơ.");
+      flash(caught instanceof ApiError ? caught.message : "Không gửi được hồ sơ.", true);
     } finally {
       setBusy(false);
     }
@@ -285,22 +274,12 @@ export function OrganizationScreen() {
                 : `Đã đính kèm ${evidenceImageUrls.length} ảnh minh chứng.`}
             </Body>
           </View>
-          {note ? (
-            <Text selectable style={{ fontFamily: fonts.medium, fontSize: 14, color: isError ? colors.error : colors.primary }}>
-              {note}
-            </Text>
-          ) : null}
           <Button
             label={busy ? "Đang gửi" : "Gửi hồ sơ"}
             disabled={busy || uploading}
             onPress={() => void submit()}
           />
         </Card>
-      ) : null}
-      {!showForm && note ? (
-        <Text selectable style={{ fontFamily: fonts.medium, fontSize: 14, color: isError ? colors.error : colors.primary }}>
-          {note}
-        </Text>
       ) : null}
     </Screen>
   );

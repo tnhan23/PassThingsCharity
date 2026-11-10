@@ -59,6 +59,15 @@ const reliefDistributionSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    imageUrl: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    images: [{
+      type: String,
+      trim: true,
+    }],
   },
   { timestamps: true }
 );

@@ -4,6 +4,7 @@ import { ActivityIndicator, View } from "react-native";
 import { backend } from "@/api/backend";
 import { ApiError } from "@/api/client";
 import { useSession } from "@/api/session";
+import { useToast } from "@/api/toast";
 import type { NamedRef } from "@/api/types";
 import { Body, Button, Card, Title } from "@/components/ui";
 import { colors } from "@/theme";
@@ -147,24 +148,23 @@ export function ServerRelief() {
 
 export function ServerTasks() {
   const { token } = useSession();
-  const [note, setNote] = useState("");
+  const toast = useToast();
   const tasks = useRows(loadTasks);
   const mine = useRows(loadMine);
   const joins = useRows(loadJoins);
   const applications = useRows(loadApplications);
 
   async function run(action: () => Promise<{ message: string; gamification?: { pointsAwarded?: number } }>) {
-    setNote("");
     try {
       const result = await action();
       const points = result.gamification?.pointsAwarded;
-      setNote(typeof points === "number" ? `${result.message} Điểm vừa cộng: ${points}.` : result.message);
+      toast.show(typeof points === "number" ? `${result.message} Điểm vừa cộng: ${points}.` : result.message, "success");
       tasks.reload();
       mine.reload();
       joins.reload();
       applications.reload();
     } catch (caught) {
-      setNote(caught instanceof ApiError ? caught.message : "Máy chủ từ chối thao tác.");
+      toast.show(caught instanceof ApiError ? caught.message : "Máy chủ từ chối thao tác.", "error");
     }
   }
 
@@ -176,7 +176,6 @@ export function ServerTasks() {
     <Card>
       <Title>Việc trên máy chủ</Title>
       <Body muted>Điểm chỉ cộng lúc check-out. Hủy ca không có route và không trừ điểm. Quét QR là bản vẽ.</Body>
-      {note ? <Body>{note}</Body> : null}
       {tasks.rows.length === 0 ? <Body>Chưa có việc.</Body> : null}
       {tasks.rows.slice(0, 5).map((task) => {
         const campaignId = task.campaignId && typeof task.campaignId === "object" ? task.campaignId._id : "";

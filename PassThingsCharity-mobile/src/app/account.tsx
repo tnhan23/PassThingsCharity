@@ -1,19 +1,19 @@
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import { Text } from "react-native";
 import { backend } from "@/api/backend";
 import { pickImage } from "@/api/images";
 import { ApiError } from "@/api/client";
 import { useGuest } from "@/api/guest";
 import { useSession } from "@/api/session";
+import { toastToneFromError, useToast } from "@/api/toast";
 import { Screen } from "@/components/chrome";
 import { Field } from "@/components/form";
 import { Body, Button, Card, Photo, Title } from "@/components/ui";
-import { colors, fonts } from "@/theme";
 
 export default function AccountPage() {
   const { token, user, patchUser, logout } = useSession();
   const { leaveGuest } = useGuest();
+  const toast = useToast();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [email, setEmail] = useState("");
@@ -21,25 +21,11 @@ export default function AccountPage() {
   const [fullName, setFullName] = useState(user?.fullName ?? "");
   const [phone, setPhone] = useState(user?.phone ?? "");
   const [deletePassword, setDeletePassword] = useState("");
-  const [message, setMessage] = useState("");
-  const [isError, setIsError] = useState(false);
-  const [activeCard, setActiveCard] = useState<"" | "password" | "profile" | "photo" | "delete">("");
   const [task, setTask] = useState("");
   const [avatar, setAvatar] = useState(user?.avatarUrl ?? "");
 
-  function showFeedback(section: "password" | "profile" | "photo" | "delete", text: string, err: boolean) {
-    setActiveCard(section);
-    setIsError(err);
-    setMessage(text);
-  }
-
-  function renderCardNotice(section: "password" | "profile" | "photo" | "delete") {
-    if (!message || activeCard !== section) return null;
-    return (
-      <Text selectable style={{ fontFamily: fonts.medium, fontSize: 14, color: isError ? colors.error : colors.primary }}>
-        {message}
-      </Text>
-    );
+  function showFeedback(_section: "password" | "profile" | "photo" | "delete", text: string, err: boolean) {
+    toast.show(text, toastToneFromError(err));
   }
 
   useEffect(() => {
@@ -63,17 +49,11 @@ export default function AccountPage() {
   return (
     <Screen tab="profile">
       <Title>Tài khoản</Title>
-      {message ? (
-        <Text selectable style={{ fontFamily: fonts.medium, fontSize: 14, color: isError ? colors.error : colors.primary }}>
-          {message}
-        </Text>
-      ) : null}
       <Card>
         <Title>Đổi mật khẩu</Title>
         <Body muted>Mật khẩu mới từ 8 ký tự.</Body>
         <Field label="Mật khẩu hiện tại" value={currentPassword} onChangeText={setCurrentPassword} secure />
         <Field label="Mật khẩu mới" value={newPassword} onChangeText={setNewPassword} secure />
-        {renderCardNotice("password")}
         <Button
           disabled={task !== ""}
           label={task === "password" ? "Đang gửi" : "Đổi mật khẩu"}
@@ -92,7 +72,6 @@ export default function AccountPage() {
               return;
             }
             setTask("password");
-            setMessage("");
             void backend
               .changePassword(token, { currentPassword, newPassword })
               .then((data) => showFeedback("password", data.message, false))
@@ -107,7 +86,6 @@ export default function AccountPage() {
         <Field label="Username" value={username} onChangeText={setUsername} />
         <Field label="Họ tên" value={fullName} onChangeText={setFullName} />
         <Field label="Số điện thoại" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
-        {renderCardNotice("profile")}
         <Button
           disabled={task !== ""}
           label={task === "profile" ? "Đang gửi" : "Lưu hồ sơ"}
@@ -131,7 +109,6 @@ export default function AccountPage() {
               return;
             }
             setTask("profile");
-            setMessage("");
             void backend
               .updateProfile(token, body)
               .then((data) => {
@@ -153,14 +130,12 @@ export default function AccountPage() {
         <Title>Ảnh hồ sơ</Title>
         <Body muted>Chọn một ảnh JPEG, PNG hoặc WebP. Ảnh được tải lên trước, rồi mới lưu vào hồ sơ.</Body>
         {avatar ? <Photo uri={avatar} height={96} width={96} radius={48} /> : <Body muted>Chưa có ảnh hồ sơ.</Body>}
-        {renderCardNotice("photo")}
         <Button
           disabled={task !== ""}
           label={task === "photo" ? "Đang gửi" : "Đổi ảnh hồ sơ"}
           onPress={() => {
             if (task) return;
             setTask("photo");
-            setMessage("");
             void (async () => {
               const file = await pickImage();
               if (!file) return { text: "Chưa chọn ảnh.", err: true };
@@ -182,7 +157,6 @@ export default function AccountPage() {
         <Title>Xóa tài khoản</Title>
         <Body muted>Chỉ xóa đúng tài khoản đang đăng nhập.</Body>
         <Field label="Mật khẩu xác nhận" value={deletePassword} onChangeText={setDeletePassword} secure />
-        {renderCardNotice("delete")}
         <Button
           disabled={task !== ""}
           label={task === "delete" ? "Đang gửi" : "Xóa tài khoản"}
@@ -194,7 +168,6 @@ export default function AccountPage() {
               return;
             }
             setTask("delete");
-            setMessage("");
             void backend
               .deleteAccount(token, user.id, deletePassword)
               .then(async () => {

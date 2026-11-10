@@ -1,20 +1,44 @@
 import { Redirect, router } from "expo-router";
-import { useState } from "react";
-import { Image, ScrollView, Text, TextInput, View } from "react-native";
+import * as Google from "expo-auth-session/providers/google";
+import * as WebBrowser from "expo-web-browser";
+import { useEffect, useState } from "react";
+import { Image, Platform, ScrollView, Text, TextInput, View } from "react-native";
+import Svg, { Path } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { backend } from "@/api/backend";
 import { ApiError } from "@/api/client";
 import { useGuest } from "@/api/guest";
 import { useLocale } from "@/api/locale";
 import { useSession } from "@/api/session";
+import { useToast } from "@/api/toast";
 import { PasswordReset } from "@/components/form";
-import { Body, Button, Title } from "@/components/ui";
+import { Body, Button, Tap, Title } from "@/components/ui";
 import { colors, fonts } from "@/theme";
+
+WebBrowser.maybeCompleteAuthSession();
+
+const GOOGLE_IOS_CLIENT_ID = "116703453640-5pmgf0934l9ri041611mcr8qkm0oq246.apps.googleusercontent.com";
+const GOOGLE_ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
+const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+
+const googleClientIds = {
+  iosClientId: GOOGLE_IOS_CLIENT_ID,
+  androidClientId: GOOGLE_ANDROID_CLIENT_ID,
+  webClientId: GOOGLE_WEB_CLIENT_ID,
+};
+
+const hasPlatformGoogleClientId =
+  Platform.OS === "android"
+    ? Boolean(GOOGLE_ANDROID_CLIENT_ID)
+    : Platform.OS === "web"
+      ? Boolean(GOOGLE_WEB_CLIENT_ID)
+      : Boolean(GOOGLE_IOS_CLIENT_ID);
 
 export default function LoginPage() {
   const { ready, user, login, register, open } = useSession();
   const { guest, enterGuest } = useGuest();
   const { t } = useLocale();
+  const toast = useToast();
   const insets = useSafeAreaInsets();
   const [form, setForm] = useState<"login" | "register" | "forgot" | "gmail" | null>(null);
   const [gmailNew, setGmailNew] = useState(false);
@@ -25,57 +49,58 @@ export default function LoginPage() {
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [codeSent, setCodeSent] = useState(false);
-  const [note, setNote] = useState("");
-  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const gmailForm = form === "gmail";
 
   if (ready && user) return <Redirect href="/" />;
 
+  function fail(message: string) {
+    toast.show(message, "error");
+  }
+
   async function submit() {
     if (busy) return;
     if (form === "register") {
       if (!email.trim() || !fullname.trim() || !phone.trim() || !username.trim() || !password) {
-        setError("Vui lòng điền đủ email, họ tên, số điện thoại, tên đăng nhập và mật khẩu.");
+        fail("Vui lòng điền đủ email, họ tên, số điện thoại, tên đăng nhập và mật khẩu.");
         return;
       }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-        setError("Email không đúng định dạng.");
+        fail("Email không đúng định dạng.");
         return;
       }
       if (!/^\d{10}$/.test(phone.trim())) {
-        setError("Số điện thoại phải gồm đúng 10 chữ số.");
+        fail("Số điện thoại phải gồm đúng 10 chữ số.");
         return;
       }
       if (password.length < 6) {
-        setError("Mật khẩu phải có ít nhất 6 ký tự.");
+        fail("Mật khẩu phải có ít nhất 6 ký tự.");
         return;
       }
     } else if (!username.trim() || !password) {
-      setError("Vui lòng nhập đủ tên đăng nhập và mật khẩu.");
+      fail("Vui lòng nhập đủ tên đăng nhập và mật khẩu.");
       return;
     }
-    setError("");
     if (form === "register") {
       if (!email.trim() || !fullname.trim() || !phone.trim() || !username.trim() || !password) {
-        setError("Vui lòng điền đầy đủ email, họ tên, số điện thoại, tên đăng nhập và mật khẩu.");
+        fail("Vui lòng điền đầy đủ email, họ tên, số điện thoại, tên đăng nhập và mật khẩu.");
         return;
       }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-        setError("Email không đúng định dạng (ví dụ: ten@email.com).");
+        fail("Email không đúng định dạng (ví dụ: ten@email.com).");
         return;
       }
       if (!/^\d{10}$/.test(phone.trim())) {
-        setError("Số điện thoại phải gồm đúng 10 chữ số.");
+        fail("Số điện thoại phải gồm đúng 10 chữ số.");
         return;
       }
       if (password.length < 6) {
-        setError("Mật khẩu phải có ít nhất 6 ký tự.");
+        fail("Mật khẩu phải có ít nhất 6 ký tự.");
         return;
       }
     } else {
       if (!username.trim() || !password) {
-        setError("Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu.");
+        fail("Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu.");
         return;
       }
     }
@@ -94,7 +119,7 @@ export default function LoginPage() {
       }
       router.replace("/");
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t("welcome.fail"));
+      fail(caught instanceof ApiError ? caught.message : t("welcome.fail"));
     } finally {
       setBusy(false);
     }
@@ -107,19 +132,17 @@ export default function LoginPage() {
   async function gmailSubmit() {
     if (busy || !gmailForm) return;
     if (!gmailAddress(email)) {
-      setError("Chỉ nhận Gmail, Google Mail hoặc email trường đuôi edu.vn.");
+      fail("Chỉ nhận Gmail, Google Mail hoặc email trường đuôi edu.vn.");
       return;
     }
     if (gmailNew && password && password.length < 6) {
-      setError("Mật khẩu phải có ít nhất 6 ký tự.");
+      fail("Mật khẩu phải có ít nhất 6 ký tự.");
       return;
     }
     if (gmailNew && phone.trim() && !/^\d{10}$/.test(phone.trim())) {
-      setError("Số điện thoại phải gồm đúng 10 chữ số.");
+      fail("Số điện thoại phải gồm đúng 10 chữ số.");
       return;
     }
-    setError("");
-    setNote("");
     setBusy(true);
     try {
       if (!codeSent) {
@@ -135,11 +158,11 @@ export default function LoginPage() {
           }
         }
         setCodeSent(true);
-        setNote(sent.message);
+        toast.show(sent.message, "success");
         return;
       }
       if (!/^\d{6}$/.test(otp.trim())) {
-        setError("Nhập mã 6 số trong email.");
+        fail("Nhập mã 6 số trong email.");
         return;
       }
       const data = await backend.verifyGmailOtp({
@@ -153,7 +176,7 @@ export default function LoginPage() {
       await open(data);
       router.replace("/");
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t("welcome.fail"));
+      fail(caught instanceof ApiError ? caught.message : t("welcome.fail"));
     } finally {
       setBusy(false);
     }
@@ -190,14 +213,13 @@ export default function LoginPage() {
           {form === "register" ? <Field label={t("welcome.phone")} value={phone} onChangeText={setPhone} keyboard="phone-pad" /> : null}
           <Field label={form === "login" ? t("welcome.userOrGmail") : t("welcome.user")} value={username} onChangeText={setUsername} autoCapitalize="none" />
           <Field label={t("welcome.password")} value={password} onChangeText={setPassword} secure />
-          {error ? <Text style={{ fontFamily: fonts.medium, color: colors.error, fontSize: 14 }}>{error}</Text> : null}
           <Button
             disabled={busy}
             label={busy ? t("welcome.sending") : form === "register" ? t("welcome.create") : t("welcome.enter")}
             onPress={() => void submit()}
           />
           {form === "login" ? <Button label={t("welcome.forgot")} tone="ghost" onPress={() => setForm("forgot")} /> : null}
-          <Button label={t("welcome.back")} tone="ghost" onPress={() => { setForm(null); setError(""); }} />
+          <Button label={t("welcome.back")} tone="ghost" onPress={() => setForm(null)} />
         </View>
       ) : null}
       {gmailForm ? (
@@ -209,21 +231,39 @@ export default function LoginPage() {
           {gmailNew ? <Field label={t("welcome.phone")} value={phone} onChangeText={setPhone} keyboard="phone-pad" /> : null}
           {gmailNew ? <Field label={t("welcome.password")} value={password} onChangeText={setPassword} secure /> : null}
           {codeSent ? <Field label={t("welcome.otp")} value={otp} onChangeText={setOtp} keyboard="phone-pad" /> : null}
-          {note ? <Body muted>{note}</Body> : null}
-          {error ? <Text style={{ fontFamily: fonts.medium, color: colors.error, fontSize: 14 }}>{error}</Text> : null}
           <Button
             disabled={busy}
             label={busy ? t("welcome.sending") : codeSent ? t("welcome.confirmCode") : t("welcome.sendCode")}
             onPress={() => void gmailSubmit()}
           />
-          <Button label={t("welcome.back")} tone="ghost" onPress={() => { setForm(null); setError(""); setCodeSent(false); }} />
+          <Button label={t("welcome.back")} tone="ghost" onPress={() => { setForm(null); setCodeSent(false); }} />
         </View>
       ) : null}
       {form === null ? (
         <View style={{ gap: 10 }}>
           <Button label={t("welcome.login")} onPress={() => setForm("login")} />
           <Button label={t("welcome.register")} tone="ghost" onPress={() => setForm("register")} />
-          {error ? <Text style={{ fontFamily: fonts.medium, color: colors.error, fontSize: 14 }}>{error}</Text> : null}
+          {hasPlatformGoogleClientId ? (
+            <GoogleSignInButton
+              busy={busy}
+              setBusy={setBusy}
+              open={open}
+              label={t("welcome.gmail")}
+            />
+          ) : (
+            <View style={{ gap: 8 }}>
+              <Tap
+                disabled
+                style={{ minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.card, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8, paddingHorizontal: 16, opacity: 0.6 }}
+              >
+                <GoogleMark />
+                <Text style={{ fontFamily: fonts.semibold, fontSize: 15, color: colors.primary }}>{t("welcome.gmail")}</Text>
+              </Tap>
+              <Body muted>
+                {`Đăng nhập Google cần cấu hình ${Platform.OS === "android" ? "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID" : "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID"}.`}
+              </Body>
+            </View>
+          )}
           <Button label={t("welcome.forgot")} tone="ghost" onPress={() => setForm("forgot")} />
           <Button
             label={t("welcome.guest")}
@@ -237,6 +277,71 @@ export default function LoginPage() {
         </View>
       ) : null}
     </ScrollView>
+  );
+}
+
+function GoogleSignInButton({
+  busy,
+  setBusy,
+  open,
+  label,
+}: {
+  busy: boolean;
+  setBusy: (busy: boolean) => void;
+  open: (data: Parameters<ReturnType<typeof useSession>["open"]>[0]) => Promise<void>;
+  label: string;
+}) {
+  const toast = useToast();
+  const [googleRequest, googleResponse, promptGoogle] = Google.useAuthRequest(googleClientIds);
+
+  useEffect(() => {
+    if (googleResponse?.type !== "success") return;
+    const idToken = googleResponse.authentication?.idToken || googleResponse.params.id_token;
+    if (!idToken) {
+      toast.show("Google không trả mã đăng nhập.", "error");
+      return;
+    }
+    let cancelled = false;
+    setBusy(true);
+    backend.googleSignIn(idToken)
+      .then(async (data) => {
+        if (cancelled) return;
+        await open(data);
+        router.replace("/");
+      })
+      .catch((caught: unknown) => {
+        if (!cancelled) {
+          toast.show(caught instanceof ApiError ? caught.message : "Không đăng nhập bằng Google được.", "error");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [googleResponse, open, setBusy, toast]);
+
+  return (
+    <Tap
+      disabled={!googleRequest || busy}
+      onPress={() => void promptGoogle()}
+      style={{ minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.card, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8, paddingHorizontal: 16 }}
+    >
+      <GoogleMark />
+      <Text style={{ fontFamily: fonts.semibold, fontSize: 15, color: colors.primary }}>{label}</Text>
+    </Tap>
+  );
+}
+
+function GoogleMark() {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 48 48">
+      <Path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 8 3.1l5.7-5.7C34.2 6.1 29.4 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.2-.1-2.3-.4-3.5z" />
+      <Path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 12 24 12c3.1 0 5.8 1.2 8 3.1l5.7-5.7C34.2 6.1 29.4 4 24 4 16.3 4 9.6 8.3 6.3 14.7z" />
+      <Path fill="#4CAF50" d="M24 44c5.2 0 10-2 13.6-5.2l-6.3-5.3C29.2 35.1 26.7 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z" />
+      <Path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-1.1 3.2-3.5 5.7-6.7 7.2l6.3 5.3C37.4 38.3 44 33 44 24c0-1.2-.1-2.3-.4-3.5z" />
+    </Svg>
   );
 }
 
