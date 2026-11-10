@@ -346,6 +346,9 @@ export const backend = {
   uploadTaskImage(token: Token, file: UploadFile) {
     return uploadImages<{ imageUrl: string }>("/uploads/tasks/image", token, [file], "image");
   },
+  uploadReliefImages(token: Token, files: UploadFile[]) {
+    return uploadImages<{ imageUrls: string[] }>("/contributions/upload-images", token, files);
+  },
   createTransfer(token: Token, body: Body) {
     return api<{ message: string }>("/transfers", withToken(token, "POST", body));
   },
@@ -379,8 +382,63 @@ export const backend = {
   myTaskApplications(token: Token) {
     return api<unknown>("/workforce/tasks/applications/me", { token });
   },
-  taskApplications(token: Token, taskId: string) {
-    return api<unknown>(`/workforce/tasks/${taskId}/applications`, { token });
+  stationTaskApplications(
+    token: Token,
+    stationId: string,
+    query?: { status?: string; page?: number; limit?: number },
+  ) {
+    const params = new URLSearchParams();
+    if (query?.status && query.status.trim().toUpperCase() !== "ALL") {
+      params.set("status", query.status.trim().toUpperCase());
+    }
+    if (query?.page) {
+      params.set("page", String(query.page));
+    }
+    if (query?.limit) {
+      params.set("limit", String(query.limit));
+    }
+    const qs = params.toString();
+    return api<{
+      data: Array<{
+        _id: string;
+        taskId?: {
+          _id?: string;
+          title?: string;
+          description?: string;
+          stationId?: { _id?: string; name?: string; address?: string };
+          campaignId?: { _id?: string; title?: string; status?: string };
+          startTime?: string;
+          endTime?: string;
+          rewardPoints?: number;
+          requiredVolunteers?: number;
+          status?: string;
+          recruitmentStatus?: string;
+        };
+        userId?: {
+          _id?: string;
+          fullName?: string;
+          email?: string;
+          phone?: string;
+          username?: string;
+        };
+        status?: string;
+        appliedAt?: string;
+        note?: string;
+        reviewedBy?: {
+          _id?: string;
+          fullName?: string;
+          username?: string;
+        };
+        reviewedAt?: string;
+      }>;
+      total: number;
+      page: number;
+      totalPages: number;
+    }>(`/workforce/stations/${encodeURIComponent(stationId)}/applications${qs ? `?${qs}` : ""}`, { token });
+  },
+  taskApplications(token: Token, taskId: string, status?: string) {
+    const qs = status && status.trim().toUpperCase() !== "ALL" ? `?status=${encodeURIComponent(status.trim().toUpperCase())}` : "";
+    return api<unknown>(`/workforce/tasks/${encodeURIComponent(taskId)}/applications${qs}`, { token });
   },
   reviewTaskApplication(token: Token, id: string, body: Body) {
     return api<{ message: string }>(`/workforce/tasks/applications/${id}/review`, withToken(token, "PATCH", body));

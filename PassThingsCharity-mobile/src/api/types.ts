@@ -136,6 +136,9 @@ export type ReliefRow = {
   recipientName?: string;
   campaignId?: NamedRef;
   stationId?: NamedRef;
+  imageUrl?: string | null;
+  images?: string[];
+  notes?: string;
 };
 
 export type ReliefSummaryItem = {

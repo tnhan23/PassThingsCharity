@@ -4,6 +4,7 @@ import { ScrollView, Text, View } from "react-native";
 import { backend } from "@/api/backend";
 import { ApiError } from "@/api/client";
 import { useSession } from "@/api/session";
+import { useToast } from "@/api/toast";
 import { Screen } from "@/components/chrome";
 import { StationProofScan } from "@/components/station-proof";
 import { Badge, Body, Button, Card, Photo, Pill, StatRow, Title } from "@/components/ui";
@@ -80,13 +81,13 @@ function applicationStatusLabel(status: string) {
 
 export default function JobsPage() {
   const { token } = useSession();
+  const toast = useToast();
   const [tab, setTab] = useState<"open" | "mine">("open");
   const [posts, setPosts] = useState<Post[] | null>(null);
   const [assigned, setAssigned] = useState<MyAssignedItem[]>([]);
   const [applications, setApplications] = useState<MyApplicationItem[]>([]);
   const [busyId, setBusyId] = useState("");
   const [stamp, setStamp] = useState(0);
-  const [note, setNote] = useState("");
   const [proofFor, setProofFor] = useState<{ id: string; kind: "in" | "out" } | null>(null);
 
   useEffect(() => {
@@ -106,7 +107,7 @@ export default function JobsPage() {
       .catch((caught) => {
         if (!cancelled) {
           setPosts([]);
-          setNote(caught instanceof ApiError ? caught.message : "Không tải được danh sách việc.");
+          toast.show(caught instanceof ApiError ? caught.message : "Không tải được danh sách việc.", "error");
         }
       });
     return () => {
@@ -133,14 +134,13 @@ export default function JobsPage() {
 
   async function runAction(id: string, action: () => Promise<{ message: string; gamification?: { pointsAwarded?: number } }>) {
     setBusyId(id);
-    setNote("");
     try {
       const data = await action();
       const bonus = data.gamification?.pointsAwarded;
-      setNote(typeof bonus === "number" && bonus > 0 ? `${data.message} (+${bonus} điểm)` : data.message);
+      toast.show(typeof bonus === "number" && bonus > 0 ? `${data.message} (+${bonus} điểm)` : data.message, "success");
       setStamp((value) => value + 1);
     } catch (caught) {
-      setNote(caught instanceof ApiError ? caught.message : "Không thực hiện được thao tác.");
+      toast.show(caught instanceof ApiError ? caught.message : "Không thực hiện được thao tác.", "error");
     } finally {
       setBusyId("");
     }
@@ -154,7 +154,6 @@ export default function JobsPage() {
         <Pill label={`Tin đang tuyển (${posts?.length ?? 0})`} active={tab === "open"} onPress={() => setTab("open")} />
         <Pill label={`Việc đã duyệt & đơn của tôi (${assigned.length + pendingOrRejectedApps.length})`} active={tab === "mine"} onPress={() => setTab("mine")} />
       </ScrollView>
-      {note ? <Body>{note}</Body> : null}
       {proofFor ? (
         <StationProofScan
           title={proofFor.kind === "in" ? "Điểm danh bắt đầu việc" : "Điểm danh hoàn thành việc"}
