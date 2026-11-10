@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import { ApiError } from "@/api/client";
 import { resultText } from "@/api/backend";
@@ -16,6 +16,11 @@ export type Row = {
   code?: string;
   status?: string;
   address?: string;
+  latitude?: string | number;
+  longitude?: string | number;
+  openingTime?: string;
+  closingTime?: string;
+  imageUrl?: string | null;
   isVerified?: boolean;
   isActive?: boolean;
   unit?: string;
@@ -32,6 +37,7 @@ export type Row = {
   rejectionReason?: string;
   recipientName?: string;
   recruitmentStatus?: string;
+  rewardPoints?: number;
   slots?: { total?: number; approved?: number; pending?: number; remaining?: number; isFull?: boolean };
   campaignId?: { title?: string; _id?: string } | string;
   stationId?: { _id?: string; name?: string; address?: string } | string;
@@ -75,7 +81,7 @@ export const deskAccess = {
 } as const;
 
 const campaignNext: Record<string, string[]> = {
-  DRAFT: ["PUBLISHED", "CANCELLED"],
+  DRAFT: ["ACTIVE", "CANCELLED"],
   PUBLISHED: ["ACTIVE", "CANCELLED"],
   ACTIVE: ["COMPLETED", "CANCELLED"],
   COMPLETED: [],
@@ -120,6 +126,7 @@ export function useRows(load: (token: string) => Promise<Row[]>) {
   const [stamp, setStamp] = useState(0);
   const loadRef = useRef(load);
   loadRef.current = load;
+  const reload = useCallback(() => setStamp((value) => value + 1), []);
 
   useEffect(() => {
     if (!token) return;
@@ -140,30 +147,58 @@ export function useRows(load: (token: string) => Promise<Row[]>) {
     };
   }, [token, stamp]);
 
-  return { token, rows, error, reload: () => setStamp((value) => value + 1) };
+  return { token, rows, error, reload };
+}
+
+export function formatServerMessage(raw: string) {
+  const trimmed = raw.trim();
+  if (trimmed === "name và address là bắt buộc; tọa độ phải hợp lệ.") {
+    return "Vui lòng nhập tên trạm, địa chỉ và tọa độ dạng số thập phân hợp lệ (ví dụ: 10.8289, 106.8172).";
+  }
+  if (trimmed === "Provide startTime and endTime, with endTime after startTime.") {
+    return "Vui lòng chọn đầy đủ ngày giờ bắt đầu và kết thúc. Giờ kết thúc phải sau giờ bắt đầu.";
+  }
+  if (trimmed === "Schedule must start in the future.") {
+    return "Thời gian bắt đầu công việc phải ở trong tương lai.";
+  }
+  if (trimmed === "You cannot manage schedules for this station.") {
+    return "Tài khoản này không có quyền quản lý lịch công việc của trạm này.";
+  }
+  if (trimmed === "Station not found.") return "Không tìm thấy trạm.";
+  if (trimmed === "Cannot edit this campaign.") return "Bạn không có quyền chỉnh sửa chiến dịch này.";
+  return trimmed;
 }
 
 export function useJob() {
   const { token } = useSession();
   const [note, setNote] = useState("");
+  const [isError, setIsError] = useState(false);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
 
+  function fail(message: string) {
+    setIsError(true);
+    setNote(formatServerMessage(message));
+  }
+
   async function run(job: (token: string) => Promise<unknown>) {
     if (!token) {
-      setNote("Đăng nhập trước.");
+      fail("Vui lòng đăng nhập trước.");
       return false;
     }
     if (busyRef.current) return false;
     busyRef.current = true;
     setBusy(true);
+    setIsError(false);
     setNote("");
     try {
       const data = await job(token);
-      setNote(resultText(data));
+      setIsError(false);
+      setNote(formatServerMessage(resultText(data)));
       return true;
     } catch (caught) {
-      setNote(caught instanceof Error ? caught.message : "Máy chủ từ chối.");
+      setIsError(true);
+      setNote(formatServerMessage(caught instanceof Error ? caught.message : "Máy chủ từ chối yêu cầu."));
       return false;
     } finally {
       busyRef.current = false;
@@ -171,12 +206,13 @@ export function useJob() {
     }
   }
 
-  return { token, note, busy, run };
+  return { token, note, isError, busy, run, fail };
 }
 
-export function Note({ text }: { text: string }) {
+export function Note({ text, error }: { text: string; error?: boolean }) {
   if (!text) return null;
-  const isErr = /không|lỗi|chưa|từ chối|thiếu|sai/i.test(text);
+  const display = formatServerMessage(text);
+  const isErr = error ?? /không|lỗi|chưa|từ chối|thiếu|sai|bắt buộc|hợp lệ|vui lòng/i.test(display);
   return (
     <Card
       style={{
@@ -195,7 +231,7 @@ export function Note({ text }: { text: string }) {
             color: isErr ? colors.error : colors.primary,
           }}
         >
-          {text}
+          {display}
         </Text>
       </View>
     </Card>
@@ -302,6 +338,18 @@ export function Units({ value, onChange }: { value: string; onChange: (unit: str
   );
 }
 
-export function TextField({ label, value, onChangeText, secure }: { label: string; value: string; onChangeText: (value: string) => void; secure?: boolean }) {
-  return <Field label={label} value={value} onChangeText={onChangeText} secure={secure} />;
+export function TextField({
+  label,
+  value,
+  onChangeText,
+  secure,
+  keyboardType,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (value: string) => void;
+  secure?: boolean;
+  keyboardType?: "default" | "email-address" | "phone-pad" | "number-pad" | "decimal-pad";
+}) {
+  return <Field label={label} value={value} onChangeText={onChangeText} secure={secure} keyboardType={keyboardType} />;
 }
