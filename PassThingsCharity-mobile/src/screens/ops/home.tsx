@@ -1,7 +1,7 @@
 import { router, type Href } from "expo-router";
 import { useEffect, useState } from "react";
 import { AccessibilityInfo, Text, View } from "react-native";
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import Svg, { Circle, G } from "react-native-svg";
 import { ApiError } from "@/api/client";
 import { backend } from "@/api/backend";
 import { useLocale, type CopyKey } from "@/api/locale";
@@ -116,7 +116,28 @@ const toolTile = {
 };
 const toolLabel = { fontFamily: fonts.semibold, fontSize: 15, color: colors.ink };
 
-const chartColors = [colors.primary, colors.secondary, colors.primaryContainer, colors.warning, colors.outline];
+const statusColor: Record<string, string> = {
+  USER: "#1f6b4a",
+  VOLUNTEER: "#c45c26",
+  STAFF: "#2a6f97",
+  STATION_MANAGER: "#c9a227",
+  ORG_MANAGER: "#7a3e5c",
+  ADMIN: "#0e3b4c",
+  ACTIVE: "#1f6b4a",
+  PUBLISHED: "#2a6f97",
+  DRAFT: "#c9a227",
+  COMPLETED: "#5c6b73",
+  CANCELLED: "#a33b3b",
+  ACCEPTED: "#1f6b4a",
+  PENDING: "#c45c26",
+  REJECTED: "#a33b3b",
+  APPROVED: "#2a6f97",
+  PREPARING: "#c9a227",
+  IN_TRANSIT: "#3d8b7a",
+  RECEIVED: "#7a3e5c",
+};
+
+const fallbackColors = ["#1f6b4a", "#c45c26", "#2a6f97", "#c9a227", "#7a3e5c", "#3d8b7a", "#a33b3b", "#5c6b73"];
 
 function useStill() {
   const [still, setStill] = useState(false);
@@ -168,21 +189,6 @@ function CountText({ value, light }: { value: number; light?: boolean }) {
   );
 }
 
-function GrowBar({ fraction, color }: { fraction: number; color: string }) {
-  const still = useStill();
-  const scale = useSharedValue(still ? 1 : 0);
-  useEffect(() => {
-    scale.value = still ? 1 : 0;
-    scale.value = withTiming(1, { duration: still ? 0 : 800, easing: Easing.out(Easing.cubic) });
-  }, [fraction, scale, still]);
-  const bar = useAnimatedStyle(() => ({ transform: [{ scaleX: scale.value }] }));
-  return (
-    <View style={{ height: 8, borderRadius: 4, backgroundColor: colors.surfaceContainer, overflow: "hidden" }}>
-      <Animated.View style={[{ height: 8, width: `${Math.max(fraction, 0) * 100}%`, backgroundColor: color, transformOrigin: "left center" }, bar]} />
-    </View>
-  );
-}
-
 function Figures({ items }: { items: { key: string; value: number; label: string; href: Href }[] }) {
   return (
     <View style={{ flexDirection: "row", flexWrap: "wrap", marginHorizontal: -4 }}>
@@ -224,12 +230,16 @@ function Columns({ title, rows }: { title: string; rows: { label: string; value:
         <Text style={panelTitle}>{title}</Text>
         <Badge label={`Tổng ${total}`} tone="neutral" />
       </View>
-      <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 8, minHeight: 148 }}>
+      <View style={{ flexDirection: "row", alignItems: "stretch", gap: 6 }}>
         {shown.map((row) => (
-          <View key={row.label} style={{ flex: 1, alignItems: "center", gap: 6 }}>
-            <CountText value={row.value} />
-            <GrowColumn fraction={row.value / peak} color={row.color} />
-            <Text numberOfLines={2} style={{ fontFamily: fonts.medium, fontSize: 11, lineHeight: 14, textAlign: "center", color: colors.ink }}>{row.label}</Text>
+          <View key={row.label} style={{ flex: 1, minWidth: 0, alignItems: "center" }}>
+            <View style={{ height: 22, justifyContent: "flex-end" }}>
+              <CountText value={row.value} />
+            </View>
+            <View style={{ height: 88, width: "100%", justifyContent: "flex-end", alignItems: "center" }}>
+              <View style={{ height: Math.max(row.value / peak, 0.12) * 88, width: "70%", backgroundColor: row.color, borderRadius: 8 }} />
+            </View>
+            <Text numberOfLines={2} style={{ width: "100%", height: 32, fontFamily: fonts.medium, fontSize: 11, lineHeight: 14, textAlign: "center", color: colors.ink }}>{row.label}</Text>
           </View>
         ))}
       </View>
@@ -237,22 +247,7 @@ function Columns({ title, rows }: { title: string; rows: { label: string; value:
   );
 }
 
-function GrowColumn({ fraction, color }: { fraction: number; color: string }) {
-  const still = useStill();
-  const scale = useSharedValue(still ? 1 : 0);
-  useEffect(() => {
-    scale.value = still ? 1 : 0;
-    scale.value = withTiming(1, { duration: still ? 0 : 800, easing: Easing.out(Easing.cubic) });
-  }, [fraction, scale, still]);
-  const bar = useAnimatedStyle(() => ({ transform: [{ scaleY: scale.value }] }));
-  return (
-    <View style={{ height: 88, width: "100%", justifyContent: "flex-end" }}>
-      <Animated.View style={[{ height: Math.max(fraction, 0.08) * 88, width: "100%", backgroundColor: color, borderRadius: 8, transformOrigin: "bottom" }, bar]} />
-    </View>
-  );
-}
-
-function Stacked({ title, rows }: { title: string; rows: { label: string; value: number; color: string }[] }) {
+function Bars({ title, rows }: { title: string; rows: { label: string; value: number; color: string }[] }) {
   const shown = rows.filter((row) => row.value > 0);
   const total = shown.reduce((sum, row) => sum + row.value, 0);
   if (total === 0) return null;
@@ -262,48 +257,13 @@ function Stacked({ title, rows }: { title: string; rows: { label: string; value:
         <Text style={panelTitle}>{title}</Text>
         <Badge label={`Tổng ${total}`} tone="neutral" />
       </View>
-      <View style={{ flexDirection: "row", height: 18, borderRadius: 9, overflow: "hidden", backgroundColor: colors.surfaceContainer }}>
-        {shown.map((row) => (
-          <View key={row.label} style={{ width: `${(row.value / total) * 100}%`, backgroundColor: row.color }} />
-        ))}
-      </View>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
-        {shown.map((row) => {
-          const pct = Math.round((row.value / total) * 100);
-          return (
-            <View key={row.label} style={{ gap: 2, minWidth: 96 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: row.color }} />
-                <CountText value={row.value} />
-                <Text style={{ fontFamily: fonts.medium, fontSize: 12, color: colors.muted, fontVariant: ["tabular-nums"] }}>
-                  {`(${pct}%)`}
-                </Text>
-              </View>
-              <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.ink }}>{row.label}</Text>
-            </View>
-          );
-        })}
-      </View>
-    </View>
-  );
-}
-
-function Chart({ title, rows }: { title: string; rows: { label: string; value: number; color: string }[] }) {
-  const total = rows.reduce((sum, row) => sum + row.value, 0);
-  if (total === 0) return null;
-  return (
-    <View style={panel}>
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-        <Text style={panelTitle}>{title}</Text>
-        <Badge label={`Tổng ${total}`} tone="neutral" />
-      </View>
-      {rows.filter((row) => row.value > 0).map((row) => {
+      {shown.map((row) => {
         const pct = Math.round((row.value / total) * 100);
         return (
           <View key={row.label} style={{ gap: 4 }}>
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: row.color }} />
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <View style={{ width: 12, height: 12, borderRadius: 4, backgroundColor: row.color }} />
                 <Text style={{ fontFamily: fonts.medium, fontSize: 14, color: colors.ink }}>{row.label}</Text>
               </View>
               <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6 }}>
@@ -313,7 +273,9 @@ function Chart({ title, rows }: { title: string; rows: { label: string; value: n
                 </Text>
               </View>
             </View>
-            <GrowBar fraction={row.value / total} color={row.color} />
+            <View style={{ height: 10, borderRadius: 5, backgroundColor: colors.surfaceContainer, overflow: "hidden" }}>
+              <View style={{ height: 10, width: `${Math.max(row.value / total, 0) * 100}%`, backgroundColor: row.color }} />
+            </View>
           </View>
         );
       })}
@@ -321,15 +283,83 @@ function Chart({ title, rows }: { title: string; rows: { label: string; value: n
   );
 }
 
+function Donut({ title, rows }: { title: string; rows: { label: string; value: number; color: string }[] }) {
+  const shown = rows.filter((row) => row.value > 0);
+  const total = shown.reduce((sum, row) => sum + row.value, 0);
+  if (!shown.length || total === 0) return null;
+  const size = 168;
+  const stroke = 28;
+  const radius = (size - stroke) / 2;
+  const circ = 2 * Math.PI * radius;
+  const gap = shown.length > 1 ? 3 : 0;
+  let cursor = 0;
+  const slices = shown.map((row) => {
+    const share = (row.value / total) * circ;
+    const slice = { label: row.label, color: row.color, length: Math.max(share - gap, 1), offset: cursor };
+    cursor += share;
+    return slice;
+  });
+  return (
+    <View style={panel}>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+        <Text style={panelTitle}>{title}</Text>
+        <Badge label={`Tổng ${total}`} tone="neutral" />
+      </View>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
+        <Svg width={size} height={size}>
+          <G rotation={-90} origin={`${size / 2}, ${size / 2}`}>
+            {slices.map((slice) => (
+              <Circle
+                key={slice.label}
+                cx={size / 2}
+                cy={size / 2}
+                r={radius}
+                stroke={slice.color}
+                strokeWidth={stroke}
+                fill="none"
+                strokeDasharray={`${slice.length} ${circ - slice.length}`}
+                strokeDashoffset={-slice.offset}
+              />
+            ))}
+          </G>
+        </Svg>
+        <View style={{ flex: 1, gap: 10 }}>
+          {shown.map((row) => {
+            const pct = Math.round((row.value / total) * 100);
+            return (
+              <View key={row.label} style={{ gap: 2 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <View style={{ width: 12, height: 12, borderRadius: 4, backgroundColor: row.color }} />
+                  <CountText value={row.value} />
+                  <Text style={{ fontFamily: fonts.medium, fontSize: 12, color: colors.muted, fontVariant: ["tabular-nums"] }}>
+                    {`${pct}%`}
+                  </Text>
+                </View>
+                <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.ink }}>{row.label}</Text>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function Share({ title, rows }: { title: string; rows: { label: string; value: number; color: string }[] }) {
+  const parts = rows.filter((row) => row.value > 0).length;
+  if (parts < 2) return <Bars title={title} rows={rows} />;
+  return <Donut title={title} rows={rows} />;
+}
+
 function buckets(values: string[], order: { status: string; label: string }[], otherLabel: string) {
   const known = new Set(order.map((item) => item.status));
   const rows = order.map((item, index) => ({
     label: item.label,
     value: values.filter((status) => status === item.status).length,
-    color: chartColors[index % chartColors.length],
+    color: statusColor[item.status] ?? fallbackColors[index % fallbackColors.length],
   }));
   const other = values.filter((status) => !known.has(status)).length;
-  if (other > 0) rows.push({ label: otherLabel, value: other, color: colors.line });
+  if (other > 0) rows.push({ label: otherLabel, value: other, color: "#8a8175" });
   return rows;
 }
 
@@ -421,10 +451,9 @@ export function OpsHome() {
   const fresh = receipts.filter((row) => !row.code.startsWith("SAMPLE-"));
   const waiting = [...fresh.filter((row) => row.status === "PENDING"), ...fresh.filter((row) => row.status !== "PENDING")].slice(0, 5);
   const moving = moves.filter((row) => transferOpen.has(row.status) && !String(row.code || "").startsWith("SAMPLE-")).slice(0, 5);
-  const quiet = !loading && pendingOrgs.length + soon.length + open.length + waiting.length + moving.length === 0;
+  const quiet = !loading && pendingOrgs.length + (role === "ORG_MANAGER" ? 0 : soon.length) + open.length + waiting.length + moving.length === 0;
   const pendingCount = orgs.filter((org) => org.status === "PENDING").length;
   const openCount = campaigns.filter((row) => row.status === "ACTIVE" && !row.title.startsWith("[Mẫu]")).length;
-  const soonCount = campaigns.filter((row) => row.status === "PUBLISHED" && !row.title.startsWith("[Mẫu]")).length;
   const slipCount = fresh.filter((row) => row.status === "PENDING").length;
   const moveCount = moves.filter((row) => transferOpen.has(row.status)).length;
   const stationCount = stations.filter((row) => row.isActive).length;
@@ -434,7 +463,6 @@ export function OpsHome() {
     role === "ADMIN" ? { key: "org", value: pendingCount, label: t("dash.orgWait"), href: "/desk/orgs" as const } : null,
     role === "ADMIN" ? { key: "waitStation", value: stations.filter((row) => !row.isActive).length, label: t("dash.stationWait"), href: "/desk/stations" as const } : null,
     { key: "open", value: openCount, label: t("dash.open"), href: "/desk/campaigns" as const },
-    role === "ORG_MANAGER" ? { key: "soon", value: soonCount, label: t("dash.soon"), href: "/desk/campaigns" as const } : null,
     seesIntake ? { key: "slip", value: slipCount, label: t("dash.pendingSlip"), href: "/desk/intake" as const } : null,
     seesStations ? { key: "station", value: stationCount, label: t("dash.stationOpen"), href: "/desk/stations" as const } : null,
     seesTransfers ? { key: "move", value: moveCount, label: t("dash.moving"), href: "/desk/transfers" as const } : null,
@@ -473,7 +501,7 @@ export function OpsHome() {
       </View>
       {quiet ? <Body muted>{t("dash.quiet")}</Body> : null}
       <Board title="Tổ chức chờ duyệt" href="/desk/orgs" rows={pendingOrgs.map((org) => ({ id: org._id, title: org.name, detail: "Chờ duyệt" }))} />
-      <Board title="Chiến dịch sắp mở" href="/desk/campaigns" rows={soon.map((row) => ({ id: row._id, title: row.title, detail: spoken(row.status) }))} />
+      {role !== "ORG_MANAGER" ? <Board title="Chiến dịch sắp mở" href="/desk/campaigns" rows={soon.map((row) => ({ id: row._id, title: row.title, detail: spoken(row.status) }))} /> : null}
       <Board title="Chiến dịch đang nhận" href="/desk/campaigns" rows={open.map((row) => ({ id: row._id, title: row.title, detail: spoken(row.status) }))} />
       {seesIntake ? <Board title="Phiếu gần nhất" href="/desk/intake" rows={waiting.map((row) => ({ id: row._id, title: row.code, detail: spoken(row.status) }))} /> : null}
       <Board title="Điều chuyển đang mở" href="/desk/transfers" rows={moving.map((row) => {
@@ -496,7 +524,7 @@ export function OpsHome() {
               ], t("status.other"))}
             />
           ) : null}
-          <Stacked
+          <Share
             title={t("chart.campaigns")}
             rows={buckets(campaigns.filter((row) => !row.title.startsWith("[Mẫu]")).map((row) => row.status), [
               { status: "ACTIVE", label: t("status.active") },
@@ -507,7 +535,7 @@ export function OpsHome() {
             ], t("status.other"))}
           />
           {role === "ADMIN" || seesIntake ? (
-            <Chart
+            <Share
               title={t("chart.slips")}
               rows={buckets(fresh.map((row) => row.status), [
                 { status: "ACCEPTED", label: t("status.accepted") },
@@ -518,7 +546,7 @@ export function OpsHome() {
             />
           ) : null}
           {role === "ADMIN" ? (
-            <Columns
+            <Share
               title={t("chart.orgs")}
               rows={buckets(orgs.map((row) => row.status || ""), [
                 { status: "PENDING", label: t("status.pending") },
@@ -528,16 +556,16 @@ export function OpsHome() {
             />
           ) : null}
           {seesStations ? (
-            <Stacked
+            <Bars
               title={t("chart.stations")}
               rows={[
-                { label: t("status.stationOn"), value: stationCount, color: colors.primary },
-                { label: t("status.stationOff"), value: stations.filter((row) => !row.isActive).length, color: colors.secondary },
+                { label: t("status.stationOn"), value: stationCount, color: "#1f6b4a" },
+                { label: t("status.stationOff"), value: stations.filter((row) => !row.isActive).length, color: "#a33b3b" },
               ]}
             />
           ) : null}
           {seesTransfers ? (
-            <Chart
+            <Share
               title={t("chart.moves")}
               rows={buckets(moves.filter((row) => !String(row.code || "").startsWith("SAMPLE-")).map((row) => row.status), [
                 { status: "PENDING", label: t("status.pending") },
