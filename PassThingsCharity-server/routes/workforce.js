@@ -12,6 +12,7 @@ const {
   applyForTask,
   getMyTaskApplications,
   getTaskApplications,
+  getStationTaskApplications,
   reviewTaskApplication,
   assignTask,
   checkInTask,
@@ -54,6 +55,13 @@ router.patch(
 
 // TNV xem các đơn ứng tuyển nhiệm vụ của bản thân
 router.get('/tasks/applications/me', checkBearerToken, getMyTaskApplications);
+
+router.get(
+  '/stations/:stationId/applications',
+  checkBearerToken,
+  checkRole(['ADMIN', 'STATION_MANAGER', 'STAFF']),
+  getStationTaskApplications
+);
 
 // TNV nộp đơn ứng tuyển cho một nhiệm vụ cụ thể
 router.post('/tasks/:taskId/apply', checkBearerToken, applyForTask);

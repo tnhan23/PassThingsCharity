@@ -116,6 +116,13 @@ module.exports = {
       identifier: { type: 'string', example: '0987654321', description: 'Số điện thoại hoặc email của User cần bổ nhiệm' },
     },
   },
+  AssignStationStaffRequest: {
+    type: 'object',
+    required: ['identifier'],
+    properties: {
+      identifier: { type: 'string', example: '0987654321', description: 'Số điện thoại hoặc email của User cần cấp role STAFF' },
+    },
+  },
   StationRequest: {
     type: 'object',
     required: ['name', 'address', 'latitude', 'longitude'],

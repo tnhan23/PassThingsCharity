@@ -181,7 +181,7 @@ async function getCampaignById(req, res, next) {
     // Fetch associated stations
     const stations = await CampaignStation.find({ campaignId: id }).populate({
       path: 'stationId',
-      select: 'name address latitude longitude openingTime closingTime isActive',
+      select: 'name address latitude longitude openingTime closingTime isActive imageUrl',
     });
 
     return res.status(200).json({
@@ -511,7 +511,7 @@ async function findStationsForCampaign(req, res, next) {
 
     const campaignStations = await CampaignStation.find({ campaignId: id }).populate({
       path: 'stationId',
-      select: 'name address latitude longitude openingTime closingTime isActive organizationId managerId',
+      select: 'name address latitude longitude openingTime closingTime isActive organizationId managerId imageUrl',
       populate: { path: 'organizationId', select: 'name code' },
     });
 
