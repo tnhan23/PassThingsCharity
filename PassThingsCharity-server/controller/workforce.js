@@ -7,6 +7,7 @@ const TaskAssignment = require('../models/taskAssignment');
 const TaskApplication = require('../models/taskApplication');
 const Campaign = require('../models/campaign');
 const Station = require('../models/station');
+const StationStaff = require('../models/stationstaff');
 const CampaignTransfer = require('../models/campaignTransfer');
 const User = require('../models/user');
 const PointTransaction = require('../models/pointTransaction');
@@ -316,6 +317,17 @@ async function getAllTasks(req, res, next) {
       filter.recruitmentStatus = String(recruitmentStatus).toUpperCase();
     }
 
+    if (['STAFF', 'STATION_MANAGER'].includes(req.user.role?.name)) {
+      if (stationId) {
+        await scheduleService.requireStationOperator(stationId, req.user);
+      } else {
+        const allowed = req.user.role.name === 'STAFF'
+          ? await StationStaff.distinct('stationId', { userId: req.user._id })
+          : await Station.distinct('_id', { managerId: req.user._id });
+        filter.stationId = { $in: allowed };
+      }
+    }
+
     const pageNum = Math.max(1, parseInt(page, 10) || 1);
     const limitNum = Math.max(1, Math.min(100, parseInt(limit, 10) || 20));
     const skip = (pageNum - 1) * limitNum;
@@ -361,6 +373,10 @@ async function getTaskById(req, res, next) {
 
     if (!task) {
       return res.status(404).json({ error: 'Không tìm thấy nhiệm vụ.' });
+    }
+
+    if (['STAFF', 'STATION_MANAGER'].includes(req.user.role?.name)) {
+      await scheduleService.requireStationOperator(task.stationId?._id || task.stationId, req.user);
     }
 
     const [assignments, applications] = await Promise.all([
@@ -582,6 +598,41 @@ async function getMyTaskApplications(req, res, next) {
 /**
  * Get list of applications for a specific task (Admin / Station Manager / Staff)
  */
+async function getStationTaskApplications(req, res, next) {
+  try {
+    const { stationId } = req.params;
+    const { status } = req.query;
+    if (!mongoose.isValidObjectId(stationId)) {
+      return res.status(400).json({ error: 'ID trạm không hợp lệ.' });
+    }
+    const filter = {};
+    if (status !== undefined) {
+      if (typeof status !== 'string' || !['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'].includes(status.trim().toUpperCase())) {
+        return res.status(400).json({ error: 'status phải thuộc PENDING, APPROVED, REJECTED, CANCELLED. Bỏ status để lấy tất cả.' });
+      }
+      filter.status = status.trim().toUpperCase();
+    }
+    await scheduleService.requireStationOperator(stationId, req.user);
+    const taskIds = await Task.distinct('_id', { stationId });
+    filter.taskId = { $in: taskIds };
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 20));
+    const total = await TaskApplication.countDocuments(filter);
+    const data = await TaskApplication.find(filter)
+      .populate({ path: 'taskId', populate: [
+        { path: 'stationId', select: 'name address' },
+        { path: 'campaignId', select: 'title status' },
+      ] })
+      .populate('userId', 'fullName email phone username')
+      .populate('reviewedBy', 'fullName username')
+      .sort({ appliedAt: -1, _id: -1 })
+      .skip((page - 1) * limit).limit(limit);
+    return res.status(200).json({ data, total, page, totalPages: Math.ceil(total / limit) });
+  } catch (error) {
+    return next(error);
+  }
+}
+
 async function getTaskApplications(req, res, next) {
   try {
     const { taskId } = req.params;
@@ -1032,6 +1083,7 @@ module.exports = {
   applyForTask,
   getMyTaskApplications,
   getTaskApplications,
+  getStationTaskApplications,
   reviewTaskApplication,
   assignTask,
   checkInTask,

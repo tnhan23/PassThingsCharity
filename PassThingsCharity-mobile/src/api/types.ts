@@ -41,27 +41,34 @@ export type CampaignSummary = {
   _id: string;
   title: string;
   description?: string;
+  imageUrl?: string | null;
   startDate: string;
   endDate: string;
   status: string;
   organizationId: OrgRef;
-  items?: { itemTypeId?: { _id?: string; name?: string } | string; progressPercent?: number }[];
+  items?: CampaignItemRow[];
   progress?: CampaignProgress;
 };
 
-export type ItemTypeRef = { name?: string; unit?: string } | string;
+export type ItemTypeRef = { _id?: string; name?: string; unit?: string } | string;
 
 export type CampaignItemRow = {
   _id: string;
   targetQuantity: number;
   currentQuantity: number;
   itemTypeId: ItemTypeRef;
+  remainingQuantity?: number;
+  progressPercent?: number;
+  isFulfilled?: boolean;
 };
 
 export type StationRef = {
   _id?: string;
   name?: string;
   address?: string;
+  imageUrl?: string | null;
+  openingTime?: string;
+  closingTime?: string;
   isActive?: boolean;
   latitude?: string | number;
   longitude?: string | number;

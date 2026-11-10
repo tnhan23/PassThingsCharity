@@ -225,11 +225,16 @@ function StationCards({
 
 type PlaceFix = { latitude: number; longitude: number };
 
-function usePlaceAccess(active: boolean) {
+function usePlaceAccess(active: boolean, initialHere: PlaceFix | null) {
   const [text, setText] = useState("Đang mở bản đồ các trạm.");
-  const [here, setHere] = useState<PlaceFix | null>(null);
+  const [here, setHere] = useState<PlaceFix | null>(initialHere);
   useEffect(() => {
     if (!active) return;
+    if (initialHere) {
+      setHere(initialHere);
+      setText("Vị trí của bạn đã sẵn sàng để tìm đường.");
+      return;
+    }
     let cancelled = false;
     setText("Điện thoại đang hỏi quyền vị trí. Hãy bấm Cho phép.");
     Location.requestForegroundPermissionsAsync()
@@ -251,7 +256,7 @@ function usePlaceAccess(active: boolean) {
     return () => {
       cancelled = true;
     };
-  }, [active]);
+  }, [active, initialHere?.latitude, initialHere?.longitude]);
   return { text, here };
 }
 
@@ -515,7 +520,7 @@ function openInMaps(here: PlaceFix | null, latitude: number, longitude: number) 
   return Linking.openURL(`http://maps.apple.com/?daddr=${latitude},${longitude}${start}&dirflg=d`);
 }
 
-function PlaceMap({ here, focusId, rows }: { here: PlaceFix | null; focusId: string; rows: StationRow[] | null }) {
+function PlaceMap({ here, focusId, rows, autoRoute }: { here: PlaceFix | null; focusId: string; rows: StationRow[] | null; autoRoute: boolean }) {
   const mapRef = useRef<{ setCameraPosition: (config?: { coordinates?: { latitude?: number; longitude?: number }; zoom?: number }) => Promise<void> } | null>(null);
   const glideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const moved = useRef(false);
@@ -527,6 +532,7 @@ function PlaceMap({ here, focusId, rows }: { here: PlaceFix | null; focusId: str
   const [routeProblem, setRouteProblem] = useState("");
   const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
   const [liveCamera, setLiveCamera] = useState<{ latitude: number; longitude: number; zoom: number } | null>(null);
+  const autoRouteAttempted = useRef("");
   useEffect(() => () => {
     if (glideTimer.current) clearTimeout(glideTimer.current);
   }, []);
@@ -535,6 +541,9 @@ function PlaceMap({ here, focusId, rows }: { here: PlaceFix | null; focusId: str
     setRoute(null);
     setRouteProblem("");
   }, [focusId]);
+  useEffect(() => {
+    if (!autoRoute) autoRouteAttempted.current = "";
+  }, [autoRoute, focusId]);
   function glide(latitude: number, longitude: number) {
     moved.current = true;
     const from = liveCamera ?? anchor.current;
@@ -607,6 +616,12 @@ function PlaceMap({ here, focusId, rows }: { here: PlaceFix | null; focusId: str
       })
       .finally(() => setRouteBusy(false));
   }
+  useEffect(() => {
+    if (!autoRoute || !focusId || infoId !== focusId || !here || route?.id === focusId || routeBusy) return;
+    if (autoRouteAttempted.current === focusId) return;
+    autoRouteAttempted.current = focusId;
+    showRoute();
+  }, [autoRoute, focusId, here, infoId, route?.id, routeBusy]);
   if (Platform.OS !== "ios" || !AppleMaps) {
     return infoStation ? (
       <StationFacts
@@ -750,7 +765,7 @@ function useOpenCampaigns() {
   return rows;
 }
 
-function useStationRows(campaignId: string, here: PlaceFix | null) {
+function useStationRows(campaignId: string, here: PlaceFix | null, focusId: string) {
   const { token } = useSession();
   const [rows, setRows] = useState<StationRow[] | null>(null);
   const [problem, setProblem] = useState("");
@@ -779,8 +794,13 @@ function useStationRows(campaignId: string, here: PlaceFix | null) {
           return;
         }
         const data = await backend.nearbyStations(token, here?.latitude, here?.longitude);
+        let stations = data.data;
+        if (focusId && token && !stations.some((station) => station._id === focusId)) {
+          const focused = await backend.getStation(token, focusId);
+          stations = [...stations, focused.station];
+        }
         if (!cancelled) {
-          setRows(data.data.map((station) => ({
+          setRows(stations.map((station) => ({
             ...station,
             address: station.address || "",
             isActive: station.isActive !== false,
@@ -794,7 +814,7 @@ function useStationRows(campaignId: string, here: PlaceFix | null) {
     return () => {
       cancelled = true;
     };
-  }, [campaignId, here?.latitude, here?.longitude, token]);
+  }, [campaignId, focusId, here?.latitude, here?.longitude, token]);
   return { rows, problem, needsLogin: false };
 }
 
@@ -882,14 +902,21 @@ export function StationsScreen({
 }: {
   state: "list" | "map" | "overload" | "closed" | "loading" | "error" | "denied";
 }) {
-  const place = usePlaceAccess(state === "list");
-  const { user } = useSession();
-  const params = useLocalSearchParams<{ station?: string; campaign?: string }>();
+  const params = useLocalSearchParams<{ station?: string; campaign?: string; route?: string; originLat?: string; originLng?: string }>();
   const focusId = typeof params.station === "string" ? params.station : "";
   const campaignId = typeof params.campaign === "string" ? params.campaign : "";
+  const autoRoute = params.route === "1";
+  const originLatitude = typeof params.originLat === "string" ? Number(params.originLat) : NaN;
+  const originLongitude = typeof params.originLng === "string" ? Number(params.originLng) : NaN;
+  const origin = Number.isFinite(originLatitude) && originLatitude >= -90 && originLatitude <= 90
+    && Number.isFinite(originLongitude) && originLongitude >= -180 && originLongitude <= 180
+    ? { latitude: originLatitude, longitude: originLongitude }
+    : null;
+  const place = usePlaceAccess(state === "list" || (state === "map" && Platform.OS !== "android"), origin);
+  const { user } = useSession();
   const [filterOpen, setFilterOpen] = useState(false);
   const openCampaigns = useOpenCampaigns();
-  const loaded = useStationRows(state === "list" || state === "map" ? campaignId : "", place.here);
+  const loaded = useStationRows(state === "list" || state === "map" ? campaignId : "", place.here, focusId);
   const selectedCampaign = openCampaigns.find((campaign) => campaign._id === campaignId);
   if (state === "denied") {
     return (
@@ -951,6 +978,8 @@ export function StationsScreen({
             rows={loaded.rows}
             problem={loaded.problem}
             initialStationId={focusId}
+            autoRoute={autoRoute}
+            initialLocation={origin}
             onInteractionChange={() => undefined}
           />
         </View>
@@ -966,7 +995,7 @@ export function StationsScreen({
           {!loaded.needsLogin && !loaded.rows && !loaded.problem ? <ActivityIndicator color={colors.primary} /> : null}
           {loaded.problem ? <Body>{loaded.problem}</Body> : null}
           {campaignId && loaded.rows && loaded.rows.length === 0 ? <Body>Chiến dịch này chưa có trạm đang mở để nhận đồ.</Body> : null}
-          {loaded.rows && loaded.rows.length > 0 ? <PlaceMap here={place.here} focusId={focusId} rows={loaded.rows} /> : null}
+          {loaded.rows && loaded.rows.length > 0 ? <PlaceMap here={place.here} focusId={focusId} rows={loaded.rows} autoRoute={autoRoute} /> : null}
           <Body>{`${place.text} Bấm vùng trống trên bản đồ để đóng thẻ trạm.`}</Body>
         </View>
       </Screen>

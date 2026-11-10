@@ -232,14 +232,18 @@ export function StationMap({
   problem,
   onInteractionChange,
   initialStationId = "",
+  autoRoute = false,
+  initialLocation = null,
 }: {
   rows: StationRow[] | null;
   problem: string;
   onInteractionChange: (interacting: boolean) => void;
   initialStationId?: string;
+  autoRoute?: boolean;
+  initialLocation?: { latitude: number; longitude: number } | null;
 }) {
   const [selectedId, setSelectedId] = useState(initialStationId);
-  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(initialLocation);
   const [locationBusy, setLocationBusy] = useState(false);
   const [locationStatus, setLocationStatus] = useState("");
   const [openSettings, setOpenSettings] = useState(false);
@@ -251,6 +255,7 @@ export function StationMap({
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [mapCenter, setMapCenter] = useState<{ latitude: number; longitude: number } | null>(null);
   const interactionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoRouteAttempted = useRef("");
   const points = useMemo(() => (rows ?? []).flatMap((station): MapPoint[] => {
     const coordinates = stationCoordinates(station);
     return coordinates ? [{ ...station, ...coordinates }] : [];
@@ -281,8 +286,15 @@ export function StationMap({
     setRoute(null);
     setRouteProblem("");
   }, [initialStationId]);
+  useEffect(() => {
+    if (!autoRoute) autoRouteAttempted.current = "";
+  }, [autoRoute, initialStationId]);
 
   useEffect(() => {
+    if (initialLocation) {
+      setUserLocation(initialLocation);
+      return;
+    }
     let cancelled = false;
     async function loadLocationIfAllowed() {
       try {
@@ -305,7 +317,7 @@ export function StationMap({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [initialLocation?.latitude, initialLocation?.longitude]);
 
   async function allowLocation() {
     setLocationBusy(true);
@@ -397,6 +409,13 @@ export function StationMap({
       setRouteBusy(false);
     }
   }
+
+  useEffect(() => {
+    if (!autoRoute || !initialStationId || selected?._id !== initialStationId || route?.id === initialStationId || routeBusy) return;
+    if (autoRouteAttempted.current === initialStationId) return;
+    autoRouteAttempted.current = initialStationId;
+    void drawRoute();
+  }, [autoRoute, initialStationId, route?.id, routeBusy, selected?._id]);
 
   async function viewRouteToSelectedStation() {
     if (!selected) return;

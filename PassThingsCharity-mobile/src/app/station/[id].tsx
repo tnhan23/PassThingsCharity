@@ -1,6 +1,7 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator } from "react-native";
+import * as Location from "expo-location";
 import { backend } from "@/api/backend";
 import { ApiError } from "@/api/client";
 import { pickImage } from "@/api/images";
@@ -24,6 +25,8 @@ export default function StationDetailPage() {
   const [tasks, setTasks] = useState<TaskRow[] | null>(null);
   const [problem, setProblem] = useState("");
   const [photoNote, setPhotoNote] = useState("");
+  const [routeNote, setRouteNote] = useState("");
+  const [findingRoute, setFindingRoute] = useState(false);
   const [uploading, setUploading] = useState(false);
   const canEditPhoto = user?.role === "ADMIN" || user?.role === "ORG_MANAGER" || user?.role === "STATION_MANAGER";
 
@@ -110,10 +113,53 @@ export default function StationDetailPage() {
     }
   }
 
+  async function findRoute() {
+    if (!station || findingRoute) return;
+    setFindingRoute(true);
+    setRouteNote("");
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (!permission.granted) {
+        setRouteNote(permission.canAskAgain
+          ? "Để tìm đường, hãy cho phép ứng dụng truy cập vị trí."
+          : "Quyền vị trí đang tắt. Hãy bật quyền vị trí cho ứng dụng trong Cài đặt.");
+        return;
+      }
+
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      let position: Location.LocationObject;
+      try {
+        position = await Promise.race([
+          Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+          new Promise<never>((_, reject) => {
+            timeout = setTimeout(() => reject(new Error("Không lấy được vị trí sau 15 giây. Hãy bật dịch vụ định vị rồi thử lại.")), 15000);
+          }),
+        ]);
+      } finally {
+        if (timeout) clearTimeout(timeout);
+      }
+
+      router.push(
+        `/stations/map?station=${encodeURIComponent(station._id)}&route=1&originLat=${position.coords.latitude}&originLng=${position.coords.longitude}`,
+      );
+    } catch (caught) {
+      setRouteNote(caught instanceof Error ? caught.message : "Không lấy được vị trí hiện tại.");
+    } finally {
+      setFindingRoute(false);
+    }
+  }
+
   const active = campaigns.filter((detail) => detail.campaign.status === "ACTIVE" || detail.campaign.status === "PUBLISHED");
   const hours = station.openingTime || station.closingTime
     ? `${station.openingTime || "?"} đến ${station.closingTime || "?"}`
     : "Chưa có giờ mở cửa.";
+  const hasCoordinates =
+    station.latitude !== undefined &&
+    station.latitude !== null &&
+    station.longitude !== undefined &&
+    station.longitude !== null &&
+    Number.isFinite(Number(station.latitude)) &&
+    Number.isFinite(Number(station.longitude));
 
   return (
     <Screen tab="stations">
@@ -122,6 +168,14 @@ export default function StationDetailPage() {
       {station.imageUrl ? <Photo uri={station.imageUrl} height={200} radius={18} /> : <Body muted>Trạm chưa có ảnh.</Body>}
       <Body>{station.address}</Body>
       <Body muted>{hours}</Body>
+      {hasCoordinates ? (
+        <Button
+          label={findingRoute ? "Đang lấy vị trí..." : "Tìm đường trên bản đồ"}
+          disabled={findingRoute}
+          onPress={() => void findRoute()}
+        />
+      ) : <Body muted>Trạm chưa có tọa độ để tìm đường.</Body>}
+      {routeNote ? <Body>{routeNote}</Body> : null}
       {canEditPhoto ? (
         <Button label={uploading ? "Đang tải ảnh..." : station.imageUrl ? "Đổi ảnh trạm" : "Tải ảnh trạm"} disabled={uploading} onPress={() => void changePhoto()} />
       ) : null}
@@ -148,7 +202,6 @@ export default function StationDetailPage() {
               />
             );
           })}
-          <Button label="Mở chiến dịch" tone="ghost" onPress={() => router.push(`/campaign?id=${detail.campaign._id}`)} />
         </Card>
       ))}
       <Title>Việc tại trạm</Title>

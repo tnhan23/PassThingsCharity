@@ -251,8 +251,6 @@ function tabsFor(role: string | undefined, _signedIn: boolean, desk: boolean): {
   if (!desk) {
     return [
       { key: "home", label: "nav.explore", icon: "explore", href: "/" },
-      { key: "give", label: "nav.give", icon: "volunteer-activism", href: "/campaign" },
-      { key: "stations", label: "nav.stations", icon: "warehouse", href: "/stations/list" },
       { key: "profile", label: "nav.profile", icon: "account-circle", href: profile },
     ];
   }
@@ -290,10 +288,8 @@ function TabBar({ active, desk, sheet, onCreate }: { active: TabKey; desk: boole
   return (
     <View style={[styles.tabBar, { paddingBottom: bottom }]}>
       <TabItem label={t(tabs[0].label)} icon={tabs[0].icon} active={active === "home"} href={tabs[0].href} />
-      <TabItem label={t(tabs[1].label)} icon={tabs[1].icon} active={active === "give"} href={tabs[1].href} />
       <View style={{ width: 64 }} />
-      <TabItem label={t(tabs[2].label)} icon={tabs[2].icon} active={active === "stations"} href={tabs[2].href} />
-      <TabItem label={t(tabs[3].label)} icon={tabs[3].icon} active={active === "profile"} href={tabs[3].href} />
+      <TabItem label={t(tabs[1].label)} icon={tabs[1].icon} active={active === "profile"} href={tabs[1].href} />
       <Tap
         onPress={onCreate}
         style={[styles.plus, sheet ? { backgroundColor: colors.secondary } : null]}
