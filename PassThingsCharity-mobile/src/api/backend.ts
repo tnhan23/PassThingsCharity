@@ -8,6 +8,7 @@ import type {
   PointsPayload,
   ReliefRow,
   ReliefSummaryItem,
+  StationRef,
   StationRow,
   TaskRow,
   TransferRow,
@@ -18,6 +19,11 @@ import type {
 
 type Token = string;
 type Body = Record<string, unknown>;
+type AuthSession = {
+  token: string;
+  message?: string;
+  user: { id: unknown; username: string; phone?: string | null; email?: string | null; fullName?: string | null; avatarUrl?: string | null; role?: string; stations?: StationRow[] };
+};
 
 function withToken(token: Token, method: string, body?: Body) {
   return { method, body, token };
@@ -33,10 +39,19 @@ export function resultText(data: unknown) {
 
 export const backend = {
   login(username: string, password: string) {
-    return api<{ token: string; user: { id: unknown; username: string; phone?: string | null; email?: string | null; fullName?: string | null; avatarUrl?: string | null; role?: string; stations?: StationRow[] } }>("/auth/login", {
+    return api<AuthSession>("/auth/login", {
       method: "POST",
       body: { username, password },
     });
+  },
+  googleSignIn(idToken: string) {
+    return api<AuthSession>("/auth/google", { method: "POST", body: { idToken } });
+  },
+  sendGmailOtp(email: string, mode: "login" | "register") {
+    return api<{ message: string }>("/auth/google/send-otp", { method: "POST", body: { email, mode } });
+  },
+  verifyGmailOtp(body: { email: string; otp: string; fullname?: string; username?: string; password?: string; phone?: string }) {
+    return api<AuthSession>("/auth/google/verify-otp", { method: "POST", body });
   },
   register(body: { email: string; username: string; password: string; fullname: string; phone: string }) {
     return api<{ message: string }>("/auth/register", { method: "POST", body });
@@ -174,19 +189,19 @@ export const backend = {
     return api<{ message: string }>(`/catalog/items/${id}`, withToken(token, "DELETE"));
   },
 
-  listCampaigns(query?: { status?: string; search?: string; organizationId?: string }) {
+  listCampaigns(query?: { status?: string; search?: string; organizationId?: string }, token?: Token) {
     const params = new URLSearchParams();
     if (query?.status) params.set("status", query.status);
     if (query?.search) params.set("search", query.search);
     if (query?.organizationId) params.set("organizationId", query.organizationId);
     const suffix = params.toString();
-    return api<{ campaigns: CampaignSummary[] }>(`/campaigns${suffix ? `?${suffix}` : ""}`);
+    return api<{ campaigns: CampaignSummary[] }>(`/campaigns${suffix ? `?${suffix}` : ""}`, token ? { token } : {});
   },
   getCampaign(id: string) {
     return api<CampaignDetail>(`/campaigns/${id}`);
   },
   createCampaign(token: Token, body: Body) {
-    return api<{ message: string }>("/campaigns", withToken(token, "POST", body));
+    return api<{ message: string; campaign: Pick<CampaignSummary, "_id"> }>("/campaigns", withToken(token, "POST", body));
   },
   updateCampaign(token: Token, id: string, body: Body) {
     return api<{ message: string }>(`/campaigns/${id}`, withToken(token, "PATCH", body));
@@ -208,7 +223,7 @@ export const backend = {
   },
   campaignStations(campaignId: string, coords?: { userLat: string; userLng: string }) {
     const query = coords ? `?userLat=${encodeURIComponent(coords.userLat)}&userLng=${encodeURIComponent(coords.userLng)}` : "";
-    return api<{ totalStations: number; stations: { _id?: string; name?: string; address?: string; isActive?: boolean; latitude?: string; longitude?: string; openingTime?: string; closingTime?: string; distanceKm?: number }[] }>(
+    return api<{ totalStations: number; stations: (NonNullable<StationRef> & { openingTime?: string; closingTime?: string; distanceKm?: number })[] }>(
       `/campaigns/${campaignId}/stations${query}`,
     );
   },
@@ -225,7 +240,7 @@ export const backend = {
     return api<{ totalDistributionBatches: number; itemsSummary: ReliefSummaryItem[] }>(`/relief/summary/${campaignId}`, { token });
   },
   listOpenTasks(token: Token) {
-    return api<{ data: { _id: string; title?: string; description?: string; rewardPoints?: number; startTime?: string; endTime?: string; recruitmentStatus?: string; slots?: { remaining?: number; total?: number }; stationId?: { name?: string; address?: string } | string }[] }>(
+    return api<{ data: { _id: string; title?: string; description?: string; imageUrl?: string | null; rewardPoints?: number; startTime?: string; endTime?: string; recruitmentStatus?: string; slots?: { remaining?: number; total?: number }; stationId?: { name?: string; address?: string; imageUrl?: string | null } | string }[] }>(
       "/workforce/tasks?limit=100&recruitmentStatus=OPEN",
       { token },
     );
@@ -243,11 +258,14 @@ export const backend = {
   applyTask(token: Token, taskId: string) {
     return api<{ message: string }>(`/workforce/tasks/${taskId}/apply`, withToken(token, "POST", {}));
   },
-  checkInTask(token: Token, assignmentId: string) {
-    return api<{ message: string }>("/workforce/tasks/check-in", withToken(token, "POST", { assignmentId }));
+  checkInTask(token: Token, assignmentId: string, proof?: Body) {
+    return api<{ message: string }>("/workforce/tasks/check-in", withToken(token, "POST", { assignmentId, ...proof }));
   },
   checkOutTask(token: Token, assignmentId: string, body?: Body) {
     return api<{ message: string; gamification?: { pointsAwarded?: number } }>("/workforce/tasks/check-out", withToken(token, "POST", { assignmentId, ...body }));
+  },
+  taskQr(token: Token, taskId: string) {
+    return api<{ data: { qrCode: string; staticQrCode: string; stationId?: string; allowedRadiusKm?: number } }>(`/workforce/tasks/${taskId}/qr`, { token });
   },
   forgotPassword(email: string) {
     return api<{ message: string }>("/auth/forgot-password", { method: "POST", body: { email } });
@@ -304,6 +322,12 @@ export const backend = {
   },
   uploadAvatar(token: Token, file: UploadFile) {
     return uploadImages<{ avatarUrl: string }>("/uploads/users/image", token, [file], "image");
+  },
+  uploadStationImage(token: Token, file: UploadFile) {
+    return uploadImages<{ imageUrl: string }>("/uploads/stations/image", token, [file], "image");
+  },
+  uploadTaskImage(token: Token, file: UploadFile) {
+    return uploadImages<{ imageUrl: string }>("/uploads/tasks/image", token, [file], "image");
   },
   createTransfer(token: Token, body: Body) {
     return api<{ message: string }>("/transfers", withToken(token, "POST", body));
@@ -374,11 +398,23 @@ export const backend = {
   createShiftSchedule(token: Token, stationId: string, body: Body) {
     return api<{ message: string }>(`/shiftstations/${stationId}/schedules`, withToken(token, "POST", body));
   },
-  checkInShift(token: Token, scheduleId: string) {
-    return api<{ message: string }>(`/shiftstations/schedules/${scheduleId}/check-in`, withToken(token, "POST", {}));
+  checkInShift(token: Token, scheduleId: string, proof?: Body) {
+    return api<{ message: string }>(`/shiftstations/schedules/${scheduleId}/check-in`, withToken(token, "POST", proof ?? {}));
   },
-  checkOutShift(token: Token, scheduleId: string) {
-    return api<{ message: string }>(`/shiftstations/schedules/${scheduleId}/check-out`, withToken(token, "POST", {}));
+  checkOutShift(token: Token, scheduleId: string, proof?: Body) {
+    return api<{ message: string }>(`/shiftstations/schedules/${scheduleId}/check-out`, withToken(token, "POST", proof ?? {}));
+  },
+  stationQr(token: Token, stationId: string) {
+    return api<{ data: { qrCode: string; staticQrCode: string; stationName?: string; allowedRadiusKm?: number } }>(`/stations/${stationId}/qr`, { token });
+  },
+  shiftQr(token: Token, scheduleId: string) {
+    return api<{ data: { qrCode: string; staticQrCode: string; allowedRadiusKm?: number } }>(`/shiftstations/schedules/${scheduleId}/qr`, { token });
+  },
+  shipmentQr(token: Token, transferId: string, shipmentId: string, stage: string) {
+    return api<{ data: { qrCode: string; staticQrCode: string; stage: string; allowedRadiusKm?: number } }>(
+      `/transfers/${transferId}/shipments/${shipmentId}/qr?stage=${encodeURIComponent(stage)}`,
+      { token },
+    );
   },
   listStationStaff(token: Token, stationId: string) {
     return api<{ data: { _id: string; fullName?: string; username?: string }[] }>(`/stationmanager/${stationId}/staff`, { token });
