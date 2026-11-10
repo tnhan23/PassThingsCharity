@@ -7,6 +7,7 @@ import type { NoticeRow } from "@/api/types";
 import { publishUnread } from "@/api/unread";
 import { useLocale, type CopyKey } from "@/api/locale";
 import { useSession } from "@/api/session";
+import { useToast } from "@/api/toast";
 import { Screen } from "@/components/chrome";
 import { Body, Button, Card, Title } from "@/components/ui";
 import { colors } from "@/theme";
@@ -21,10 +22,10 @@ function noticeKind(type: string | undefined, t: (key: CopyKey) => string) {
 export function NoticesScreen() {
   const { token, user } = useSession();
   const { t } = useLocale();
+  const toast = useToast();
   const [rows, setRows] = useState<NoticeRow[] | null>(null);
   const [unread, setUnread] = useState(0);
   const [error, setError] = useState("");
-  const [note, setNote] = useState("");
 
   const load = useCallback(() => {
     if (!token) {
@@ -52,33 +53,31 @@ export function NoticesScreen() {
 
   async function markOne(id: string) {
     if (!token) return;
-    setNote("");
     try {
       const data = await backend.markNotificationRead(token, id);
       const next = (rows ?? []).map((item) => (item._id === id ? { ...item, isRead: true } : item));
       const nextUnread = next.filter((item) => !item.isRead).length;
-      setNote(data.message);
+      toast.show(data.message, "success");
       setRows(next);
       setUnread(nextUnread);
       publishUnread(nextUnread);
       load();
     } catch (reason) {
-      setNote(reason instanceof ApiError ? reason.message : "Không đánh dấu được.");
+      toast.show(reason instanceof ApiError ? reason.message : "Không đánh dấu được.", "error");
     }
   }
 
   async function markAll() {
     if (!token) return;
-    setNote("");
     try {
       const data = await backend.markAllNotificationsRead(token);
-      setNote(data.message);
+      toast.show(data.message, "success");
       setRows((rows ?? []).map((item) => ({ ...item, isRead: true })));
       setUnread(0);
       publishUnread(0);
       load();
     } catch (reason) {
-      setNote(reason instanceof ApiError ? reason.message : "Không đánh dấu được.");
+      toast.show(reason instanceof ApiError ? reason.message : "Không đánh dấu được.", "error");
     }
   }
 
@@ -96,7 +95,6 @@ export function NoticesScreen() {
     <Screen tab="home">
       <Title>{t("notice.title")}</Title>
       <Body muted>{unread > 0 ? `${unread} ${t("notice.unread")}` : t("notice.noneUnread")}</Body>
-      {note ? <Body>{note}</Body> : null}
       {error ? <Body>{error}</Body> : null}
       {rows === null ? <ActivityIndicator color={colors.primary} /> : null}
       {rows && rows.length === 0 && !error ? <Body>{t("notice.empty")}</Body> : null}

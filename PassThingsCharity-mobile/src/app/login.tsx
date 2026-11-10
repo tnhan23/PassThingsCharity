@@ -10,6 +10,7 @@ import { ApiError } from "@/api/client";
 import { useGuest } from "@/api/guest";
 import { useLocale } from "@/api/locale";
 import { useSession } from "@/api/session";
+import { useToast } from "@/api/toast";
 import { PasswordReset } from "@/components/form";
 import { Body, Button, Tap, Title } from "@/components/ui";
 import { colors, fonts } from "@/theme";
@@ -37,6 +38,7 @@ export default function LoginPage() {
   const { ready, user, login, register, open } = useSession();
   const { guest, enterGuest } = useGuest();
   const { t } = useLocale();
+  const toast = useToast();
   const insets = useSafeAreaInsets();
   const [form, setForm] = useState<"login" | "register" | "forgot" | "gmail" | null>(null);
   const [gmailNew, setGmailNew] = useState(false);
@@ -47,57 +49,58 @@ export default function LoginPage() {
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [codeSent, setCodeSent] = useState(false);
-  const [note, setNote] = useState("");
-  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const gmailForm = form === "gmail";
 
   if (ready && user) return <Redirect href="/" />;
 
+  function fail(message: string) {
+    toast.show(message, "error");
+  }
+
   async function submit() {
     if (busy) return;
     if (form === "register") {
       if (!email.trim() || !fullname.trim() || !phone.trim() || !username.trim() || !password) {
-        setError("Vui lòng điền đủ email, họ tên, số điện thoại, tên đăng nhập và mật khẩu.");
+        fail("Vui lòng điền đủ email, họ tên, số điện thoại, tên đăng nhập và mật khẩu.");
         return;
       }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-        setError("Email không đúng định dạng.");
+        fail("Email không đúng định dạng.");
         return;
       }
       if (!/^\d{10}$/.test(phone.trim())) {
-        setError("Số điện thoại phải gồm đúng 10 chữ số.");
+        fail("Số điện thoại phải gồm đúng 10 chữ số.");
         return;
       }
       if (password.length < 6) {
-        setError("Mật khẩu phải có ít nhất 6 ký tự.");
+        fail("Mật khẩu phải có ít nhất 6 ký tự.");
         return;
       }
     } else if (!username.trim() || !password) {
-      setError("Vui lòng nhập đủ tên đăng nhập và mật khẩu.");
+      fail("Vui lòng nhập đủ tên đăng nhập và mật khẩu.");
       return;
     }
-    setError("");
     if (form === "register") {
       if (!email.trim() || !fullname.trim() || !phone.trim() || !username.trim() || !password) {
-        setError("Vui lòng điền đầy đủ email, họ tên, số điện thoại, tên đăng nhập và mật khẩu.");
+        fail("Vui lòng điền đầy đủ email, họ tên, số điện thoại, tên đăng nhập và mật khẩu.");
         return;
       }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-        setError("Email không đúng định dạng (ví dụ: ten@email.com).");
+        fail("Email không đúng định dạng (ví dụ: ten@email.com).");
         return;
       }
       if (!/^\d{10}$/.test(phone.trim())) {
-        setError("Số điện thoại phải gồm đúng 10 chữ số.");
+        fail("Số điện thoại phải gồm đúng 10 chữ số.");
         return;
       }
       if (password.length < 6) {
-        setError("Mật khẩu phải có ít nhất 6 ký tự.");
+        fail("Mật khẩu phải có ít nhất 6 ký tự.");
         return;
       }
     } else {
       if (!username.trim() || !password) {
-        setError("Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu.");
+        fail("Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu.");
         return;
       }
     }
@@ -116,7 +119,7 @@ export default function LoginPage() {
       }
       router.replace("/");
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t("welcome.fail"));
+      fail(caught instanceof ApiError ? caught.message : t("welcome.fail"));
     } finally {
       setBusy(false);
     }
@@ -129,19 +132,17 @@ export default function LoginPage() {
   async function gmailSubmit() {
     if (busy || !gmailForm) return;
     if (!gmailAddress(email)) {
-      setError("Chỉ nhận Gmail, Google Mail hoặc email trường đuôi edu.vn.");
+      fail("Chỉ nhận Gmail, Google Mail hoặc email trường đuôi edu.vn.");
       return;
     }
     if (gmailNew && password && password.length < 6) {
-      setError("Mật khẩu phải có ít nhất 6 ký tự.");
+      fail("Mật khẩu phải có ít nhất 6 ký tự.");
       return;
     }
     if (gmailNew && phone.trim() && !/^\d{10}$/.test(phone.trim())) {
-      setError("Số điện thoại phải gồm đúng 10 chữ số.");
+      fail("Số điện thoại phải gồm đúng 10 chữ số.");
       return;
     }
-    setError("");
-    setNote("");
     setBusy(true);
     try {
       if (!codeSent) {
@@ -157,11 +158,11 @@ export default function LoginPage() {
           }
         }
         setCodeSent(true);
-        setNote(sent.message);
+        toast.show(sent.message, "success");
         return;
       }
       if (!/^\d{6}$/.test(otp.trim())) {
-        setError("Nhập mã 6 số trong email.");
+        fail("Nhập mã 6 số trong email.");
         return;
       }
       const data = await backend.verifyGmailOtp({
@@ -175,7 +176,7 @@ export default function LoginPage() {
       await open(data);
       router.replace("/");
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t("welcome.fail"));
+      fail(caught instanceof ApiError ? caught.message : t("welcome.fail"));
     } finally {
       setBusy(false);
     }
@@ -212,14 +213,13 @@ export default function LoginPage() {
           {form === "register" ? <Field label={t("welcome.phone")} value={phone} onChangeText={setPhone} keyboard="phone-pad" /> : null}
           <Field label={form === "login" ? t("welcome.userOrGmail") : t("welcome.user")} value={username} onChangeText={setUsername} autoCapitalize="none" />
           <Field label={t("welcome.password")} value={password} onChangeText={setPassword} secure />
-          {error ? <Text style={{ fontFamily: fonts.medium, color: colors.error, fontSize: 14 }}>{error}</Text> : null}
           <Button
             disabled={busy}
             label={busy ? t("welcome.sending") : form === "register" ? t("welcome.create") : t("welcome.enter")}
             onPress={() => void submit()}
           />
           {form === "login" ? <Button label={t("welcome.forgot")} tone="ghost" onPress={() => setForm("forgot")} /> : null}
-          <Button label={t("welcome.back")} tone="ghost" onPress={() => { setForm(null); setError(""); }} />
+          <Button label={t("welcome.back")} tone="ghost" onPress={() => setForm(null)} />
         </View>
       ) : null}
       {gmailForm ? (
@@ -231,14 +231,12 @@ export default function LoginPage() {
           {gmailNew ? <Field label={t("welcome.phone")} value={phone} onChangeText={setPhone} keyboard="phone-pad" /> : null}
           {gmailNew ? <Field label={t("welcome.password")} value={password} onChangeText={setPassword} secure /> : null}
           {codeSent ? <Field label={t("welcome.otp")} value={otp} onChangeText={setOtp} keyboard="phone-pad" /> : null}
-          {note ? <Body muted>{note}</Body> : null}
-          {error ? <Text style={{ fontFamily: fonts.medium, color: colors.error, fontSize: 14 }}>{error}</Text> : null}
           <Button
             disabled={busy}
             label={busy ? t("welcome.sending") : codeSent ? t("welcome.confirmCode") : t("welcome.sendCode")}
             onPress={() => void gmailSubmit()}
           />
-          <Button label={t("welcome.back")} tone="ghost" onPress={() => { setForm(null); setError(""); setCodeSent(false); }} />
+          <Button label={t("welcome.back")} tone="ghost" onPress={() => { setForm(null); setCodeSent(false); }} />
         </View>
       ) : null}
       {form === null ? (
@@ -249,7 +247,6 @@ export default function LoginPage() {
             <GoogleSignInButton
               busy={busy}
               setBusy={setBusy}
-              setError={setError}
               open={open}
               label={t("welcome.gmail")}
             />
@@ -267,7 +264,6 @@ export default function LoginPage() {
               </Body>
             </View>
           )}
-          {error ? <Text style={{ fontFamily: fonts.medium, color: colors.error, fontSize: 14 }}>{error}</Text> : null}
           <Button label={t("welcome.forgot")} tone="ghost" onPress={() => setForm("forgot")} />
           <Button
             label={t("welcome.guest")}
@@ -287,28 +283,26 @@ export default function LoginPage() {
 function GoogleSignInButton({
   busy,
   setBusy,
-  setError,
   open,
   label,
 }: {
   busy: boolean;
   setBusy: (busy: boolean) => void;
-  setError: (error: string) => void;
   open: (data: Parameters<ReturnType<typeof useSession>["open"]>[0]) => Promise<void>;
   label: string;
 }) {
+  const toast = useToast();
   const [googleRequest, googleResponse, promptGoogle] = Google.useAuthRequest(googleClientIds);
 
   useEffect(() => {
     if (googleResponse?.type !== "success") return;
     const idToken = googleResponse.authentication?.idToken || googleResponse.params.id_token;
     if (!idToken) {
-      setError("Google không trả mã đăng nhập.");
+      toast.show("Google không trả mã đăng nhập.", "error");
       return;
     }
     let cancelled = false;
     setBusy(true);
-    setError("");
     backend.googleSignIn(idToken)
       .then(async (data) => {
         if (cancelled) return;
@@ -316,7 +310,9 @@ function GoogleSignInButton({
         router.replace("/");
       })
       .catch((caught: unknown) => {
-        if (!cancelled) setError(caught instanceof ApiError ? caught.message : "Không đăng nhập bằng Google được.");
+        if (!cancelled) {
+          toast.show(caught instanceof ApiError ? caught.message : "Không đăng nhập bằng Google được.", "error");
+        }
       })
       .finally(() => {
         if (!cancelled) setBusy(false);
@@ -324,7 +320,7 @@ function GoogleSignInButton({
     return () => {
       cancelled = true;
     };
-  }, [googleResponse, open, setBusy, setError]);
+  }, [googleResponse, open, setBusy, toast]);
 
   return (
     <Tap
