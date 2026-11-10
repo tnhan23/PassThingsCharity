@@ -8,6 +8,56 @@ import { colors } from "@/theme";
 import { can, Fold, nextCampaignStatuses, Note, OpsGate, PickList, RoleNote, TextField, Units, useJob, useRole, useRows, type Row } from "@/screens/ops/kit";
 
 const AppleMaps = Platform.OS === "ios" ? (require("expo-maps") as typeof import("expo-maps")).AppleMaps : null;
+const NativeWebView = Platform.OS === "android"
+  ? (require("react-native-webview") as typeof import("react-native-webview")).WebView
+  : null;
+
+function stationPlaceMapHtml(latitude: number | null, longitude: number | null) {
+  const center = latitude !== null && longitude !== null ? [latitude, longitude] : [10.7769, 106.7009];
+  const zoom = latitude !== null && longitude !== null ? 16 : 13;
+  const markerLine = latitude !== null && longitude !== null
+    ? `let marker = L.marker(${JSON.stringify(center)}).addTo(map);`
+    : "let marker = null;";
+  return `<!doctype html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>html,body,#map{height:100%;width:100%;margin:0}</style>
+</head>
+<body>
+  <div id="map"></div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map("map").setView(${JSON.stringify(center)}, ${zoom});
+    delete L.Icon.Default.prototype._getIconUrl;
+    L.Icon.Default.mergeOptions({
+      iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+      iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+      shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+    });
+    const streets = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 });
+    const relief = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19 });
+    let tileErrors = 0;
+    streets.on("tileerror", () => {
+      tileErrors += 1;
+      if (tileErrors < 3 || map.hasLayer(relief)) return;
+      map.removeLayer(streets);
+      relief.addTo(map);
+    });
+    streets.addTo(map);
+    ${markerLine}
+    map.on("click", (event) => {
+      const { lat, lng } = event.latlng;
+      if (marker) marker.setLatLng(event.latlng);
+      else marker = L.marker(event.latlng).addTo(map);
+      window.ReactNativeWebView.postMessage(JSON.stringify({ latitude: lat, longitude: lng }));
+    });
+    setTimeout(() => map.invalidateSize(), 200);
+  </script>
+</body>
+</html>`;
+}
 
 function StationPlaceMap({
   latitude,
@@ -19,10 +69,36 @@ function StationPlaceMap({
   onPick: (latitude: string, longitude: string) => void;
 }) {
   const camera = useRef({ coordinates: { latitude: 10.7769, longitude: 106.7009 }, zoom: 13 }).current;
-  if (!AppleMaps) return null;
   const lat = Number(latitude);
   const lng = Number(longitude);
-  const picked = Number.isFinite(lat) && Number.isFinite(lng);
+  const picked = Number.isFinite(lat) && Number.isFinite(lng) && latitude.trim() !== "" && longitude.trim() !== "";
+  const androidMapHtml = useRef(stationPlaceMapHtml(picked ? lat : null, picked ? lng : null)).current;
+  if (Platform.OS === "android" && NativeWebView) {
+    return (
+      <View style={{ height: 220, borderRadius: 14, overflow: "hidden" }}>
+        <NativeWebView
+          originWhitelist={["*"]}
+          source={{ html: androidMapHtml, baseUrl: "https://tile.openstreetmap.org/" }}
+          userAgent="Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+          javaScriptEnabled
+          scrollEnabled={false}
+          onMessage={(event) => {
+            try {
+              const point: unknown = JSON.parse(event.nativeEvent.data);
+              if (!point || typeof point !== "object" || !("latitude" in point) || !("longitude" in point)) return;
+              if (typeof point.latitude !== "number" || typeof point.longitude !== "number") return;
+              if (!Number.isFinite(point.latitude) || !Number.isFinite(point.longitude)) return;
+              onPick(point.latitude.toFixed(6), point.longitude.toFixed(6));
+            } catch {
+              return;
+            }
+          }}
+          style={{ flex: 1, backgroundColor: colors.surfaceContainer }}
+        />
+      </View>
+    );
+  }
+  if (!AppleMaps) return null;
   return (
     <View style={{ height: 220, borderRadius: 14, overflow: "hidden" }}>
       <AppleMaps.View
@@ -274,8 +350,8 @@ export function StationScreen() {
           <PickList rows={orgs.rows} selected={orgId} onPick={setOrgId} detail={orgDetail} />
           <TextField label="Tên trạm" value={name} onChangeText={setName} />
           <TextField label="Địa chỉ" value={address} onChangeText={setAddress} />
-          {AppleMaps ? <Body muted>Chạm bản đồ để đặt vị trí trạm.</Body> : null}
-          {AppleMaps ? <StationPlaceMap latitude={latitude} longitude={longitude} onPick={(lat, lng) => { setLatitude(lat); setLongitude(lng); }} /> : null}
+          {Platform.OS === "android" || AppleMaps ? <Body muted>Chạm bản đồ để đặt vị trí trạm.</Body> : null}
+          {Platform.OS === "android" || AppleMaps ? <StationPlaceMap latitude={latitude} longitude={longitude} onPick={(lat, lng) => { setLatitude(lat); setLongitude(lng); }} /> : null}
           <TextField label="Vĩ độ" value={latitude} onChangeText={setLatitude} />
           <TextField label="Kinh độ" value={longitude} onChangeText={setLongitude} />
           <Button
