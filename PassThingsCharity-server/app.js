@@ -42,6 +42,13 @@ const captureRawBody = (req, res, buf) => {
 app.use(express.json({ verify: captureRawBody }));
 app.use(express.urlencoded({ extended: false, verify: captureRawBody }));
 app.use(passport.initialize());
+
+// Render probes GET / to detect the public HTTP port. Keep it unsigned and empty
+// so signed API routes stay protected while the host can stay reachable.
+app.get('/', (req, res) => {
+  res.status(404).end();
+});
+
 app.use(requireAppSignature);
 
 const authLimiter = rateLimit({
@@ -60,10 +67,6 @@ app.use('/auth/google', authLimiter);
 if (swaggerEnabled) {
   app.use(['/swagger', '/api-docs'], swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 }
-
-app.get('/', (req, res) => {
-  res.status(404).end();
-});
 
 // Existing Route Middlewares
 app.use('/auth', authRouter);
