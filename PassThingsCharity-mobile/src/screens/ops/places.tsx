@@ -34,9 +34,9 @@ function addCampaignDays(date: Date, days: number) {
 function stationPlaceMapHtml(latitude: number | null, longitude: number | null) {
   const center = latitude !== null && longitude !== null ? [latitude, longitude] : [10.7769, 106.7009];
   const zoom = latitude !== null && longitude !== null ? 16 : 13;
-  const initialMarker = latitude !== null && longitude !== null
-    ? `L.marker(${JSON.stringify(center)}).addTo(map);`
-    : "";
+  const markerLine = latitude !== null && longitude !== null
+    ? `let marker = L.marker(${JSON.stringify(center)}).addTo(map);`
+    : "let marker = null;";
   return `<!doctype html>
 <html>
 <head>
@@ -49,18 +49,30 @@ function stationPlaceMapHtml(latitude: number | null, longitude: number | null) 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     const map = L.map("map").setView(${JSON.stringify(center)}, ${zoom});
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
-    }).addTo(map);
-    let marker = null;
-    ${initialMarker.replace("L.marker(", "marker = L.marker(")}
+    delete L.Icon.Default.prototype._getIconUrl;
+    L.Icon.Default.mergeOptions({
+      iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+      iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+      shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+    });
+    const streets = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 });
+    const relief = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19 });
+    let tileErrors = 0;
+    streets.on("tileerror", () => {
+      tileErrors += 1;
+      if (tileErrors < 3 || map.hasLayer(relief)) return;
+      map.removeLayer(streets);
+      relief.addTo(map);
+    });
+    streets.addTo(map);
+    ${markerLine}
     map.on("click", (event) => {
       const { lat, lng } = event.latlng;
       if (marker) marker.setLatLng(event.latlng);
       else marker = L.marker(event.latlng).addTo(map);
       window.ReactNativeWebView.postMessage(JSON.stringify({ latitude: lat, longitude: lng }));
     });
+    setTimeout(() => map.invalidateSize(), 200);
   </script>
 </body>
 </html>`;
@@ -81,13 +93,13 @@ function StationPlaceMap({
   const picked = lat !== null && lng !== null && Number.isFinite(lat) && Number.isFinite(lng);
   const androidMapHtml = useRef(stationPlaceMapHtml(picked ? lat : null, picked ? lng : null)).current;
   const camera = useRef({ coordinates: { latitude: 10.7769, longitude: 106.7009 }, zoom: 13 }).current;
-
   if (Platform.OS === "android" && NativeWebView) {
     return (
       <View style={{ height: 220, borderRadius: 14, overflow: "hidden" }}>
         <NativeWebView
           originWhitelist={["*"]}
-          source={{ html: androidMapHtml }}
+          source={{ html: androidMapHtml, baseUrl: "https://tile.openstreetmap.org/" }}
+          userAgent="Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
           javaScriptEnabled
           scrollEnabled={false}
           onMessage={(event) => {
@@ -106,7 +118,6 @@ function StationPlaceMap({
       </View>
     );
   }
-
   if (!AppleMaps) return null;
   return (
     <View style={{ height: 220, borderRadius: 14, overflow: "hidden" }}>

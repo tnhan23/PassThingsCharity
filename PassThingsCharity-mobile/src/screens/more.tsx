@@ -10,15 +10,13 @@ import { isOperator, useSession } from "@/api/session";
 import { campaignPhase, donorLabel, formatDay } from "@/api/labels";
 import type { CampaignSummary, StationRow } from "@/api/types";
 import { Screen } from "@/components/chrome";
+import { StationLeafletPeek, StationMap } from "@/components/station-map";
 import { PasswordReset } from "@/components/form";
-import { StationMap } from "@/components/station-map";
 import { Badge, Body, Button, Card, Eyebrow, Icon, Pill, StatRow, Tap, Title } from "@/components/ui";
 import { colors, fonts } from "@/theme";
 
 const AppleMaps = Platform.OS === "ios" ? (require("expo-maps") as typeof import("expo-maps")).AppleMaps : null;
 const LiveQr = Platform.OS === "web" ? null : (require("./qr-camera") as typeof import("./qr-camera")).LiveQr;
-
-function ignoreMapInteraction(_interacting: boolean) {}
 
 const stations = [
   { name: "Trạm Đa Kao", address: "45 Mạc Đĩnh Chi, Quận 1", hours: "08:00–18:30", km: "1,2 km", load: "Đang nhận" },
@@ -43,13 +41,20 @@ function stationDistance(here: PlaceFix | null, station: StationRow) {
 }
 
 function StationPeek({ station }: { station: StationRow }) {
+  if (Platform.OS === "android") return <StationLeafletPeek station={station} />;
+  const latitude = Number(station.latitude);
+  const longitude = Number(station.longitude);
+  if (!AppleMaps || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return <Body muted>Bản đồ Apple mở trên iPhone.</Body>;
+  }
   return (
-    <View style={{ gap: 8 }}>
-      <Body muted>Trạm đã chọn. Mở bản đồ để xem vị trí và đường đi.</Body>
-      <Button
-        label="Xem trên bản đồ"
-        tone="ghost"
-        onPress={() => router.push(`/stations/map?station=${encodeURIComponent(station._id)}`)}
+    <View style={{ height: 168, borderRadius: 14, overflow: "hidden" }}>
+      <AppleMaps.View
+        style={{ flex: 1, width: "100%" }}
+        cameraPosition={{ coordinates: { latitude, longitude }, zoom: 16 }}
+        markers={[{ id: station._id, title: station.name, coordinates: { latitude, longitude }, tintColor: colors.primary }]}
+        uiSettings={{ myLocationButtonEnabled: false, compassEnabled: false, scaleBarEnabled: false }}
+        colorScheme={AppleMaps.MapColorScheme.LIGHT}
       />
     </View>
   );
@@ -838,9 +843,9 @@ export function StationsScreen({
       campaigns={openCampaigns}
     />
   );
-  if (state === "map") {
+  if (state === "map" && Platform.OS === "android") {
     return (
-      <Screen tab="stations" nestedScrollEnabled>
+      <Screen tab="stations">
         <View style={{ gap: 10 }}>
           {chrome}
           {loaded.needsLogin ? <Body>Đăng nhập để xem mọi trạm, hoặc chọn một chiến dịch trong bộ lọc.</Body> : null}
@@ -848,8 +853,23 @@ export function StationsScreen({
             rows={loaded.rows}
             problem={loaded.problem}
             initialStationId={focusId}
-            onInteractionChange={ignoreMapInteraction}
+            onInteractionChange={() => undefined}
           />
+        </View>
+      </Screen>
+    );
+  }
+  if (state === "map") {
+    return (
+      <Screen tab="stations" scroll={false}>
+        <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 12, gap: 10 }}>
+          {chrome}
+          {loaded.needsLogin ? <Body>Đăng nhập để xem mọi trạm, hoặc chọn một chiến dịch trong bộ lọc.</Body> : null}
+          {!loaded.needsLogin && !loaded.rows && !loaded.problem ? <ActivityIndicator color={colors.primary} /> : null}
+          {loaded.problem ? <Body>{loaded.problem}</Body> : null}
+          {campaignId && loaded.rows && loaded.rows.length === 0 ? <Body>Chiến dịch này chưa có trạm đang mở để nhận đồ.</Body> : null}
+          {loaded.rows && loaded.rows.length > 0 ? <PlaceMap here={place.here} focusId={focusId} rows={loaded.rows} /> : null}
+          <Body>{`${place.text} Bấm vùng trống trên bản đồ để đóng thẻ trạm.`}</Body>
         </View>
       </Screen>
     );
