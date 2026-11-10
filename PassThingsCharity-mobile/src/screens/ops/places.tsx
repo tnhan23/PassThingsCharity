@@ -1,10 +1,14 @@
-import { useEffect, useRef, useState } from "react";
-import { Platform, ScrollView, View } from "react-native";
+import { useFocusEffect } from "expo-router";
+import DateTimePicker, { type DateTimePickerEvent } from "@react-native-community/datetimepicker";
+import { createElement, useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+import { Platform, ScrollView, Text, View } from "react-native";
+import * as Location from "expo-location";
 import { backend } from "@/api/backend";
 import { donorLabel } from "@/api/labels";
 import { ApiError } from "@/api/client";
+import { pickImage } from "@/api/images";
 import { Body, Button, Card, Photo, Pill, StatRow, Title } from "@/components/ui";
-import { colors } from "@/theme";
+import { colors, fonts } from "@/theme";
 import { can, Fold, nextCampaignStatuses, Note, OpsGate, PickList, RoleNote, TextField, Units, useJob, useRole, useRows, type Row } from "@/screens/ops/kit";
 
 const AppleMaps = Platform.OS === "ios" ? (require("expo-maps") as typeof import("expo-maps")).AppleMaps : null;
@@ -59,6 +63,22 @@ function stationPlaceMapHtml(latitude: number | null, longitude: number | null) 
 </html>`;
 }
 
+function campaignDateValue(date: Date) {
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function campaignDateFromInput(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function addCampaignDays(date: Date, days: number) {
+  const result = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
 function StationPlaceMap({
   latitude,
   longitude,
@@ -68,11 +88,14 @@ function StationPlaceMap({
   longitude: string;
   onPick: (latitude: string, longitude: string) => void;
 }) {
-  const camera = useRef({ coordinates: { latitude: 10.7769, longitude: 106.7009 }, zoom: 13 }).current;
-  const lat = Number(latitude);
-  const lng = Number(longitude);
-  const picked = Number.isFinite(lat) && Number.isFinite(lng) && latitude.trim() !== "" && longitude.trim() !== "";
+  const hasCoordinates = Boolean(latitude.trim() && longitude.trim());
+  const lat = hasCoordinates ? Number(latitude) : null;
+  const lng = hasCoordinates ? Number(longitude) : null;
+  const picked = lat !== null && lng !== null && Number.isFinite(lat) && Number.isFinite(lng);
   const androidMapHtml = useRef(stationPlaceMapHtml(picked ? lat : null, picked ? lng : null)).current;
+  const camera = useRef(picked && lat !== null && lng !== null
+    ? { coordinates: { latitude: lat, longitude: lng }, zoom: 16 }
+    : { coordinates: { latitude: 10.7769, longitude: 106.7009 }, zoom: 13 }).current;
   if (Platform.OS === "android" && NativeWebView) {
     return (
       <View style={{ height: 220, borderRadius: 14, overflow: "hidden" }}>
@@ -231,14 +254,31 @@ export function StationScreen() {
   const stations = useRows((token) => backend.listStations(token).then((data) => data.data as Row[]));
   const orgs = useRows((token) => backend.listOrganizations(token).then((data) => data.data as Row[]));
   const job = useJob();
+  const approveStationJob = useJob();
+  const createStationJob = useJob();
   const role = useRole();
+  const hasFocused = useRef(false);
   const [picked, setPicked] = useState("");
+  const [stationFilter, setStationFilter] = useState<"ALL" | "PENDING" | "APPROVED">("ALL");
+  const [editName, setEditName] = useState("");
+  const [editAddress, setEditAddress] = useState("");
+  const [editLatitude, setEditLatitude] = useState("");
+  const [editLongitude, setEditLongitude] = useState("");
+  const [editOpen, setEditOpen] = useState("");
+  const [editClose, setEditClose] = useState("");
   const [staffError, setStaffError] = useState("");
   const [orgId, setOrgId] = useState("");
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
+  const [geocoding, setGeocoding] = useState(false);
+  const [geocodeMessage, setGeocodeMessage] = useState("");
+  const [mapFocusKey, setMapFocusKey] = useState(0);
+  const [photoUrl, setPhotoUrl] = useState("");
+  const [photoNote, setPhotoNote] = useState("");
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const canEditPhoto = role === "ADMIN" || role === "ORG_MANAGER" || role === "STATION_MANAGER";
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -247,12 +287,33 @@ export function StationScreen() {
   const [identifier, setIdentifier] = useState("");
   const [staff, setStaff] = useState<Row[] | null>(null);
   const [staffId, setStaffId] = useState("");
+  const visibleStations = stations.rows?.filter((station) => (
+    stationFilter === "ALL" || (stationFilter === "APPROVED" ? station.isActive : !station.isActive)
+  )) ?? null;
+
+  useFocusEffect(useCallback(() => {
+    if (role !== "ADMIN") return;
+    if (!hasFocused.current) {
+      hasFocused.current = true;
+      return;
+    }
+    stations.reload();
+  }, [role, stations.reload]));
 
   useEffect(() => {
-    if (!job.token || !picked) return;
-    if (!can(role, ["STATION_MANAGER", "ORG_MANAGER"])) {
+    const selected = stations.rows?.find((row) => row._id === picked);
+    setEditName(selected?.name || "");
+    setEditAddress(selected?.address || "");
+    setEditLatitude(selected?.latitude != null ? String(selected.latitude) : "");
+    setEditLongitude(selected?.longitude != null ? String(selected.longitude) : "");
+    setEditOpen(selected?.openingTime || "");
+    setEditClose(selected?.closingTime || "");
+  }, [picked, stations.rows]);
+
+  useEffect(() => {
+    if (!job.token || !picked || !can(role, ["STATION_MANAGER", "ORG_MANAGER"])) {
       setStaff(null);
-      setStaffError(role === "ADMIN" ? "Server chỉ cho quản lý trạm hoặc quản lý tổ chức xem nhân viên." : "");
+      setStaffError("");
       return;
     }
     let cancelled = false;
@@ -272,10 +333,43 @@ export function StationScreen() {
     };
   }, [job.token, picked, job.note, role]);
 
+  async function findStationCoordinates() {
+    const query = address.trim();
+    if (!query || geocoding) return;
+
+    setGeocoding(true);
+    setGeocodeMessage("");
+    try {
+      if (Platform.OS === "android") {
+        const permission = await Location.requestForegroundPermissionsAsync();
+        if (!permission.granted) {
+          setGeocodeMessage("Cần quyền vị trí để tra cứu địa chỉ trên Android.");
+          return;
+        }
+      }
+
+      const results = await Location.geocodeAsync(query);
+      const match = results[0];
+      if (!match) {
+        setGeocodeMessage("Không tìm thấy vị trí. Hãy nhập địa chỉ cụ thể hơn.");
+        return;
+      }
+
+      setLatitude(match.latitude.toFixed(6));
+      setLongitude(match.longitude.toFixed(6));
+      setMapFocusKey((key) => key + 1);
+      setGeocodeMessage("Đã tìm thấy vị trí. Bạn có thể chỉnh lại bằng cách chạm vào bản đồ.");
+    } catch (caught) {
+      setGeocodeMessage(caught instanceof Error ? `Không tra được địa chỉ: ${caught.message}` : "Không tra được địa chỉ.");
+    } finally {
+      setGeocoding(false);
+    }
+  }
+
   return (
     <OpsGate>
       <Title>Trạm</Title>
-      <Note text={stations.error || orgs.error || staffError || job.note} />
+      <Note text={stations.error || orgs.error || staffError || (role === "ADMIN" ? "" : job.note)} />
       {stations.rows ? (
         <StatRow
           items={[
@@ -285,12 +379,78 @@ export function StationScreen() {
           ]}
         />
       ) : null}
-      <PickList rows={stations.rows} selected={picked} onPick={setPicked} detail={(row) => `${row.isActive ? "Đang mở" : "Chưa kích hoạt"} · ${row.address || ""}`} />
-      {picked ? (
+      {can(role, ["ADMIN", "ORG_MANAGER"]) ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+          <Pill label={`Tất cả (${stations.rows?.length ?? 0})`} active={stationFilter === "ALL"} onPress={() => { setStationFilter("ALL"); setPicked(""); }} />
+          <Pill label={`${role === "ADMIN" ? "Đã duyệt" : "Đang mở"} (${stations.rows?.filter((row) => row.isActive).length ?? 0})`} active={stationFilter === "APPROVED"} onPress={() => { setStationFilter("APPROVED"); setPicked(""); }} />
+          <Pill label={`${role === "ADMIN" ? "Chờ duyệt" : "Chờ kích hoạt"} (${stations.rows?.filter((row) => !row.isActive).length ?? 0})`} active={stationFilter === "PENDING"} onPress={() => { setStationFilter("PENDING"); setPicked(""); }} />
+        </ScrollView>
+      ) : null}
+      <PickList
+        rows={can(role, ["ADMIN", "ORG_MANAGER"]) ? visibleStations : stations.rows}
+        selected={picked}
+        onPick={setPicked}
+        detail={(row) => `${row.isActive ? "Đang mở" : "Chưa kích hoạt"} · ${row.address || ""}`}
+        panel={() => (
         <View style={{ gap: 8 }}>
+          {stations.rows?.find((row) => row._id === picked)?.imageUrl ? <Photo uri={stations.rows.find((row) => row._id === picked)?.imageUrl || ""} height={160} radius={14} /> : <Body muted>Trạm chưa có ảnh.</Body>}
+          {canEditPhoto ? (
+            <Button
+              label={photoBusy ? "Đang tải ảnh..." : "Tải ảnh trạm"}
+              tone="ghost"
+              disabled={photoBusy}
+              onPress={() => void (async () => {
+                if (!job.token) return;
+                setPhotoBusy(true);
+                setPhotoNote("");
+                try {
+                  const file = await pickImage();
+                  if (!file) return;
+                  const uploaded = await backend.uploadStationImage(job.token, file);
+                  if (!uploaded.imageUrl) {
+                    setPhotoNote("Máy chủ không trả đường dẫn ảnh.");
+                    return;
+                  }
+                  await backend.updateStation(job.token, picked, { imageUrl: uploaded.imageUrl });
+                  stations.reload();
+                  setPhotoNote("Đã lưu ảnh trạm.");
+                } catch (caught) {
+                  setPhotoNote(caught instanceof ApiError ? caught.message : caught instanceof Error ? caught.message : "Không tải được ảnh trạm.");
+                } finally {
+                  setPhotoBusy(false);
+                }
+              })()}
+            />
+          ) : null}
+          {photoNote ? <Body>{photoNote}</Body> : null}
+          {can(role, ["ADMIN", "ORG_MANAGER", "STATION_MANAGER"]) ? (
+            <View style={{ gap: 8 }}>
+              <Title>Sửa trạm</Title>
+              <TextField label="Tên trạm" value={editName} onChangeText={setEditName} />
+              <TextField label="Địa chỉ" value={editAddress} onChangeText={setEditAddress} />
+              <TextField label="Vĩ độ" value={editLatitude} onChangeText={setEditLatitude} />
+              <TextField label="Kinh độ" value={editLongitude} onChangeText={setEditLongitude} />
+              <TextField label="Giờ mở" value={editOpen} onChangeText={setEditOpen} />
+              <TextField label="Giờ đóng" value={editClose} onChangeText={setEditClose} />
+              <Button
+                label="Lưu thay đổi"
+                onPress={() => void job.run((token) => backend.updateStation(token, picked, {
+                  name: editName.trim(),
+                  address: editAddress.trim(),
+                  latitude: editLatitude.trim(),
+                  longitude: editLongitude.trim(),
+                  openingTime: editOpen.trim(),
+                  closingTime: editClose.trim(),
+                })).then((ok) => ok && stations.reload())}
+              />
+            </View>
+          ) : null}
           {can(role, ["ADMIN"]) && stations.rows?.find((row) => row._id === picked)?.isActive ? <Body>Trạm này đã được duyệt.</Body> : null}
-          {can(role, ["ADMIN"]) && !stations.rows?.find((row) => row._id === picked)?.isActive ? <Button label={job.busy ? "Đang gửi" : "Duyệt trạm"} onPress={() => void job.run((token) => backend.approveStation(token, picked)).then((ok) => ok && stations.reload())} /> : null}
-          {role === "ORG_MANAGER" && stations.rows?.find((row) => row._id === picked)?.isActive ? (
+          {can(role, ["ADMIN"]) && !stations.rows?.find((row) => row._id === picked)?.isActive ? <Button label={approveStationJob.busy ? "Đang gửi" : "Duyệt trạm"} onPress={() => void approveStationJob.run((token) => backend.approveStation(token, picked)).then((ok) => ok && stations.reload())} /> : null}
+          {can(role, ["ADMIN", "ORG_MANAGER"]) ? (
+            <Button label="Xóa trạm" tone="danger" onPress={() => void job.run((token) => backend.deleteStation(token, picked)).then((ok) => { if (!ok) return; setPicked(""); stations.reload(); })} />
+          ) : null}
+          {can(role, ["ADMIN", "ORG_MANAGER"]) && stations.rows?.find((row) => row._id === picked)?.isActive ? (
             <View style={{ gap: 8 }}>
               <TextField label="Email hoặc điện thoại của trưởng trạm có sẵn" value={identifier} onChangeText={setIdentifier} />
               <Button label="Gán trưởng trạm có sẵn" tone="ghost" onPress={() => void job.run((token) => backend.assignStationManagerByContact(token, picked, identifier.trim()))} />
@@ -342,28 +502,106 @@ export function StationScreen() {
             </View>
           ) : null}
         </View>
-      ) : null}
-      {role === "ORG_MANAGER" ? (
-        <View style={{ gap: 8 }}>
-          <Title>Trạm mới</Title>
-          <Body muted>Chọn tổ chức sở hữu trạm.</Body>
-          <PickList rows={orgs.rows} selected={orgId} onPick={setOrgId} detail={orgDetail} />
-          <TextField label="Tên trạm" value={name} onChangeText={setName} />
-          <TextField label="Địa chỉ" value={address} onChangeText={setAddress} />
-          {Platform.OS === "android" || AppleMaps ? <Body muted>Chạm bản đồ để đặt vị trí trạm.</Body> : null}
-          {Platform.OS === "android" || AppleMaps ? <StationPlaceMap latitude={latitude} longitude={longitude} onPick={(lat, lng) => { setLatitude(lat); setLongitude(lng); }} /> : null}
-          <TextField label="Vĩ độ" value={latitude} onChangeText={setLatitude} />
-          <TextField label="Kinh độ" value={longitude} onChangeText={setLongitude} />
-          <Button
-            label="Tạo trạm"
-            onPress={() => void job.run((token) => backend.createStationForOrganization(token, orgId, {
-              name: name.trim(),
-              address: address.trim(),
-              latitude: latitude.trim(),
-              longitude: longitude.trim(),
-            })).then((ok) => ok && stations.reload())}
-          />
-        </View>
+      {can(role, ["ADMIN", "ORG_MANAGER"]) ? (
+        <>
+          <View style={{ gap: 8 }}>
+            <Title>Trạm mới</Title>
+            <Body muted>Chọn tổ chức sở hữu trạm.</Body>
+            <PickList rows={orgs.rows} selected={orgId} onPick={setOrgId} detail={orgDetail} />
+            <TextField label="Tên trạm" value={name} onChangeText={setName} />
+            <TextField
+              label="Địa chỉ"
+              value={address}
+              onChangeText={(value) => {
+                setAddress(value);
+                if (latitude || longitude) setMapFocusKey((key) => key + 1);
+                setLatitude("");
+                setLongitude("");
+                setGeocodeMessage("");
+              }}
+            />
+            <Button
+              label={geocoding ? "Đang tìm vị trí..." : "Tìm tọa độ từ địa chỉ"}
+              tone="ghost"
+              disabled={!address.trim() || geocoding}
+              onPress={() => void findStationCoordinates()}
+            />
+            {geocodeMessage ? <Body muted>{geocodeMessage}</Body> : null}
+            {Platform.OS === "android" || AppleMaps ? <Body muted>Chạm bản đồ để đặt vị trí trạm.</Body> : null}
+            {Platform.OS === "android" || AppleMaps ? (
+              <StationPlaceMap
+                key={mapFocusKey}
+                latitude={latitude}
+                longitude={longitude}
+                onPick={(lat, lng) => {
+                  setLatitude(lat);
+                  setLongitude(lng);
+                }}
+              />
+            ) : null}
+            <TextField label="Vĩ độ" value={latitude} onChangeText={setLatitude} />
+            <TextField label="Kinh độ" value={longitude} onChangeText={setLongitude} />
+            {photoUrl ? <Photo uri={photoUrl} height={140} radius={14} /> : null}
+            <Button
+              label={photoBusy ? "Đang tải ảnh..." : photoUrl ? "Đổi ảnh trạm" : "Tải ảnh trạm"}
+              tone="ghost"
+              disabled={photoBusy}
+              onPress={() => void (async () => {
+                if (!job.token) return;
+                setPhotoBusy(true);
+                setPhotoNote("");
+                try {
+                  const file = await pickImage();
+                  if (!file) return;
+                  const uploaded = await backend.uploadStationImage(job.token, file);
+                  if (!uploaded.imageUrl) {
+                    setPhotoNote("Máy chủ không trả đường dẫn ảnh.");
+                    return;
+                  }
+                  setPhotoUrl(uploaded.imageUrl);
+                  setPhotoNote("Ảnh sẽ được gắn khi tạo trạm.");
+                } catch (caught) {
+                  setPhotoNote(caught instanceof ApiError ? caught.message : caught instanceof Error ? caught.message : "Không tải được ảnh trạm.");
+                } finally {
+                  setPhotoBusy(false);
+                }
+              })()}
+            />
+            <Button
+              label="Tạo trạm"
+              onPress={() => {
+                if (!orgId) {
+                  createStationJob.fail("Vui lòng chọn tổ chức sở hữu trạm.");
+                  return;
+                }
+                if (!name.trim() || !address.trim()) {
+                  createStationJob.fail("Vui lòng nhập đủ tên trạm và địa chỉ.");
+                  return;
+                }
+                const lat = Number(latitude);
+                const lng = Number(longitude);
+                if (!latitude.trim() || !longitude.trim() || Number.isNaN(lat) || Number.isNaN(lng)) {
+                  createStationJob.fail("Tọa độ phải là số thập phân, ví dụ vĩ độ 10.8289 và kinh độ 106.8172.");
+                  return;
+                }
+                if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+                  createStationJob.fail("Vĩ độ phải từ -90 đến 90, kinh độ từ -180 đến 180.");
+                  return;
+                }
+                void createStationJob.run((token) => backend.createStationForOrganization(token, orgId, {
+                  name: name.trim(),
+                  address: address.trim(),
+                  latitude: latitude.trim(),
+                  longitude: longitude.trim(),
+                  ...(photoUrl ? { imageUrl: photoUrl } : {}),
+                })).then((ok) => {
+                  if (ok) stations.reload();
+                });
+              }}
+            />
+          </View>
+          <Note text={createStationJob.note} />
+        </>
       ) : role === "ADMIN" ? null : <Body muted>Vai trò này không tạo trạm.</Body>}
     </OpsGate>
   );
@@ -461,8 +699,8 @@ export function CatalogScreen() {
 }
 
 export function CampaignWork() {
-  const campaigns = useRows(async () => {
-    const data = await backend.listCampaigns();
+  const campaigns = useRows(async (token) => {
+    const data = await backend.listCampaigns(undefined, token);
     return data.campaigns as Row[];
   });
   const orgs = useRows((token) => backend.listOrganizations(token).then((data) => data.data as Row[]));
@@ -471,38 +709,136 @@ export function CampaignWork() {
   const job = useJob();
   const role = useRole();
   const editor = can(role, ["ADMIN", "ORG_MANAGER", "STATION_MANAGER"]);
+  const draftCampaigns = useRows(async (token) => {
+    if (role !== "ADMIN") return [];
+    const data = await backend.listCampaigns({ status: "DRAFT" }, token);
+    return data.campaigns as Row[];
+  });
   const [picked, setPicked] = useState("");
+  const [campaignFilter, setCampaignFilter] = useState<"ALL" | "DRAFT" | "ACTIVE" | "COMPLETED">("ALL");
   const [orgId, setOrgId] = useState("");
   const [itemId, setItemId] = useState("");
   const [stationId, setStationId] = useState("");
   const [title, setTitle] = useState("");
-  const [startDate, setStartDate] = useState("2026-10-20");
-  const [endDate, setEndDate] = useState("2026-10-26");
+  const [startDate, setStartDate] = useState(() => {
+    const date = new Date();
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  });
+  const [endDate, setEndDate] = useState(() => addCampaignDays(new Date(), 6));
+  const [activeCampaignDate, setActiveCampaignDate] = useState<"start" | "end" | null>(null);
   const [quantity, setQuantity] = useState("10");
+  const visibleCampaigns = campaignFilter === "DRAFT"
+    ? draftCampaigns.rows
+    : campaigns.rows?.filter((campaign) => campaignFilter === "ALL" || campaign.status === campaignFilter) ?? null;
+  const draftCount = draftCampaigns.error ? "—" : draftCampaigns.rows?.length ?? "…";
+  const onCampaignDateChange = (event: DateTimePickerEvent, value?: Date) => {
+    if (event.type === "dismissed") {
+      setActiveCampaignDate(null);
+      return;
+    }
+    if (value) {
+      if (activeCampaignDate === "start") setStartDate(value);
+      if (activeCampaignDate === "end") setEndDate(value);
+    }
+    if (Platform.OS === "android") setActiveCampaignDate(null);
+  };
+  const campaignDateField = (label: string, value: Date, field: "start" | "end") => {
+    if (Platform.OS === "web") {
+      return (
+        <View key={field} style={{ gap: 6 }}>
+          <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.muted }}>{label}</Text>
+          {createElement("input", {
+            type: "date",
+            value: campaignDateValue(value),
+            onChange: (event: ChangeEvent<HTMLInputElement>) => {
+              const next = campaignDateFromInput(event.currentTarget.value);
+              if (!Number.isNaN(next.getTime())) {
+                if (field === "start") setStartDate(next);
+                else setEndDate(next);
+              }
+            },
+            "aria-label": label,
+            style: {
+              boxSizing: "border-box",
+              width: "100%",
+              minHeight: 48,
+              borderRadius: 12,
+              border: `1px solid ${colors.hairline}`,
+              backgroundColor: colors.surface,
+              padding: "0 12px",
+              fontFamily: fonts.regular,
+              fontSize: 16,
+              color: colors.ink,
+            },
+          })}
+        </View>
+      );
+    }
+    return (
+      <View key={field} style={{ gap: 6 }}>
+        <Body muted>{label}</Body>
+        <Button label={campaignDateValue(value)} tone="ghost" onPress={() => setActiveCampaignDate(field)} />
+      </View>
+    );
+  };
 
   return (
     <OpsGate>
       <Title>Chiến dịch</Title>
       <RoleNote />
-      <Note text={campaigns.error || job.note} />
+      <Note text={campaigns.error || draftCampaigns.error} />
       {campaigns.rows ? (
         <StatRow
           items={[
             { label: "Đang nhận", value: campaigns.rows.filter((r) => r.status === "ACTIVE").length, unit: "đợt", tone: "primary" },
-            { label: "Sắp mở", value: campaigns.rows.filter((r) => r.status === "PUBLISHED").length, unit: "đợt", tone: "coral" },
+            { label: "Hoàn thành", value: campaigns.rows.filter((r) => r.status === "COMPLETED").length, unit: "đợt", tone: "coral" },
             { label: "Tổng cộng", value: campaigns.rows.length, unit: "đợt", tone: "ink" },
           ]}
         />
       ) : null}
+      {campaigns.rows ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+          <Pill
+            label={`Tất cả (${campaigns.rows.length})`}
+            active={campaignFilter === "ALL"}
+            onPress={() => setCampaignFilter("ALL")}
+          />
+          {role === "ADMIN" ? (
+            <Pill
+              label={`Bản nháp (${draftCount})`}
+              active={campaignFilter === "DRAFT"}
+              onPress={() => {
+                setCampaignFilter("DRAFT");
+                setPicked("");
+                draftCampaigns.reload();
+              }}
+            />
+          ) : null}
+          <Pill
+            label={`Đang diễn ra (${campaigns.rows.filter((row) => row.status === "ACTIVE").length})`}
+            active={campaignFilter === "ACTIVE"}
+            onPress={() => setCampaignFilter("ACTIVE")}
+          />
+          <Pill
+            label={`Hoàn thành (${campaigns.rows.filter((row) => row.status === "COMPLETED").length})`}
+            active={campaignFilter === "COMPLETED"}
+            onPress={() => setCampaignFilter("COMPLETED")}
+          />
+        </ScrollView>
+      ) : null}
       <PickList
-        rows={campaigns.rows}
+        rows={visibleCampaigns}
         selected={picked}
         onPick={setPicked}
         detail={(row) => donorLabel({ status: row.status || "" })}
         panel={(row) => editor ? (
           <>
             {nextCampaignStatuses(row.status || "DRAFT").map((status) => (
-              <Button key={status} label={status === "CANCELLED" ? "Hủy chiến dịch" : donorLabel({ status })} tone={status === "CANCELLED" ? "danger" : "ghost"} onPress={() => void job.run((token) => backend.updateCampaignStatus(token, row._id, status)).then((ok) => ok && campaigns.reload())} />
+              <Button key={status} label={status === "CANCELLED" ? "Hủy chiến dịch" : row.status === "DRAFT" && status === "ACTIVE" ? "Duyệt" : donorLabel({ status })} tone={status === "CANCELLED" ? "danger" : "ghost"} onPress={() => void job.run((token) => backend.updateCampaignStatus(token, row._id, status)).then((ok) => {
+                if (!ok) return;
+                campaigns.reload();
+                if (campaignFilter === "DRAFT") draftCampaigns.reload();
+              })} />
             ))}
             {nextCampaignStatuses(row.status || "").length === 0 ? <Body muted>Chiến dịch này không còn trạng thái để chuyển.</Body> : null}
             <PickList rows={items.rows} selected={itemId} onPick={setItemId} detail={(item) => item.unit || ""} />
@@ -512,6 +848,7 @@ export function CampaignWork() {
             <PickList rows={stations.rows} selected={stationId} onPick={setStationId} detail={(station) => station.address || ""} />
             <Button label="Gắn trạm" onPress={() => void job.run((token) => backend.assignCampaignStation(token, row._id, stationId))} />
             {stationId ? <Button label="Gỡ trạm đang chọn" tone="danger" onPress={() => void job.run((token) => backend.removeCampaignStation(token, row._id, stationId))} /> : null}
+            <Note text={job.note} />
           </>
         ) : null}
       />
@@ -521,16 +858,40 @@ export function CampaignWork() {
         <View style={{ gap: 8 }}>
           <PickList rows={orgs.rows} selected={orgId} onPick={setOrgId} detail={(row) => row.address || ""} />
           <TextField label="Tên chiến dịch" value={title} onChangeText={setTitle} />
-          <TextField label="Ngày bắt đầu" value={startDate} onChangeText={setStartDate} />
-          <TextField label="Ngày kết thúc" value={endDate} onChangeText={setEndDate} />
+          {campaignDateField("Ngày bắt đầu", startDate, "start")}
+          {campaignDateField("Ngày kết thúc", endDate, "end")}
+          {activeCampaignDate && Platform.OS !== "web" ? (
+            <View style={{ gap: 8 }}>
+              <DateTimePicker
+                value={activeCampaignDate === "start" ? startDate : endDate}
+                mode="date"
+                display={Platform.OS === "ios" ? "spinner" : "default"}
+                minimumDate={activeCampaignDate === "start" ? new Date() : startDate}
+                onChange={onCampaignDateChange}
+              />
+              {Platform.OS === "ios" ? <Button label="Xong" onPress={() => setActiveCampaignDate(null)} /> : null}
+            </View>
+          ) : null}
           <Button
             label="Tạo bản nháp"
             onPress={() => void job.run(async (token) => {
               const station = stations.rows?.find((row) => row._id === stationId) || stations.rows?.[0];
               const linked = (station as (Row & { organizationId?: string | { _id?: string } }) | undefined)?.organizationId;
               const organizationId = orgId || (typeof linked === "string" ? linked : linked?._id || "");
-              const data = await backend.createCampaign(token, { title: title.trim(), startDate, endDate, organizationId }) as { campaign?: { _id?: string } };
-              if (data.campaign?._id) setPicked(data.campaign._id);
+              const data = await backend.createCampaign(token, {
+                title: title.trim(),
+                startDate: campaignDateValue(startDate),
+                endDate: campaignDateValue(endDate),
+                organizationId,
+              });
+              if (data.campaign?._id) {
+                setPicked(data.campaign._id);
+                campaigns.reload();
+                if (role === "ADMIN") {
+                  setCampaignFilter("DRAFT");
+                  draftCampaigns.reload();
+                }
+              }
               return data;
             })}
           />
@@ -538,13 +899,14 @@ export function CampaignWork() {
       ) : null}
       {editor && picked && !campaigns.rows?.some((row) => row._id === picked) ? (
         <View style={{ gap: 8 }}>
-          <Body muted>Bản nháp vừa tạo chưa hiện trong danh sách công khai. Gắn trạm đang hoạt động, rồi phát hành. Không cần admin duyệt.</Body>
+          <Body muted>Bản nháp vừa tạo chưa hiện trong danh sách công khai. Gắn trạm đang hoạt động, rồi duyệt để chiến dịch chạy.</Body>
           <PickList rows={items.rows} selected={itemId} onPick={setItemId} detail={(item) => item.unit || ""} />
           <TextField label="Số mục tiêu" value={quantity} onChangeText={setQuantity} />
           <Button label="Gắn loại đồ" onPress={() => void job.run((token) => backend.addCampaignItem(token, picked, { itemTypeId: itemId, targetQuantity: Number(quantity), priority: "MEDIUM" }))} />
           <PickList rows={stations.rows} selected={stationId} onPick={setStationId} detail={(station) => station.address || ""} />
           <Button label="Gắn trạm" onPress={() => void job.run((token) => backend.assignCampaignStation(token, picked, stationId))} />
-          <Button label="Phát hành" onPress={() => void job.run((token) => backend.updateCampaignStatus(token, picked, "PUBLISHED")).then((ok) => ok && campaigns.reload())} />
+          <Button label="Duyệt" onPress={() => void job.run((token) => backend.updateCampaignStatus(token, picked, "ACTIVE")).then((ok) => ok && campaigns.reload())} />
+          <Note text={job.note} />
         </View>
       ) : null}
     </OpsGate>

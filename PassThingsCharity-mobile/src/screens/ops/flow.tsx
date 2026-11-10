@@ -1,8 +1,10 @@
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import DateTimePicker, { type DateTimePickerEvent } from "@react-native-community/datetimepicker";
+import { createElement, useEffect, useState, type ChangeEvent } from "react";
+import { Platform, ScrollView, Text, View } from "react-native";
 import { backend } from "@/api/backend";
 import { ApiError } from "@/api/client";
+import { pickImage } from "@/api/images";
 import { donorLabel, unitSpoken } from "@/api/labels";
 import { useSession } from "@/api/session";
 import type { ContributionDetail, StationRow } from "@/api/types";
@@ -62,6 +64,7 @@ export function IntakeWork() {
   const canWrite = can(role, ["ADMIN", "STATION_MANAGER", "STAFF"]);
   const canJudge = can(role, ["ADMIN", "STATION_MANAGER"]);
   const [picked, setPicked] = useState("");
+  const [receiptFilter, setReceiptFilter] = useState<"ALL" | "PENDING" | "ACCEPTED" | "REJECTED" | "COMPLETED">("ALL");
   const [detail, setDetail] = useState<ContributionDetail | null>(null);
   const [stamp, setStamp] = useState(0);
 
@@ -84,6 +87,7 @@ export function IntakeWork() {
   }, [job.token, picked, stamp]);
 
   const visible = receipts.rows?.filter((row) => !String(row.code || "").startsWith("SAMPLE-")) ?? null;
+  const filteredReceipts = visible?.filter((row) => receiptFilter === "ALL" || row.status === receiptFilter) ?? null;
 
   return (
     <OpsGate>
@@ -102,8 +106,18 @@ export function IntakeWork() {
           ]}
         />
       ) : null}
+      {visible && visible.length > 0 ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+          <Pill label={`Tất cả (${visible.length})`} active={receiptFilter === "ALL"} onPress={() => { setReceiptFilter("ALL"); setPicked(""); }} />
+          <Pill label={`Chờ xử lý (${visible.filter((row) => row.status === "PENDING").length})`} active={receiptFilter === "PENDING"} onPress={() => { setReceiptFilter("PENDING"); setPicked(""); }} />
+          <Pill label={`Đã tiếp nhận (${visible.filter((row) => row.status === "ACCEPTED").length})`} active={receiptFilter === "ACCEPTED"} onPress={() => { setReceiptFilter("ACCEPTED"); setPicked(""); }} />
+          <Pill label={`Từ chối (${visible.filter((row) => row.status === "REJECTED").length})`} active={receiptFilter === "REJECTED"} onPress={() => { setReceiptFilter("REJECTED"); setPicked(""); }} />
+          <Pill label={`Hoàn tất (${visible.filter((row) => row.status === "COMPLETED").length})`} active={receiptFilter === "COMPLETED"} onPress={() => { setReceiptFilter("COMPLETED"); setPicked(""); }} />
+        </ScrollView>
+      ) : null}
+      {filteredReceipts && filteredReceipts.length === 0 && visible?.length ? <Body>Không có phiếu ở trạng thái này.</Body> : null}
       <PickList
-        rows={receipts.rows ? visible : null}
+        rows={filteredReceipts}
         selected={picked}
         onPick={setPicked}
         detail={(row) => `${receiptStatus(row.status || "")} · ${typeof row.campaignId === "object" ? row.campaignId?.title || "" : ""}`}
@@ -197,6 +211,7 @@ export function TransferWork() {
   const { user } = useSession();
   const canWrite = can(role, ["ADMIN", "STATION_MANAGER", "STAFF"]);
   const [picked, setPicked] = useState("");
+  const [transferFilter, setTransferFilter] = useState("ALL");
   const [campaignId, setCampaignId] = useState("");
   const [fromId, setFromId] = useState("");
   const [toId, setToId] = useState("");
@@ -229,6 +244,8 @@ export function TransferWork() {
   }, [job.token, fromId]);
 
   const selectedItemsCount = stock.filter((row) => Number(amounts[refId(row.itemTypeId)]) > 0).length;
+  const transferStatuses = ["PENDING", "PREPARING", "IN_TRANSIT", "RECEIVED", "COMPLETED", "CANCELLED"];
+  const filteredTransfers = transfers.rows?.filter((row) => transferFilter === "ALL" || row.status === transferFilter) ?? null;
 
   return (
     <OpsGate>
@@ -254,8 +271,29 @@ export function TransferWork() {
           ]}
         />
       ) : null}
+      {role === "ADMIN" && transfers.rows ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+          <Pill label={`Tất cả (${transfers.rows.length})`} active={transferFilter === "ALL"} onPress={() => { setTransferFilter("ALL"); setPicked(""); }} />
+          {transferStatuses.map((status) => (
+            <Pill
+              key={status}
+              label={`${({
+                PENDING: "Chờ xử lý",
+                PREPARING: "Đang chuẩn bị",
+                IN_TRANSIT: "Đang vận chuyển",
+                RECEIVED: "Đã nhận",
+                COMPLETED: "Hoàn tất",
+                CANCELLED: "Đã hủy",
+              } as Record<string, string>)[status]} (${transfers.rows?.filter((row) => row.status === status).length ?? 0})`}
+              active={transferFilter === status}
+              onPress={() => { setTransferFilter(status); setPicked(""); }}
+            />
+          ))}
+        </ScrollView>
+      ) : null}
+      {filteredTransfers && filteredTransfers.length === 0 && transfers.rows?.length ? <Body>Không có lệnh điều chuyển ở trạng thái này.</Body> : null}
       <PickList
-        rows={transfers.rows}
+        rows={role === "ADMIN" ? filteredTransfers : transfers.rows}
         selected={picked}
         onPick={setPicked}
         detail={(row) => {
@@ -321,24 +359,32 @@ export function TransferWork() {
       {canWrite ? (
         <Button
           label={selectedItemsCount > 0 ? `Tạo lệnh (${selectedItemsCount} món)` : "Tạo lệnh"}
-          onPress={() => void job.run((token) => {
+          onPress={() => {
+            if (!campaignId || !fromId || !toId) {
+              job.fail("Vui lòng chọn đầy đủ chiến dịch, trạm đi và trạm đến.");
+              return;
+            }
             const items = stock.flatMap((row) => {
               const id = refId(row.itemTypeId);
               const quantity = Number(amounts[id]);
               if (!id || !(quantity > 0)) return [];
               return [{ itemTypeId: id, quantity, unit: row.unit }];
             });
-            return backend.createTransfer(token, {
+            if (items.length === 0) {
+              job.fail("Vui lòng nhập số lượng lớn hơn 0 cho ít nhất một món cần gửi.");
+              return;
+            }
+            void job.run((token) => backend.createTransfer(token, {
               campaignId,
               fromStationId: fromId,
               toStationId: toId,
               items,
+            })).then((ok) => {
+              if (!ok) return;
+              setAmounts({});
+              transfers.reload();
             });
-          }).then((ok) => {
-            if (!ok) return;
-            setAmounts({});
-            transfers.reload();
-          })}
+          }}
         />
       ) : null}
     </OpsGate>
@@ -467,12 +513,32 @@ function stationIdOf(value: Row["stationId"]) {
   return typeof value === "string" ? value : value._id || "";
 }
 
+type ScheduleField = "startDate" | "startTime" | "endDate" | "endTime" | "deadlineDate" | "deadlineTime";
+type ScheduleMode = "date" | "time";
+
+function dateValue(value: Date, mode: ScheduleMode) {
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return mode === "date"
+    ? `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`
+    : `${pad(value.getHours())}:${pad(value.getMinutes())}`;
+}
+
+function startOfDay(value: Date) {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+}
+
+function taskDateTime(date: Date | null, time: Date | null) {
+  return date && time ? `${dateValue(date, "date")}T${dateValue(time, "time")}+07:00` : undefined;
+}
+
 export function CrewWork() {
   const tasks = useRows((token) => backend.listTasks(token).then((data) => data.data as Row[]));
   const campaigns = useRows(async () => (await backend.listCampaigns()).campaigns as Row[]);
   const stations = useRows((token) => backend.listStations(token).then((data) => data.data as Row[]));
   const job = useJob();
+  const createTaskJob = useJob();
   const role = useRole();
+  const { user } = useSession();
   const canTask = can(role, ["ADMIN", "STATION_MANAGER", "STAFF"]);
   const canCreateTask = can(role, ["ADMIN", "STATION_MANAGER", "STAFF"]);
   const canApproveJoin = can(role, ["ADMIN", "STATION_MANAGER"]);
@@ -483,11 +549,20 @@ export function CrewWork() {
   const [stationId, setStationId] = useState("");
   const [title, setTitle] = useState("");
   const [detail, setDetail] = useState("");
-  const [startTime, setStartTime] = useState("");
-  const [endTime, setEndTime] = useState("");
+  const [startDate, setStartDate] = useState<Date | null>(null);
+  const [startTime, setStartTime] = useState<Date | null>(null);
+  const [endDate, setEndDate] = useState<Date | null>(null);
+  const [endTime, setEndTime] = useState<Date | null>(null);
   const [needed, setNeeded] = useState("1");
-  const [deadline, setDeadline] = useState("");
+  const [deadlineDate, setDeadlineDate] = useState<Date | null>(null);
+  const [deadlineTime, setDeadlineTime] = useState<Date | null>(null);
   const [points, setPoints] = useState("25");
+  const [taskImage, setTaskImage] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDetail, setEditDetail] = useState("");
+  const [editPoints, setEditPoints] = useState("");
+  const [editImage, setEditImage] = useState<string | null>(null);
+  const [activePicker, setActivePicker] = useState<{ field: ScheduleField; mode: ScheduleMode } | null>(null);
   const [people, setPeople] = useState<Row[] | null>(null);
   const [peopleError, setPeopleError] = useState("");
   const [registrationId, setRegistrationId] = useState("");
@@ -495,6 +570,120 @@ export function CrewWork() {
   const [applicantsError, setApplicantsError] = useState("");
   const [joinStamp, setJoinStamp] = useState(0);
   const [applyStamp, setApplyStamp] = useState(0);
+  const profileStationId = user?.stations?.[0]?._id ?? "";
+
+  useEffect(() => {
+    if (!stationId && profileStationId) setStationId(profileStationId);
+  }, [profileStationId, stationId]);
+
+  const scheduleValues: Record<ScheduleField, Date | null> = {
+    startDate,
+    startTime,
+    endDate,
+    endTime,
+    deadlineDate,
+    deadlineTime,
+  };
+  const scheduleSetters: Record<ScheduleField, (value: Date | null) => void> = {
+    startDate: setStartDate,
+    startTime: setStartTime,
+    endDate: setEndDate,
+    endTime: setEndTime,
+    deadlineDate: setDeadlineDate,
+    deadlineTime: setDeadlineTime,
+  };
+  const today = startOfDay(new Date());
+  const earliestEndDate = startDate ? startOfDay(startDate) : null;
+  const startAt = startDate && startTime ? new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate(), startTime.getHours(), startTime.getMinutes()) : null;
+  const endAt = endDate && endTime ? new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), endTime.getHours(), endTime.getMinutes()) : null;
+  const startDateError = startDate && startOfDay(startDate) < today
+    ? "Ngày bắt đầu không thể trước hôm nay."
+    : startAt && startAt.getTime() <= Date.now()
+      ? "Giờ bắt đầu phải ở tương lai."
+      : "";
+  const endDateError = startAt && endAt && endAt.getTime() <= startAt.getTime()
+    ? "Giờ kết thúc phải sau giờ bắt đầu."
+    : "";
+  const neededError = !Number.isInteger(Number(needed)) || Number(needed) < 1
+    ? "Số người cần phải lớn hơn hoặc bằng 1."
+    : "";
+  const formWarning = [startDateError, endDateError, neededError].filter(Boolean).join(" ");
+  const updateScheduleValue = (field: ScheduleField, mode: ScheduleMode, rawValue: string) => {
+    if (!rawValue) {
+      scheduleSetters[field](null);
+      return;
+    }
+    const currentValue = scheduleValues[field];
+    const value = currentValue ? new Date(currentValue) : new Date();
+    if (mode === "date") {
+      const [year, month, day] = rawValue.split("-").map(Number);
+      value.setFullYear(year, month - 1, day);
+    } else {
+      const [hours, minutes] = rawValue.split(":").map(Number);
+      value.setHours(hours, minutes, 0, 0);
+    }
+    scheduleSetters[field](value);
+  };
+  const renderScheduleField = (label: string, field: ScheduleField, mode: ScheduleMode) => {
+    const value = scheduleValues[field];
+    const minimumDate = field === "startDate"
+      ? today
+      : field === "endDate"
+        ? earliestEndDate
+        : null;
+    const fieldError = field === "startDate" ? startDateError : field === "endDate" ? endDateError : "";
+    if (Platform.OS === "web") {
+      return (
+        <View key={field} style={{ gap: 6 }}>
+          <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.muted }}>{label}</Text>
+          {createElement("input", {
+            type: mode,
+            value: value ? dateValue(value, mode) : "",
+            ...(minimumDate ? { min: dateValue(minimumDate, "date") } : {}),
+            onChange: (event: ChangeEvent<HTMLInputElement>) => updateScheduleValue(field, mode, event.currentTarget.value),
+            "aria-label": label,
+            style: {
+              boxSizing: "border-box",
+              width: "100%",
+              minHeight: 48,
+              borderRadius: 12,
+              border: `1px solid ${colors.hairline}`,
+              backgroundColor: colors.surface,
+              padding: "0 12px",
+              fontFamily: fonts.regular,
+              fontSize: 16,
+              color: colors.ink,
+            },
+          })}
+          {fieldError ? <Text style={{ color: colors.error, fontFamily: fonts.medium, fontSize: 13 }}>{fieldError}</Text> : null}
+        </View>
+      );
+    }
+    return (
+      <View key={field} style={{ gap: 6 }}>
+        <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.muted }}>{label}</Text>
+        <Button
+          label={value ? dateValue(value, mode) : mode === "date" ? "Chọn ngày" : "Chọn giờ"}
+          tone="ghost"
+          onPress={() => setActivePicker({ field, mode })}
+        />
+        {fieldError ? <Text style={{ color: colors.error, fontFamily: fonts.medium, fontSize: 13 }}>{fieldError}</Text> : null}
+      </View>
+    );
+  };
+
+  function onSchedulePickerChange(event: DateTimePickerEvent, value?: Date) {
+    if (event.type === "dismissed") {
+      setActivePicker(null);
+      return;
+    }
+    if (activePicker && value) {
+      if (activePicker.field === "startDate" && startOfDay(value) < today) return;
+      if (activePicker.field === "endDate" && earliestEndDate && startOfDay(value) < earliestEndDate) return;
+      scheduleSetters[activePicker.field](value);
+    }
+    if (Platform.OS === "android") setActivePicker(null);
+  }
 
   useEffect(() => {
     if (!job.token || !campaignId) {
@@ -545,6 +734,13 @@ export function CrewWork() {
   }, [job.token, taskId, applyStamp]);
 
   const allTasks = tasks.rows ?? [];
+  useEffect(() => {
+    const row = allTasks.find((item) => item._id === taskId);
+    setEditTitle(row?.title || "");
+    setEditDetail(row?.description || "");
+    setEditPoints(String(row?.rewardPoints ?? 0));
+    setEditImage(row?.imageUrl || null);
+  }, [taskId, tasks.rows]);
   const pendingTotal = allTasks.reduce((sum, row) => sum + (row.slots?.pending ?? 0), 0);
   const tasksWithPending = allTasks.filter((row) => (row.slots?.pending ?? 0) > 0).length;
   const visibleTasks = tasks.rows
@@ -599,8 +795,40 @@ export function CrewWork() {
         }}
         panel={(row) => canTask ? (
           <View style={{ gap: 10 }}>
+            {editImage ? <Photo uri={editImage} height={160} radius={12} /> : <Body muted>Tin này chưa có ảnh.</Body>}
+            <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+              <Button
+                label="Chọn ảnh tin"
+                tone="ghost"
+                onPress={() => void job.run(async (token) => {
+                  const file = await pickImage();
+                  if (!file) return { message: "Chưa chọn ảnh." };
+                  const uploaded = await backend.uploadTaskImage(token, file);
+                  setEditImage(uploaded.imageUrl);
+                  return { message: "Đã tải ảnh. Bấm lưu để gắn vào tin." };
+                })}
+              />
+              {editImage ? <Button label="Gỡ ảnh" tone="danger" onPress={() => setEditImage(null)} /> : null}
+            </View>
+            <TextField label="Tên việc" value={editTitle} onChangeText={setEditTitle} />
+            <TextField label="Mô tả" value={editDetail} onChangeText={setEditDetail} />
+            <TextField label="Điểm thưởng" value={editPoints} onChangeText={(value) => setEditPoints(value.replace(/\D/g, ""))} keyboardType="number-pad" />
+            <Button
+              label="Lưu tin"
+              onPress={() => {
+                if (!editTitle.trim()) {
+                  job.fail("Vui lòng nhập tên công việc.");
+                  return;
+                }
+                void job.run((token) => backend.updateTask(token, row._id, {
+                  title: editTitle.trim(),
+                  description: editDetail.trim(),
+                  rewardPoints: Number(editPoints) || 0,
+                  imageUrl: editImage,
+                })).then((ok) => ok && tasks.reload());
+              }}
+            />
             {stationTitleOf(row.stationId) ? <Body muted>{`Trạm: ${stationTitleOf(row.stationId)}`}</Body> : null}
-            {row.description ? <Body>{row.description}</Body> : null}
             <Text style={{ fontFamily: fonts.bold, fontSize: 15, color: colors.ink }}>
               {`Tình nguyện viên ứng tuyển (${applicants ? applicants.length : "…"})`}
             </Text>
@@ -644,11 +872,13 @@ export function CrewWork() {
               </Card>
             ))}
             <View style={{ gap: 8, paddingTop: 6, borderTopWidth: 1, borderTopColor: colors.hairline }}>
-              {row.recruitmentStatus !== "OPEN" ? (
+              {row.recruitmentStatus === "OPEN" ? (
+                <Button label="Đóng tuyển" tone="ghost" onPress={() => void job.run((token) => backend.updateTask(token, row._id, { recruitmentStatus: "CLOSED" })).then((ok) => ok && tasks.reload())} />
+              ) : row.status !== "CANCELLED" ? (
                 <Button label="Mở tuyển lại" tone="ghost" onPress={() => void job.run((token) => backend.updateTask(token, row._id, { recruitmentStatus: "OPEN" })).then((ok) => ok && tasks.reload())} />
               ) : null}
               {row.status !== "CANCELLED" ? (
-                <Button label="Hủy việc này" tone="danger" onPress={() => void job.run((token) => backend.updateTask(token, row._id, { status: "CANCELLED" })).then((ok) => ok && tasks.reload())} />
+                <Button label="Hủy việc này" tone="danger" onPress={() => void job.run((token) => backend.updateTask(token, row._id, { status: "CANCELLED", recruitmentStatus: "CLOSED" })).then((ok) => ok && tasks.reload())} />
               ) : null}
             </View>
           </View>
@@ -659,26 +889,86 @@ export function CrewWork() {
           <PickList rows={stations.rows} selected={stationId} onPick={setStationId} detail={(row) => row.address || ""} />
           <TextField label="Tên việc" value={title} onChangeText={setTitle} />
           <TextField label="Mô tả ngắn" value={detail} onChangeText={setDetail} />
-          <TextField label="Bắt đầu, ví dụ 2026-11-08T08:00" value={startTime} onChangeText={setStartTime} />
-          <TextField label="Kết thúc, ví dụ 2026-11-08T12:00" value={endTime} onChangeText={setEndTime} />
-          <TextField label="Số người cần" value={needed} onChangeText={setNeeded} />
-          <TextField label="Hạn đăng ký, có thể để trống" value={deadline} onChangeText={setDeadline} />
-          <TextField label="Điểm thưởng" value={points} onChangeText={setPoints} />
+          {renderScheduleField("Ngày bắt đầu", "startDate", "date")}
+          {renderScheduleField("Giờ bắt đầu", "startTime", "time")}
+          {renderScheduleField("Ngày kết thúc", "endDate", "date")}
+          {renderScheduleField("Giờ kết thúc", "endTime", "time")}
+          <TextField label="Số người cần" value={needed} onChangeText={(value) => setNeeded(value.replace(/\D/g, ""))} keyboardType="number-pad" />
+          {neededError ? <Text style={{ color: colors.error, fontFamily: fonts.medium, fontSize: 13 }}>{neededError}</Text> : null}
+          {renderScheduleField("Ngày hạn đăng ký (không bắt buộc)", "deadlineDate", "date")}
+          {renderScheduleField("Giờ hạn đăng ký (không bắt buộc)", "deadlineTime", "time")}
+          <TextField label="Điểm thưởng" value={points} onChangeText={(value) => setPoints(value.replace(/\D/g, ""))} keyboardType="number-pad" />
+          {taskImage ? <Photo uri={taskImage} height={160} radius={12} /> : <Body muted>Chưa chọn ảnh cho tin.</Body>}
+          <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+            <Button
+              label="Chọn ảnh tin"
+              tone="ghost"
+              onPress={() => void createTaskJob.run(async (token) => {
+                const file = await pickImage();
+                if (!file) return { message: "Chưa chọn ảnh." };
+                const uploaded = await backend.uploadTaskImage(token, file);
+                setTaskImage(uploaded.imageUrl);
+                return { message: "Đã tải ảnh. Ảnh sẽ gắn khi đăng tin." };
+              })}
+            />
+            {taskImage ? <Button label="Gỡ ảnh" tone="danger" onPress={() => setTaskImage(null)} /> : null}
+          </View>
+          {activePicker && Platform.OS !== "web" ? (
+            <View style={{ gap: 8 }}>
+              <DateTimePicker
+                value={scheduleValues[activePicker.field] || new Date()}
+                mode={activePicker.mode}
+                display={Platform.OS === "ios" ? "spinner" : "default"}
+                minimumDate={activePicker.mode === "date"
+                  ? activePicker.field === "startDate" ? today : activePicker.field === "endDate" ? earliestEndDate ?? undefined : undefined
+                  : undefined}
+                onChange={onSchedulePickerChange}
+              />
+              {Platform.OS === "ios" ? <Button label="Xong" onPress={() => setActivePicker(null)} /> : null}
+            </View>
+          ) : null}
           <Button
-            label="Đăng tin"
-            onPress={() => void job.run((token) => backend.createTask(token, {
-              ...(campaignId ? { campaignId } : {}),
-              stationId,
-              title: title.trim(),
-              description: detail.trim(),
-              startTime: startTime.trim() ? `${startTime.trim()}+07:00` : undefined,
-              endTime: endTime.trim() ? `${endTime.trim()}+07:00` : undefined,
-              requiredVolunteers: Number(needed),
-              ...(deadline.trim() ? { volunteerDeadline: `${deadline.trim()}+07:00` } : {}),
-              recruitmentStatus: "OPEN",
-              rewardPoints: Number(points) || 0,
-            })).then((ok) => ok && tasks.reload())}
+            label={createTaskJob.busy ? "Đang đăng tin..." : "Đăng tin"}
+            disabled={Boolean(startDateError || endDateError || neededError || createTaskJob.busy)}
+            onPress={() => {
+              if (startDateError || endDateError || neededError) return;
+              if (!stationId) {
+                createTaskJob.fail("Vui lòng chọn trạm cho công việc.");
+                return;
+              }
+              if (!title.trim()) {
+                createTaskJob.fail("Vui lòng nhập tên công việc.");
+                return;
+              }
+              if (!startDate || !startTime || !endDate || !endTime) {
+                createTaskJob.fail("Vui lòng chọn đủ ngày và giờ bắt đầu, ngày và giờ kết thúc.");
+                return;
+              }
+              const payload = {
+                ...(campaignId ? { campaignId } : {}),
+                stationId,
+                title: title.trim(),
+                description: detail.trim(),
+                startTime: taskDateTime(startDate, startTime),
+                endTime: taskDateTime(endDate, endTime),
+                requiredVolunteers: Number(needed),
+                ...(taskDateTime(deadlineDate, deadlineTime) ? { volunteerDeadline: taskDateTime(deadlineDate, deadlineTime) } : {}),
+                recruitmentStatus: "OPEN",
+                rewardPoints: Number(points) || 0,
+                ...(taskImage ? { imageUrl: taskImage } : {}),
+              };
+              console.info("[Đăng tin tuyển] Submitting task", payload);
+              void createTaskJob.run((token) => backend.createTask(token, payload)).then((ok) => {
+                if (ok) {
+                  console.info("[Đăng tin tuyển] Task created successfully", { stationId, title: payload.title, requiredVolunteers: payload.requiredVolunteers });
+                  tasks.reload();
+                  return;
+                }
+                console.error("[Đăng tin tuyển] Task creation failed", { stationId, title: payload.title, requiredVolunteers: payload.requiredVolunteers });
+              });
+            }}
           />
+          <Note text={createTaskJob.note} />
         </Fold>
       ) : null}
       <Title>Đơn tham gia chiến dịch</Title>
