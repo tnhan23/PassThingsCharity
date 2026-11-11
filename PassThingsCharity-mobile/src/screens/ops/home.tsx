@@ -24,7 +24,6 @@ const sections = [
   { key: "stock", href: "/desk/stock", title: "Kho trạm", body: "Xem số tồn, kiểm kê điều chỉnh và xem lịch sử giao dịch kho." },
   { key: "relief", href: "/desk/relief", title: "Giao hàng", body: "Ghi đợt giao. Đóng cả chiến dịch là một nút riêng." },
   { key: "crew", href: "/desk/crew", title: "Nhân sự", body: "Duyệt tình nguyện, tạo việc, và phân công." },
-  { key: "rewards", href: "/desk/rewards", title: "Điểm và chứng nhận", body: "Cộng điểm, tạo mốc, và cấp chứng nhận." },
 ] as const;
 
 const transferOpen = new Set(["PENDING", "PREPARING", "IN_TRANSIT", "RECEIVED"]);
@@ -394,9 +393,7 @@ export function OpsHome() {
   const [moves, setMoves] = useState<TransferRow[]>([]);
   const [stations, setStations] = useState<StationRow[]>([]);
   const [people, setPeople] = useState<{ role?: string }[]>([]);
-  const visible = sections.filter((section) => (
-    (section.key !== "rewards" || role !== "ADMIN") && can(role, [...deskAccess[section.key]])
-  ));
+  const visible = sections.filter((section) => can(role, [...deskAccess[section.key]]));
   const seesOrgs = can(role, [...deskAccess.orgs]);
   const seesIntake = can(role, [...deskAccess.intake]);
   const seesTransfers = can(role, [...deskAccess.transfers]);

@@ -3956,69 +3956,15 @@ export function CrewWork() {
 }
 
 export function RewardWork() {
-  const achievements = useRows(async () => (await backend.listAchievements()).achievements as Row[]);
-  const campaigns = useRows(async () => (await backend.listCampaigns()).campaigns as Row[]);
   const job = useJob();
-  const role = useRole();
-  const canAward = can(role, ["ADMIN", "ORG_MANAGER", "STATION_MANAGER", "STAFF"]);
-  const canIssue = can(role, ["ADMIN", "ORG_MANAGER", "STATION_MANAGER"]);
-  const [query, setQuery] = useState("");
-  const [people, setPeople] = useState<Row[] | null>(null);
-  const [personId, setPersonId] = useState("");
-  const [campaignId, setCampaignId] = useState("");
-  const [points, setPoints] = useState("20");
-  const [kind, setKind] = useState("BONUS");
-  const [milestone, setMilestone] = useState("");
-  const [paper, setPaper] = useState("");
 
   return (
     <OpsGate>
       <Title>Điểm và chứng nhận</Title>
       <RoleNote />
       <Note text={job.note} />
-      <TextField label="Tìm người nhận" value={query} onChangeText={setQuery} />
-      <Button
-        label="Tìm"
-        tone="ghost"
-        onPress={() => void job.run(async (token) => {
-          const data = await backend.lookupDonor(token, query.trim());
-          setPeople((data.data || []) as Row[]);
-          return { message: data.data?.length ? `Có ${data.data.length} người.` : "Không thấy người này." };
-        })}
-      />
-      <PickList rows={people} selected={personId} onPick={setPersonId} detail={(row) => row.phone || row.username || ""} />
-      <TextField label="Số điểm" value={points} onChangeText={setPoints} />
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {[
-          { code: "DONATION", label: "Quyên góp (DONATION)" },
-          { code: "VOLUNTEER_TASK", label: "Tình nguyện (VOLUNTEER_TASK)" },
-          { code: "BONUS", label: "Thưởng thêm (BONUS)" },
-          { code: "SYSTEM", label: "Hệ thống (SYSTEM)" },
-        ].map((type) => (
-          <Pill key={type.code} label={type.label} active={kind === type.code} onPress={() => setKind(type.code)} />
-        ))}
-      </View>
-      {canAward ? <Button label="Cộng điểm" onPress={() => void job.run((token) => backend.awardPoints(token, { userId: personId, points: Number(points), type: kind }))} /> : <Body muted>Vai trò này không cộng điểm.</Body>}
-      <Fold title="Mốc thành tích">
-        <PickList rows={achievements.rows} selected="" onPick={() => undefined} detail={() => "Đang bật"} />
-        <TextField label="Tên mốc mới" value={milestone} onChangeText={setMilestone} />
-        {canIssue ? <Button label="Tạo mốc theo tổng điểm" tone="ghost" onPress={() => void job.run((token) => backend.createAchievement(token, { title: milestone.trim(), criteriaType: "POINTS_ACCUMULATED", criteriaValue: Number(points) || 1 })).then((ok) => ok && achievements.reload())} /> : null}
-      </Fold>
-      <Fold title="Chứng nhận">
-        <PickList
-          rows={campaigns.rows}
-          selected={campaignId}
-          onPick={setCampaignId}
-          detail={(row) => donorLabel({ status: row.status || "" })}
-          panel={() => canIssue ? (
-            <>
-              <TextField label="Tiêu đề giấy" value={paper} onChangeText={setPaper} />
-              <Button label="Cấp giấy người quyên góp" onPress={() => void job.run((token) => backend.issueCertificate(token, { userId: personId, campaignId, certificateType: "DONOR", title: paper.trim() }))} />
-              <Button label="Cấp giấy tình nguyện" tone="ghost" onPress={() => void job.run((token) => backend.issueCertificate(token, { userId: personId, campaignId, certificateType: "VOLUNTEER", title: paper.trim() }))} />
-            </>
-          ) : <Body muted>Vai trò này không cấp giấy.</Body>}
-        />
-      </Fold>
+      <Body muted>Tính năng cộng điểm, tạo mốc thành tích và cấp chứng nhận đã được tắt cho mọi vai trò.</Body>
+      <Button label="Về vận hành" tone="ghost" onPress={() => router.replace("/desk")} />
     </OpsGate>
   );
 }
