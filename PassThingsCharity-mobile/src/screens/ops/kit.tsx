@@ -49,8 +49,6 @@ export type Row = {
   evidenceImageUrls?: string[];
   rejectionReason?: string;
   recipientName?: string;
-  startDate?: string;
-  endDate?: string;
   scheduledDate?: string;
   actualDeliveryDate?: string;
   distributionDate?: string;
